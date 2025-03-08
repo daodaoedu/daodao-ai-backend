@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./app
+    container_name: fastapi_app
+
+    volumes:
+      - ./app:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgres-daodao://daodao:daodao@db:5423/daodao
+      - OPENAI_API_KEY=your_openai_api_key_here
