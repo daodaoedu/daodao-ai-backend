@@ -21,12 +21,15 @@ from .ProjectMarathon import ProjectMarathon
 from .UserProfile import UserProfile
 from .Country import Country
 from .MentorParticipants import MentorParticipants
+from .Comment import Comment
+from .Reivew import Review
+from .AIFeedback import AIFeedback
 
 # 導出所有類別
-__all__ = [ "User", "Contact", "BasicInfo", "Location", "Country", "City", "Base", 
+__all__ = [ "User", "Contact", "BasicInfo", "Location", "Country", "City", "Base",
            "Store", "Resource", "Position", "UserPosition", "Group", "UserJoinGroup",
            "Project", "Milestone", "Marathon", "Task", "UserProject",
            "FeePlan","Eligibility", "ProjectMarathon", "UserProfile",
-           "MentorParticipants"
+           "MentorParticipants",
+           "Comment", "Review", "AIFeedback"
            ]
-
