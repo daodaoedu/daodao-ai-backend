@@ -1,3 +1,6 @@
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+import os
 from .Contact import Contact
 from .BasicInfo import BasicInfo
 from .Location import Location
@@ -25,6 +28,17 @@ from .Comment import Comment
 from .Reivew import Review
 from .AIFeedback import AIFeedback
 
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise Exception("請設定環境變數 DATABASE_URL 為 PostgreSQL 連線字串")
+engine = create_engine(
+    DATABASE_URL, pool_size=5, pool_timeout=10, echo=False
+)  # echo=True for debug
+
+# 創建 Session 類別
+Session = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
 # 導出所有類別
 __all__ = [ "User", "Contact", "BasicInfo", "Location", "Country", "City", "Base",
            "Store", "Resource", "Position", "UserPosition", "Group", "UserJoinGroup",
@@ -33,3 +47,10 @@ __all__ = [ "User", "Contact", "BasicInfo", "Location", "Country", "City", "Base
            "MentorParticipants",
            "Comment", "Review", "AIFeedback"
            ]
+
+def get_db():
+    db = Session()
+    try:
+        yield db
+    finally:
+        db.close()

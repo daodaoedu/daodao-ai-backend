@@ -1,8 +1,7 @@
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import router as api_router
-
+from routers import feedback
 
 
 app = FastAPI()
@@ -25,9 +24,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(api_router, prefix="/apis")
+# app.include_router(api_router, prefix="/apis")
+app.include_router(feedback.router, prefix="/api", tags=["feedback"])
 
 
+
+@app.get("/")
+async def root():
+    return {"message": "Welcome to my FastAPI project!"}
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
