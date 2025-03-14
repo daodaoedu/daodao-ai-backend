@@ -1,6 +1,8 @@
-fastapi
-uvicorn
-sqlalchemy
+fastapi>=0.100.0
+uvicorn>=0.18.0
+sqlalchemy>=2.0
 psycopg2-binary
 openai
-pydantic
+pydantic>=2.0
+requests
+httpx==0.23.3

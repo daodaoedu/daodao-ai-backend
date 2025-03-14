@@ -25,7 +25,7 @@ from .UserProfile import UserProfile
 from .Country import Country
 from .MentorParticipants import MentorParticipants
 from .Comment import Comment
-from .Reivew import Review
+from .Review import Review
 from .AIFeedback import AIFeedback
 
 DATABASE_URL = os.getenv("DATABASE_URL")

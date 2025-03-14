@@ -1,3 +1,5 @@
+import requests
+import json
 
 
 def generate_feedback(prompt: str) -> str:
@@ -11,24 +13,25 @@ def generate_feedback(prompt: str) -> str:
     #     temperature=0.7
     # )
     # return response.choices[0].message.content.strip()
-    return "Test"
+    # return "Test"
 
-    url = "http://localhost:11434/api/chat"
+    url = "http://192.168.15.209:11434/api/chat"
     headers = {"Content-Type": "application/json"}
     payload = {
-        "model": "deepseek-r1:14b",
+        "model": "phi3:latest",
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0.7,
-        "max_tokens": 1000,
+        "max_tokens": 200,
         "stream": False
     }
     
     response = requests.post(url, headers=headers, data=json.dumps(payload))
     
     if response.status_code == 200:
-        return response.json()
+        response_json = response.json()
+        return response_json.get('message', {}).get('content', '未提供回應內容')
     else:
-        return {"error": f"Request failed with status code {response.status_code}"}
+        return f"錯誤：API 請求失敗，狀態碼 {response.status_code}"
 
 
 

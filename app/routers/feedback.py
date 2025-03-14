@@ -1,6 +1,6 @@
 from fastapi import HTTPException, Depends, APIRouter, BackgroundTasks
 # from routers import router
-from models import Comment, Reivew, Session, get_db
+from models import Comment, Review, Session, get_db
 from schemas.FeedbackSchema import FeedbackSchema
 from schemas.LearningReviewSchema import LearningReviewSchema
 from services import process_feedback
@@ -33,7 +33,7 @@ async def create_feedback(
     3. 以背景任務呼叫 ChatGPT API 生成回饋留言
     """
     # 儲存學習覆盤 (可根據需要判斷是新增或更新)
-    new_review = Reivew(user_id=review.user_id, content=review.content)
+    new_review = Review(user_id=review.user_id, content=review.content)
     db.add(new_review)
     db.commit()
     db.refresh(new_review)
