@@ -14,6 +14,14 @@ services:
       OPENAI_API_KEY: "your_openai_api_key_here"  # 直接設定環境變數
     networks:
       - shared-daodao-network
+
+  ollama:
+    image: ollama/ollama
+    container_name: daodao-ai-engine
+    ports:
+      - "11434:11434"  # 假設 ollama 服務監聽在 8080 端口
+    networks:
+      - shared-daodao-network
 networks:
   shared-daodao-network:
     external: true

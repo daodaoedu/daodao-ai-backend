@@ -14,8 +14,8 @@ def generate_feedback(prompt: str) -> str:
     # )
     # return response.choices[0].message.content.strip()
     # return "Test"
-
-    url = "http://192.168.15.209:11434/api/chat"
+    prompt = "請用中文回覆，最多100字以內\n" + prompt
+    url = "http://ollama:11434/api/chat"
     headers = {"Content-Type": "application/json"}
     payload = {
         "model": "phi3:latest",
@@ -24,9 +24,9 @@ def generate_feedback(prompt: str) -> str:
         "max_tokens": 200,
         "stream": False
     }
-    
+
     response = requests.post(url, headers=headers, data=json.dumps(payload))
-    
+
     if response.status_code == 200:
         response_json = response.json()
         return response_json.get('message', {}).get('content', '未提供回應內容')
@@ -45,11 +45,11 @@ def generate_feedback(prompt: str) -> str:
 #             model="gpt-3.5-turbo",
 #             messages=[
 #                 {
-#                     "role": "system", 
+#                     "role": "system",
 #                     "content": "你是一位精通學習策略的助理，請根據使用者的學習記錄提供具體而有建設性的回饋建議。"
 #                 },
 #                 {
-#                     "role": "user", 
+#                     "role": "user",
 #                     "content": f"以下是使用者的學習資料：{context}\n請根據這些資料，給予一則回饋建議。"
 #                 }
 #             ],
