@@ -30,16 +30,16 @@ async def create_feedback(
     新增使用者學習覆盤：
     1. 儲存覆盤資料至資料庫
     2. 根據使用者相關資料聚合 context (此處以覆盤內容示範，實際可擴充其他資料)
-    3. 以背景任務呼叫 ChatGPT API 生成回饋留言
+    3. 以背景任務呼叫 LLM 生成回饋留言
     """
     # 儲存學習覆盤 (可根據需要判斷是新增或更新)
-    new_review = Review(user_id=review.user_id, content=review.content)
+    new_review = Review(post_id=review.post_id, content=review.content)
     db.add(new_review)
     db.commit()
     db.refresh(new_review)
 
     # 聚合 context 資料 (根據實際需求整合更多資訊)
-    context = f"使用者ID: {review.user_id}，覆盤內容: {review.content}"
+    context = f"使用者ID: {review.post_id}，覆盤內容: {review.content}"
     print(context)
 
     # 使用背景任務生成回饋留言

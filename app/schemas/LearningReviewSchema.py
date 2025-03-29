@@ -2,7 +2,7 @@ from pydantic import BaseModel
 
 
 class LearningReviewSchema(BaseModel):
-    user_id: int
+    post_id: int
     content: str
 
     class Config:

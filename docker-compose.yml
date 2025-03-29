@@ -10,8 +10,10 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: ${DATABASE_URL}  # 使用環境變數
-      OLLAMA_API_URL: ${OLLAMA_API_URL}  # 使用環境變數
-      OPENAI_API_KEY: "your_openai_api_key_here"  # 直接設定環境變數
+      # OLLAMA_API_URL: ${OLLAMA_API_URL}  # 使用環境變數
+      OPENAI_API_KEY: ${OPENAI_API_KEY}  # 使用環境變數
+      GEMINI_API_KEY: ${GEMINI_API_KEY}  # 使用環境變數
+      GROK_API_KEY: ${GROK_API_KEY}  # 使用環境變數
     networks:
       - shared-daodao-network
 

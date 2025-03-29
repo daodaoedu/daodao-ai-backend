@@ -33,7 +33,7 @@ class User(Base):
     basic_info_id = Column(Integer, ForeignKey("basic_info.id"), nullable=True)  # 外鍵
     createdDate = Column(TIMESTAMP(timezone=False), nullable=False)
     updatedDate = Column(TIMESTAMP(timezone=False), nullable=False)
-    
+
     created_by = Column(String(255), nullable=True) # for developer
     created_at = Column(TIMESTAMP(timezone=True), nullable=True) # for developer
     updated_by = Column(String(255), nullable=True) # for developer
@@ -43,18 +43,19 @@ class User(Base):
     contact = relationship("Contact", back_populates="user")
     location = relationship("Location", back_populates="user")
     basic_info = relationship("BasicInfo", back_populates="user")
-    resource = relationship("Resource", back_populates="user")    
+    resource = relationship("Resource", back_populates="user")
     stores = relationship("Store", back_populates="user")
     # 與身份的多對多關聯
     identities = relationship( "Position", secondary="user_positions", back_populates="users", overlaps="user_positions")
-    
+
     # 用來反向查詢User所創建的群組
     groups_created = relationship("Group", back_populates="created_by_user")
-    
+
     # 用來反向查詢User加入的群組
     user_join_group = relationship("UserJoinGroup", back_populates="user")
-    
+
     profile = relationship('UserProfile', back_populates='user', uselist=False)
+    comments = relationship("Comment", back_populates="user", cascade="all, delete-orphan")
 
 
     def __repr__(self):
