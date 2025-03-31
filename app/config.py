@@ -7,7 +7,7 @@ LLM_BACKENDS = {
     },
     "openai": {
         "url": "https://api.openai.com/v1/chat/completions",
-        "model": "gpt-4o",
+        "model": "gpt-4",
         "api_key": os.getenv("OPENAI_API_KEY"),
     },
     "gemini": {
