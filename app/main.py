@@ -1,7 +1,7 @@
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import feedback, learning_review
+from routers import feedback, learning_review, review
 
 
 app = FastAPI()
@@ -27,7 +27,7 @@ app.add_middleware(
 # app.include_router(api_router, prefix="/apis")
 app.include_router(feedback.router, prefix="/api", tags=["feedback"])
 app.include_router(learning_review.router, prefix="/api", tags=["learning_review"])
-
+app.include_router(review_router.router)  # 這行很重要！
 
 
 @app.get("/")
