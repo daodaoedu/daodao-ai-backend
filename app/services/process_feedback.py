@@ -1,13 +1,23 @@
-from services import generate_feedback
+from services.generate_feedback import generate_feedback
+from utils.llm_router import query_openai, query_gemini, query_grok
 from models import Comment, Session
+from utils.redis_utils import Redis
 
-def process_feedback(review_id: int, context: str, db: Session):
+def process_feedback(context: str, task_id: str):
     """
-    背景任務：產生回饋並儲存到資料庫
+    背景任務：產生回饋並儲存至 Redis
     """
-    feedback_text = generate_feedback(context)
-    feedback_record = Comment(review_id=review_id, content=feedback_text)
-    db.add(feedback_record)
-    db.commit()
-    db.refresh(feedback_record)
-    # 這裡可以加入記錄或其他後續處理
+    try:
+        feedback_text = query_openai(context)
+
+        # 儲存至 Redis
+        Redis.write_dict(f"feedback:{task_id}", {
+            "status": "done",
+            "result": feedback_text
+        })
+
+    except Exception as e:
+        Redis.write_dict(f"feedback:{task_id}", {
+            "status": "error",
+            "message": str(e)
+        })

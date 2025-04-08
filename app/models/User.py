@@ -56,6 +56,7 @@ class User(Base):
 
     profile = relationship('UserProfile', back_populates='user', uselist=False)
     comments = relationship("Comment", back_populates="user", cascade="all, delete-orphan")
+    posts = relationship("Post", back_populates="user", cascade="all, delete-orphan")
 
 
     def __repr__(self):

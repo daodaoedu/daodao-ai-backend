@@ -6,7 +6,7 @@ LLM_BACKENDS = {
         "model": "phi3:latest",
     },
     "openai": {
-        "url": "https://api.openai.com/v1/chat/completions",
+        "url": "https://api.openai.com/v1/responses",
         "model": "gpt-4",
         "api_key": os.getenv("OPENAI_API_KEY"),
     },
@@ -20,4 +20,12 @@ LLM_BACKENDS = {
         "model": "grok-2-latest",
         "api_key": os.getenv("GROK_API_KEY"),
     }
+}
+
+REDIS = {
+    'HOST': 'cache',
+    'PORT': 6379,
+    'PASSWD': '',
+    'DB': 0,
+    "EXPIRE": 60000
 }

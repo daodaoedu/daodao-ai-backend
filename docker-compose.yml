@@ -9,11 +9,11 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: ${DATABASE_URL}  # 使用環境變數
+      DATABASE_URL: ${DATABASE_URL} # 使用環境變數
       # OLLAMA_API_URL: ${OLLAMA_API_URL}  # 使用環境變數
-      OPENAI_API_KEY: ${OPENAI_API_KEY}  # 使用環境變數
-      GEMINI_API_KEY: ${GEMINI_API_KEY}  # 使用環境變數
-      GROK_API_KEY: ${GROK_API_KEY}  # 使用環境變數
+      OPENAI_API_KEY: ${OPENAI_API_KEY} # 使用環境變數
+      GEMINI_API_KEY: ${GEMINI_API_KEY} # 使用環境變數
+      GROK_API_KEY: ${GROK_API_KEY} # 使用環境變數
     networks:
       - shared-daodao-network
 
@@ -21,7 +21,21 @@ services:
     image: ollama/ollama
     container_name: daodao-ai-engine
     ports:
-      - "11434:11434"  # 假設 ollama 服務監聽在 8080 端口
+      - "11434:11434" # 假設 ollama 服務監聽在 8080 端口
+    networks:
+      - shared-daodao-network
+
+  cache:
+    build:
+      context: cache/
+      dockerfile: Dockerfile
+    image: redis:alpine
+    container_name: daodao-ai-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./cache/data:/data
     networks:
       - shared-daodao-network
 networks:
