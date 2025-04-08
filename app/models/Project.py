@@ -45,4 +45,5 @@ class Project(Base):
 
     milestones = relationship("Milestone", back_populates="project")
     tasks = relationship("Task", secondary="milestone", back_populates="project")
+    posts = relationship("Post", back_populates="project", cascade="all, delete-orphan")
 

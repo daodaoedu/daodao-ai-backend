@@ -27,7 +27,7 @@ app.add_middleware(
 # app.include_router(api_router, prefix="/apis")
 app.include_router(feedback.router, prefix="/api", tags=["feedback"])
 app.include_router(learning_review.router, prefix="/api", tags=["learning_review"])
-app.include_router(review_router.router)  # 這行很重要！
+app.include_router(review.router)  # 這行很重要！
 
 
 @app.get("/")
