@@ -93,13 +93,14 @@ async def get_feedback(review_id: int, db: ORMSession = Depends(get_db)):
     """
     取得回饋
     """
-    feedback = db.query(Comment).filter(Comment.review_id == review_id).first()
+    review = db.query(Review).filter(Review.id == review_id).first()
+    feedback = db.query(Comment).filter(Comment.target_id == review_id).first()
     if not feedback:
         raise HTTPException(status_code=404, detail="找不到對應的回饋留言")
 
     return FeedbackDetailResponse(
         feedbackId=feedback.id,
-        reviewId=feedback.review_id,
+        reviewId=review.id,
         style=feedback.style,
         thinkingMethod=feedback.thinking_method,
         content=feedback.content,

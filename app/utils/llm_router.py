@@ -84,4 +84,4 @@ def test_choose_llm():
     # print(f"Response for other prompt: {response_other}")
     # assert "joke" in response_other, f"Expected Grok, but got {response_other}"
 
-test_choose_llm()
+# test_choose_llm()
