@@ -8,7 +8,7 @@ class Milestone(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     project_id = Column(UUID(as_uuid=True), ForeignKey("project.id", ondelete="CASCADE"), nullable=False)
-    week = Column(Integer, nullable=False)
+    position = Column(Integer, nullable=False)
     name = Column(String(255))
     description = Column(Text)
     start_date = Column(Date)

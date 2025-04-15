@@ -1,18 +1,142 @@
 from fastapi import HTTPException, Depends, APIRouter, BackgroundTasks
 # from routers import router
-from models import Comment, Review, Session, get_db, Post, Project
+from models import Comment, Review, Session, get_db, Post, Project, Milestone, Task
 # from schemas.FeedbackSchema import FeedbackSchema
 # from schemas.LearningReviewSchema import LearningReviewSchema
 from schemas.Feedback import ( GenerateFeedbackRequest, GenerateFeedbackResponse, FeedbackDetailResponse, RateFeedbackRequest)
 from services.process_feedback import process_feedback
 from datetime import datetime
 from sqlalchemy.orm import Session as ORMSession
+from sqlalchemy import func, case
 from utils.redis_utils import Redis
 import uuid
 
 
 
 router = APIRouter()
+
+def get_project_data(db: ORMSession, project_id: int):
+    """Get and process project data"""
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="找不到相關專案")
+    return project
+
+def get_milestones_data(db: ORMSession, project_id: int):
+    """Get and process milestones data"""
+    milestones = db.query(Milestone).filter(Milestone.project_id == project_id).all()
+    return milestones
+
+def get_tasks_stats(db: ORMSession, milestones: list[Milestone]):
+    """Get and process tasks statistics for the given milestones"""
+    if not milestones:
+        return {'total': 0, 'completed': 0} # Return zero stats if no milestones
+
+    milestone_ids = [m.id for m in milestones]
+    print(f" milestone_ids {milestone_ids}")
+
+    tasks_stats = db.query(
+        func.count(Task.id).label('total'),
+        func.sum(case(
+            [(Task.is_completed == True, 1)], # Use is_completed boolean field
+            else_=0
+        )).label('completed')
+    ).filter(Task.milestone_id.in_(milestone_ids)).first() # Filter by milestone_ids
+
+    # Handle case where query returns None (e.g., no tasks found)
+    if tasks_stats is None or tasks_stats.total is None:
+         return {'total': 0, 'completed': 0}
+
+    # Ensure completed count is not None
+    completed_count = tasks_stats.completed if tasks_stats.completed is not None else 0
+
+    return {'total': tasks_stats.total, 'completed': completed_count}
+
+def get_review_trends(db: ORMSession, project_id: int, current_review_id: int):
+    """Get review trends for the project"""
+    reviews = db.query(Review).join(Post).filter(
+        Post.project_id == project_id,
+        Review.id <= current_review_id
+    ).order_by(Review.created_at.desc()).all()
+    return reviews
+
+def prepare_feedback_context(db: ORMSession, review_id: int):
+    """Prepare comprehensive context for feedback generation"""
+    # Get review and related data
+    review = db.query(Review).filter(Review.id == review_id).first()
+    if not review:
+        raise HTTPException(status_code=404, detail="找不到對應的學習覆盤")
+
+    post = db.query(Post).filter(Post.id == review.post_id).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="找不到相關聯的 post")
+
+    # Get project and related data
+
+    project = get_project_data(db, post.project_id)
+    print(f"檢查並取得專案資料（從快取或重新處理）{project}")
+    milestones = get_milestones_data(db, post.project_id)
+    print(f"檢查並取得里程碑資料 {milestones}")
+    tasks_stats_dict = get_tasks_stats(db, milestones)
+    print(f"檢查並取得任務統計資料 {tasks_stats_dict}")
+    review_trends = get_review_trends(db, post.project_id, review_id)
+    print(f"取得或更新覆盤趨勢資料 (Count: {len(review_trends)})")
+    for r in review_trends:
+        print(f"Review ID: {r.id}, Learning Score: {r.learning_review}, Stress: {r.stress_level}, Created: {r.created_at}")
+
+    # Format milestone progress
+    milestone_status = "\n".join([
+        f"- {m.name}: {m.is_completed}" for m in milestones
+    ])
+
+    # Calculate task completion rate
+    task_completion_rate = (tasks_stats_dict['completed'] / tasks_stats_dict['total'] * 100) if tasks_stats_dict['total'] > 0 else 0
+
+    # Analyze review trends
+    recent_reviews = review_trends[:5]  # Last 5 reviews
+    avg_learning_score = sum(r.learning_review for r in recent_reviews) / len(recent_reviews) if recent_reviews else 0
+    avg_stress_level = sum(r.stress_level for r in recent_reviews) / len(recent_reviews) if recent_reviews else 0
+
+    context = f"""
+    你是一位學習教練，請根據以下使用者輸入內容，給出「個人化」、「實用」、「具體可行」的學習回饋與建議：
+
+    🧠 覆盤回顧內容：
+    - 學習心得評分（1-10）：{review.learning_review}
+    - 覆盤內容：{review.learning_feedback}
+    - 調整與規劃：{review.adjustment_plan}
+    - 心情狀態：{review.mood}（說明：{review.mood_description}）
+    - 壓力等級（1-10）：{review.stress_level}
+
+    📊 學習趨勢分析：
+    - 近期平均學習評分：{avg_learning_score:.1f}
+    - 近期平均壓力指數：{avg_stress_level:.1f}
+
+    📘 專案資訊：
+    - 專案標題：{project.title}
+    - 專案描述：{project.description}
+    - 專案目標：{project.goal or '未提供'}
+    - 動機說明：{project.motivation_description or '未提供'}
+    - 策略說明：{project.strategy_description or '未提供'}
+    - 預期成果說明：{project.outcome_description or '未提供'}
+    - 專案狀態：{project.status}
+    - 起訖日期：{project.start_date} ~ {project.end_date}（週期：{project.interval} 天）
+
+    📈 專案進度：
+    - 任務完成率：{task_completion_rate:.1f}%
+    里程碑狀態：
+    {milestone_status}
+
+    📝 本週貼文資訊：
+    - 標題：{post.title}
+    - 週次：{post.week}
+    - 日期：{post.date}
+
+    請回覆給使用者一段清楚、貼心、專屬的建議與鼓勵。特別注意：
+    1. 根據學習趨勢給出針對性建議
+    2. 參考專案進度提供實際可行的改進方向
+    3. 結合里程碑完成情況給出下一步建議
+    """
+    return context
 
 @router.get("/feedback/status/{task_id}")
 async def get_feedback_status(task_id: str):
@@ -32,60 +156,17 @@ async def generate_feedback(
     """
     生成回饋
     """
-    # 檢查是否有對應的 review
-    review = db.query(Review).filter(Review.id == req.reviewId).first()
-    if not review:
-        raise HTTPException(status_code=404, detail="找不到對應的學習覆盤")
+    # Prepare comprehensive context for feedback
+    context = prepare_feedback_context(db, req.reviewId)
+    print(f"context {context}")
 
-    post = db.query(Post).filter(Post.id == review.post_id).first()
-    if not post:
-        raise HTTPException(status_code=404, detail="找不到相關聯的 post")
-
-    project = db.query(Project).filter(Project.id == post.project_id).first()
-    
-    
-    # 組成 context 給 LLM
-    context = f"""
-    你是一位學習教練，請根據以下使用者輸入內容，給出「個人化」、「實用」、「具體可行」的學習回饋與建議：
-
-    🧠 覆盤回顧內容：
-    - 學習心得評分（1-10）：{review.learning_review}
-    - 覆盤內容：{review.learning_feedback}
-    - 調整與規劃：{review.adjustment_plan}
-    - 心情狀態：{review.mood}（說明：{review.mood_description}）
-    - 壓力等級（1-10）：{review.stress_level}
-
-    📘 專案資訊：
-    - 專案標題：{project.title if project else '未知'}
-    - 專案描述：{project.description if project else '未知'}
-    - 專案目標：{project.goal if project and project.goal else '未提供'}
-    - 動機說明：{project.motivation_description if project and project.motivation_description else '未提供'}
-    - 策略說明：{project.strategy_description if project and project.strategy_description else '未提供'}
-    - 預期成果說明：{project.outcome_description if project and project.outcome_description else '未提供'}
-    - 專案狀態：{project.status if project else '未知'}
-    - 起訖日期：{project.start_date} ~ {project.end_date}（週期：{project.interval} 天）
-
-    📝 本週貼文資訊：
-    - 標題：{post.title}
-    - 週次：{post.week}
-    - 日期：{post.date}
-
-    請回覆給使用者一段清楚、貼心、專屬的建議與鼓勵。
-    """
-    
-
-
-    # 背景產生回饋（以 review 為 context）
-    # background_tasks.add_task(process_feedback, context)
-    # 建立唯一任務 ID
+    # Generate unique task ID and trigger background processing
     task_id = str(uuid.uuid4())
-    
     background_tasks.add_task(process_feedback, context, task_id)
 
     return GenerateFeedbackResponse(
         feedbackId=task_id,
         content="已提交生成任務，請稍後查看",
-        # generatedAt=comment.created_at
     )
 
 @router.get("/feedback/{review_id}", response_model=FeedbackDetailResponse)
@@ -129,5 +210,3 @@ async def rate_feedback(
     feedback.rating = req.rating
     db.commit()
     return {"message": "評分成功"}
-
-
