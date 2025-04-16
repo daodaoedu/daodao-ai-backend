@@ -28,6 +28,7 @@ from .Comment import Comment
 from .Review import Review
 from .AIFeedback import AIFeedback
 from .Post import Post
+from .Outcome import Outcome
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
@@ -46,7 +47,7 @@ __all__ = [ "User", "Contact", "BasicInfo", "Location", "Country", "City", "Base
            "Project", "Milestone", "Marathon", "Task", "UserProject",
            "FeePlan","Eligibility", "ProjectMarathon", "UserProfile",
            "MentorParticipants",
-           "Comment", "Review", "AIFeedback", "Post"
+           "Comment", "Review", "AIFeedback", "Post", "Outcome"
            ]
 
 def get_db():
