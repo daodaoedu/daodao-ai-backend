@@ -1,6 +1,6 @@
 from fastapi import HTTPException, Depends, APIRouter, BackgroundTasks
 # from routers import router
-from models import Comment, Review, Session, get_db, Post, Project, Milestone, Task, Outcome
+from models import Comment, Review, Session, get_db, Post, Project, Milestone, Task, Outcome, AIReviewFeedback
 # from schemas.FeedbackSchema import FeedbackSchema
 # from schemas.LearningReviewSchema import LearningReviewSchema
 from schemas.Feedback import ( GenerateFeedbackRequest, GenerateFeedbackResponse, FeedbackDetailResponse, RateFeedbackRequest)
@@ -188,7 +188,7 @@ async def generate_feedback(
 
     # Generate unique task ID and trigger background processing
     task_id = str(uuid.uuid4())
-    background_tasks.add_task(process_feedback, context, task_id)
+    background_tasks.add_task(process_feedback, req.style, req.thinkingMethod, context, task_id, req.reviewId , db)
 
     # 立即回傳 task_id，其他欄位等 status 查詢
     return {
@@ -203,39 +203,17 @@ async def get_feedback(review_id: int, db: ORMSession = Depends(get_db)):
     """
     取得回饋
     """
-    review = db.query(Review).filter(Review.id == review_id).first()
-    feedback = db.query(Comment).filter(Comment.target_id == review_id).first()
-    if not feedback:
+    ai_feedback = db.query(AIReviewFeedback).filter(AIReviewFeedback.review_id == review_id).first()
+
+    if not ai_feedback:
         raise HTTPException(status_code=404, detail="找不到對應的回饋留言")
 
     return FeedbackDetailResponse(
-        feedbackId=feedback.id,
-        reviewId=review.id,
-        style=feedback.style,
-        thinkingMethod=feedback.thinking_method,
-        content=feedback.content,
-        tokenUsage=feedback.token_usage,
-        createdAt=feedback.created_at
+        feedbackId=ai_feedback.id,
+        reviewId=ai_feedback.review_id,
+        style=ai_feedback.style,
+        thinkingMethod=ai_feedback.thinking_method,
+        content=ai_feedback.content,
+        tokenUsage=ai_feedback.token_usage,
+        createdAt=ai_feedback.created_at
     )
-
-
-@router.put("/feedback/{feedback_id}/rate")
-async def rate_feedback(
-    feedback_id: int,
-    req: RateFeedbackRequest,
-    db: ORMSession = Depends(get_db)
-):
-    """
-    評價回饋
-    """
-    feedback = db.query(Comment).filter(Comment.id == feedback_id).first()
-    if not feedback:
-        raise HTTPException(status_code=404, detail="找不到對應的回饋留言")
-
-    if not (1 <= req.rating <= 5):
-        raise HTTPException(status_code=400, detail="評分需介於 1 到 5 之間")
-
-    # 實際可儲存至 `rating` 欄位
-    feedback.rating = req.rating
-    db.commit()
-    return {"message": "評分成功"}

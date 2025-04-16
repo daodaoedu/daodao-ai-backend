@@ -28,6 +28,9 @@ class Review(Base):
     created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
     updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
 
+    # 關聯到 AIReviewFeedback
+    ai_feedback = relationship("AIReviewFeedback", back_populates="review", uselist=False)
+
     # 限制 mood 和 visibility
     __table_args__ = (
         CheckConstraint(mood.in_(['happy', 'calm', 'anxious', 'tired', 'frustrated'])),

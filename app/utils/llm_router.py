@@ -69,7 +69,6 @@ def query_openai(prompt: str) -> tuple[str, float, dict]:
         output = data.get("output", [{}])[0].get("content", [{}])[0].get("text", "未提供回應")
         usage = data.get("usage", {})
         cost = estimate_openai_cost(usage) if usage else estimate_token_cost(estimate_tokens(prompt + output), 0.09)
-        print(f"query_openai {output}, {cost}, {usage}")
         return output, cost, usage
     else:
         return f"錯誤：API 請求失敗，狀態碼 {response.status_code}", 0, {}

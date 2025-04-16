@@ -26,7 +26,7 @@ from .Country import Country
 from .MentorParticipants import MentorParticipants
 from .Comment import Comment
 from .Review import Review
-from .AIFeedback import AIFeedback
+from .AIReviewFeedback import AIReviewFeedback
 from .Post import Post
 from .Outcome import Outcome
 
@@ -47,7 +47,7 @@ __all__ = [ "User", "Contact", "BasicInfo", "Location", "Country", "City", "Base
            "Project", "Milestone", "Marathon", "Task", "UserProject",
            "FeePlan","Eligibility", "ProjectMarathon", "UserProfile",
            "MentorParticipants",
-           "Comment", "Review", "AIFeedback", "Post", "Outcome"
+           "Comment", "Review", "AIReviewFeedback", "Post", "Outcome"
            ]
 
 def get_db():
