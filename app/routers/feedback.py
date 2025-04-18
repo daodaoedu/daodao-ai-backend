@@ -54,11 +54,19 @@ def get_tasks_stats(db: ORMSession, milestones: list[Milestone]):
 
 def get_review_trends(db: ORMSession, project_id: int, current_review_id: int):
     """Get review trends for the project"""
-    ## TODO: filter type: review
+    # Step 1: 找出該 review 對應的 post_id
+    review = db.query(Review).filter(Review.id == current_review_id).first()
+    if not review:
+        return []
+
+    post_id = review.post_id
+    
+    # Step 2: 查找該 project_id 下，type 為 review，且 post.id <= 當前 review 對應的 post_id 的所有 review
     reviews = db.query(Review).join(Post).filter(
         Post.project_id == project_id,
-        Review.id <= current_review_id
-    ).order_by(Review.created_at.desc()).all()
+        Post.type == 'review',
+        Post.id <= post_id
+    ).order_by(Post.id.desc()).all()
     return reviews
 
 def prepare_feedback_context(db: ORMSession, review_id: int, style: str = None, thinking_method: str = None):
@@ -80,11 +88,10 @@ def prepare_feedback_context(db: ORMSession, review_id: int, style: str = None, 
     print(f"檢查並取得里程碑資料 {milestones}")
     tasks_stats_dict = get_tasks_stats(db, milestones)
     print(f"檢查並取得任務統計資料 {tasks_stats_dict}")
-    # TODO: 處理當前覆盤資料 -> context 太長，做摘要。判斷字數超過300字，則 gemini 進行摘要成300字
     review_trends = get_review_trends(db, post.project_id, review_id)
     print(f"取得或更新覆盤趨勢資料 (Count: {len(review_trends)})")
     for r in review_trends:
-        print(f"Review ID: {r.id}, Learning Score: {r.learning_review}, Stress: {r.stress_level}, Created: {r.created_at}")
+        print(f"Review ID: {r.id}, Post id {r.post_id}, Learning Score: {r.learning_review}, Stress: {r.stress_level}, Created: {r.created_at}")
 
     # Format milestone progress
     milestone_status = "\n".join([
@@ -158,6 +165,7 @@ def prepare_feedback_context(db: ORMSession, review_id: int, style: str = None, 
     2. 參考專案進度提供實際可行的改進方向
     3. 結合里程碑完成情況給出下一步建議
     """
+    
     return context
 
 @router.get("/feedback/status/{task_id}")

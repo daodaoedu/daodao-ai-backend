@@ -1,7 +1,7 @@
 # See https://pre-commit.com for more information
 # See https://pre-commit.com/hooks.html for more hooks
 repos:
--   repo: https://github.com/pre-commit/pre-commit-hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v3.2.0
     hooks:
     -   id: trailing-whitespace
@@ -10,3 +10,12 @@ repos:
     -   id: check-added-large-files
     -   id: check-symlinks
     -   id: debug-statements
+
+  - repo: https://github.com/sourcery-ai/sourcery
+    rev: v1.11.0
+    hooks:
+      - id: sourcery
+        # The best way to use Sourcery in a pre-commit hook:
+        # * review only changed lines:
+        # * omit the summary
+        args: [--diff=git diff HEAD]

@@ -6,10 +6,15 @@ from datetime import datetime
 from sqlalchemy.orm import Session as ORMSession
 from fastapi import HTTPException
 
+
+
 def process_feedback(style, thinking_method, context: str, task_id: str, review_id: int, db: ORMSession):
     """
     背景任務：產生回饋並儲存至 Redis 和資料庫
     """
+    
+    # TODO: 處理當前覆盤資料 -> context 太長，做摘要。判斷字數超過300字，則 gemini 進行摘要成300字
+    
     try:
         # output: str, cost: float, usage: dict
         output, cost, usage = query_openai(context)
