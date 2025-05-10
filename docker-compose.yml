@@ -17,13 +17,13 @@ services:
     networks:
       - shared-daodao-network
 
-  ollama:
-    image: ollama/ollama
-    container_name: daodao-ai-engine
-    ports:
-      - "11434:11434" # 假設 ollama 服務監聽在 8080 端口
-    networks:
-      - shared-daodao-network
+  # ollama:
+  #   image: ollama/ollama
+  #   container_name: daodao-ai-engine
+  #   ports:
+  #     - "11434:11434" # 假設 ollama 服務監聽在 8080 端口
+  #   networks:
+      # - shared-daodao-network
 
   cache:
     build:

@@ -53,7 +53,7 @@ def estimate_tokens(text: str) -> int:
     # 粗估 1 token ~ 4 字元
     return max(1, len(text) // 4)
 
-def query_openai(prompt: str) -> tuple[str, float, dict]:
+def query_openai(prompt: str) -> tuple[str, float, dict, str]:
     url = LLM_BACKENDS['openai']['url']
     headers = {
         "Content-Type": "application/json",
@@ -69,11 +69,11 @@ def query_openai(prompt: str) -> tuple[str, float, dict]:
         output = data.get("output", [{}])[0].get("content", [{}])[0].get("text", "未提供回應")
         usage = data.get("usage", {})
         cost = estimate_openai_cost(usage) if usage else estimate_token_cost(estimate_tokens(prompt + output), 0.09)
-        return output, cost, usage
+        return output, cost, usage, "query_openai"
     else:
-        return f"錯誤：API 請求失敗，狀態碼 {response.status_code}", 0, {}
+        return f"錯誤：API 請求失敗，狀態碼 {response.status_code}", 0, {},  "query_openai"
 
-def query_gemini(prompt: str) -> tuple[str, float, dict]:
+def query_gemini(prompt: str) -> tuple[str, float, dict, str]:
     url = f"{LLM_BACKENDS['gemini']['url']}/?key={LLM_BACKENDS['gemini']['api_key']}"
     headers = {
         "Content-Type": "application/json"
@@ -93,11 +93,11 @@ def query_gemini(prompt: str) -> tuple[str, float, dict]:
         tokens = estimate_tokens(prompt + output)
         cost = estimate_token_cost(tokens, 0.01)
         usage = {"estimated_tokens": tokens}
-        return output, cost, usage
+        return output, cost, usage, "query_gemini"
     else:
-        return f"錯誤：API 請求失敗，狀態碼 {response.status_code}", 0, {}
+        return f"錯誤：API 請求失敗，狀態碼 {response.status_code}", 0, {}, "query_gemini"
 
-def query_grok(prompt: str) -> tuple[str, float, dict]:
+def query_grok(prompt: str) -> tuple[str, float, dict, str]:
     url = LLM_BACKENDS['grok']['url']
     headers = {
         "Content-Type": "application/json",
@@ -119,9 +119,9 @@ def query_grok(prompt: str) -> tuple[str, float, dict]:
         tokens = estimate_tokens(prompt + output)
         cost = estimate_token_cost(tokens, 0.01)
         usage = {"estimated_tokens": tokens}
-        return output, cost, usage
+        return output, cost, usage, "query_grok"
     else:
-        return f"錯誤：API 請求失敗，狀態碼 {response.status_code}", 0, {}
+        return f"錯誤：API 請求失敗，狀態碼 {response.status_code}", 0, {}, "query_grok"
 
 def choose_llm(prompt: str) -> tuple[str, float, dict]:
     """選擇適合的 LLM 服務，並回傳 (output, cost, usage)"""
