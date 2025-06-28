@@ -1,43 +1,62 @@
-version: '3.8'
+version: "3.8"
 
 services:
-  backend:
+  backend-dev:
     build: ./app
-    container_name: daodao-ai-backend-container
+    container_name: daodao-ai-backend-dev-container
+    volumes:
+      - ./app:/app
+    ports:
+      - "8001:8000"
+    environment:
+      DATABASE_URL: ${DATABASE_URL_DEV}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GROK_API_KEY: ${GROK_API_KEY}
+      REDIS_URL: redis://redis-dev:6379
+    networks:
+      - dev-daodao-network
+
+  redis-dev:
+    image: redis:alpine
+    container_name: daodao-ai-redis-dev
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    volumes:
+      - ./cache/dev_data:/data
+    networks:
+      - dev-daodao-network
+
+  backend-prod:
+    build: ./app
+    container_name: daodao-ai-backend-prod-container
     volumes:
       - ./app:/app
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: ${DATABASE_URL} # 使用環境變數
-      # OLLAMA_API_URL: ${OLLAMA_API_URL}  # 使用環境變數
-      OPENAI_API_KEY: ${OPENAI_API_KEY} # 使用環境變數
-      GEMINI_API_KEY: ${GEMINI_API_KEY} # 使用環境變數
-      GROK_API_KEY: ${GROK_API_KEY} # 使用環境變數
+      DATABASE_URL: ${DATABASE_URL_PROD}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GROK_API_KEY: ${GROK_API_KEY}
+      REDIS_URL: redis://redis-prod:6379
     networks:
-      - shared-daodao-network
+      - prod-daodao-network
 
-  # ollama:
-  #   image: ollama/ollama
-  #   container_name: daodao-ai-engine
-  #   ports:
-  #     - "11434:11434" # 假設 ollama 服務監聽在 8080 端口
-  #   networks:
-      # - shared-daodao-network
-
-  cache:
-    build:
-      context: cache/
-      dockerfile: Dockerfile
+  redis-prod:
     image: redis:alpine
-    container_name: daodao-ai-redis
+    container_name: daodao-ai-redis-prod
     restart: unless-stopped
     ports:
       - "6379:6379"
     volumes:
-      - ./cache/data:/data
+      - ./cache/prod_data:/data
     networks:
-      - shared-daodao-network
+      - prod-daodao-network
+
 networks:
-  shared-daodao-network:
+  prod-daodao-network:
+    external: true
+  dev-daodao-network:
     external: true
