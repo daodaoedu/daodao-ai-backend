@@ -47,10 +47,11 @@ __all__ = [ "User", "Contact", "BasicInfo", "Location", "Country", "City", "Base
            "Project", "Milestone", "Marathon", "Task", "UserProject",
            "FeePlan","Eligibility", "ProjectMarathon", "UserProfile",
            "MentorParticipants",
-           "Comment", "Review", "AIReviewFeedback", "Post", "Outcome"
+           "Comment", "Review", "AIReviewFeedback", "Post", "Outcome","Category"
            ]
 
 def get_db():
+    
     db = Session()
     try:
         yield db

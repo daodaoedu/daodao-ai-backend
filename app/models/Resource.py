@@ -1,26 +1,34 @@
-from sqlalchemy import create_engine, Column, Integer, ForeignKey, Text
+from sqlalchemy import String, Column, Integer, ForeignKey, Text, DateTime
 from sqlalchemy.orm import relationship
-from utils.code_enum import cost_t, age_t
+from sqlalchemy.dialects.postgresql import UUID
+
+from datetime import datetime
+import uuid
+
 from .base import Base  # 引用分離出的 Base
 
 
 
 class Resource(Base):
-    __tablename__ = 'resource'
-    id = Column(Integer, primary_key=True)
-    created_by_user_id = Column(Integer, ForeignKey('users.id'), unique=True)
-    image_url = Column(Text)
-    resource_name = Column(Text) 
-    cost = Column(cost_t) # TODO, index to filter
-    tag_list = Column(Text) # TODO 標籤 split(,) index to filter
-    username = Column(Text)
-    age = Column(age_t) # TODO split(,) index to filter
-    type_list = Column(Text) # TODO, 資源類型 split(,) index to filter
-    url_link = Column(Text)
-    filed_name_list = Column(Text)  # TODO, 領域名稱 split(,) index to filter
-    video_url = Column(Text)
-    introduction = Column(Text)
-    area = Column(Text)
-    supplement = Column(Text)
+    __tablename__ = "resources"
 
-    user = relationship("User", back_populates="resource")
+    id = Column(Integer, primary_key=True, index=True)
+    external_id = Column(UUID(as_uuid=True), default=uuid.uuid4, unique=True)
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
+    major_category_id = Column(Integer, ForeignKey("categories.id"))
+    sub_category_id = Column(Integer, ForeignKey("categories.id"))
+    name = Column(String(255), nullable=False)
+    url = Column(String(1000), nullable=False)
+    image_url = Column(String(1000))
+    description = Column(Text, nullable=False)
+    video_url = Column(String(1000))
+    type = Column(String(100), nullable=False)
+    cost = Column(String(50), nullable=False)
+    level = Column(String(50), default="all_levels", nullable=False)
+    status = Column(String(20), default="active")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime)
+    deleted_at = Column(DateTime)
+
+    creator = relationship("User", back_populates="resources")  # 若有對應 User Model
+

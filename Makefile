@@ -10,7 +10,7 @@ up-dev:
 
 # 停止並移除 dev 環境容器、網路等
 down-dev:
-	docker compose --profile dev down
+	docker compose --profile dev down --volumes --rmi all
 
 # 啟動 prod 環境，使用 profile prod
 up-prod:
@@ -18,7 +18,7 @@ up-prod:
 
 # 停止並移除 prod 環境容器、網路等
 down-prod:
-	docker compose --profile prod down
+	docker compose --profile prod down --volumes --rmi all
 
 # 重建並啟動 dev 環境
 rebuild-dev: down-dev up-dev

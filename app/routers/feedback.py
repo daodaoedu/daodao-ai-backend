@@ -9,10 +9,11 @@ import uuid
 
 
 
-router = APIRouter()
+# router = APIRouter()
+router = APIRouter(prefix="/feedback", tags=["feedback"])
 
 
-@router.get("/feedback/status/{task_id}")
+@router.get("/status/{task_id}")
 async def get_feedback_status(task_id: str):
     data = Redis.read_dict(f"feedback:{task_id}")
 
@@ -27,7 +28,7 @@ async def get_feedback_status(task_id: str):
         "generatedAt": data.get("generatedAt")
     }
 
-@router.post("/feedback/generate", response_model=GenerateFeedbackResponse)
+@router.post("/generate", response_model=GenerateFeedbackResponse)
 async def generate_feedback(
     req: GenerateFeedbackRequest,
     background_tasks: BackgroundTasks,
@@ -53,7 +54,7 @@ async def generate_feedback(
         "generatedAt": None
     }
 
-@router.get("/feedback/{review_id}", response_model=FeedbackDetailResponse)
+@router.get("/{review_id}", response_model=FeedbackDetailResponse)
 async def get_feedback(review_id: int, db: ORMSession = Depends(get_db)):
     """
     取得回饋
