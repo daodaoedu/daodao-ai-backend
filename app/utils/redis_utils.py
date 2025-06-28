@@ -1,5 +1,5 @@
 import redis
-from config import REDIS
+from config import REDIS_URL
 import pickle
 
 
@@ -10,19 +10,13 @@ class Redis(object):
 
     @staticmethod
     def _get_r():
-        host = REDIS["HOST"]
-        port = REDIS["PORT"]
-        db = REDIS["DB"]
-        passwd = REDIS["PASSWD"]
-        r = redis.StrictRedis(host=host, port=port, db=db, password=passwd)
+        r = redis.from_url(REDIS_URL)
         return r
 
     @classmethod
     def write_dict(self, key, value, expire=None):
-        if expire:
-            expire_in_seconds = expire
-        else:
-            expire_in_seconds = REDIS["EXPIRE"]
+        expire_in_seconds = expire or 60000
+
         r = self._get_r()
         r.set(key, pickle.dumps(value), ex=expire_in_seconds)
 
@@ -42,10 +36,7 @@ class Redis(object):
 
     @classmethod
     def expire(self, name, expire=None):
+        expire_in_seconds = expire or 60000
 
-        if expire:
-            expire_in_seconds = expire
-        else:
-            expire_in_seconds = REDIS["EXPIRE"]
         r = self._get_r()
         r.expire(name, expire_in_seconds)

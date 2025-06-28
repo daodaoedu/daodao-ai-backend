@@ -22,10 +22,11 @@ LLM_BACKENDS = {
     }
 }
 
-REDIS = {
-    'HOST': 'cache',
-    'PORT': 6379,
-    'PASSWD': '',
-    'DB': 0,
-    "EXPIRE": 60000
-}
+# REDIS = {
+#     'HOST': 'cache',
+#     'PORT': 6379,
+#     'PASSWD': '',
+#     'DB': 0,
+#     "EXPIRE": 60000
+# }
+REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0')

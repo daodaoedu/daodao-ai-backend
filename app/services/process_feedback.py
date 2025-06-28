@@ -1,6 +1,5 @@
-from services.generate_feedback import generate_feedback
-from utils.llm_router import query_openai, query_gemini, query_grok
-from models import Comment, Session, AIReviewFeedback, Review
+from utils.llm_router import query_gemini
+from models import Comment, AIReviewFeedback
 from utils.redis_utils import Redis
 from datetime import datetime
 from sqlalchemy.orm import Session as ORMSession
@@ -24,7 +23,7 @@ def process_feedback(style, thinking_method, context: str, task_id: str, review_
 
     try:
         # output: str, cost: float, usage: dict
-        output, cost, usage, llm_name = query_grok(context)
+        output, cost, usage, llm_name = query_gemini(context)
         token_usage = round(cost, 6)
         generated_at = datetime.now().isoformat()
 

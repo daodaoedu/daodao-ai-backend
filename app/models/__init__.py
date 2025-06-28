@@ -34,7 +34,7 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     raise Exception("請設定環境變數 DATABASE_URL 為 PostgreSQL 連線字串")
 engine = create_engine(
-    "postgresql+psycopg2://daodao:daodao@postgres-daodao:5432/daodao", pool_size=5, pool_timeout=10, echo=False
+    f"{os.getenv('DATABASE_URL')}", pool_size=5, pool_timeout=10, echo=False
 )  # echo=True for debug
 
 # 創建 Session 類別
