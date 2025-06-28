@@ -1,62 +1,66 @@
-version: "3.8"
+version: "3.9"
+
+networks:
+  dev-daodao-network:
+    external: true
+  prod-daodao-network:
+    external: true
 
 services:
   backend-dev:
     build: ./app
-    container_name: daodao-ai-backend-dev-container
-    volumes:
-      - ./app:/app
+    container_name: daodao-ai-backend-dev
     ports:
       - "8001:8000"
     environment:
       DATABASE_URL: ${DATABASE_URL_DEV}
+      REDIS_URL: ${REDIS_URL_DEV}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       GROK_API_KEY: ${GROK_API_KEY}
-      REDIS_URL: redis://redis-dev:6379
     networks:
       - dev-daodao-network
+    profiles:
+      - dev
 
   redis-dev:
     image: redis:alpine
     container_name: daodao-ai-redis-dev
     restart: unless-stopped
     ports:
-      - "6380:6379"
+      - "6381:6379"
     volumes:
       - ./cache/dev_data:/data
     networks:
       - dev-daodao-network
+    profiles:
+      - dev
 
   backend-prod:
     build: ./app
-    container_name: daodao-ai-backend-prod-container
-    volumes:
-      - ./app:/app
+    container_name: daodao-ai-backend-prod
     ports:
       - "8000:8000"
     environment:
       DATABASE_URL: ${DATABASE_URL_PROD}
+      REDIS_URL: ${REDIS_URL_PROD}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       GROK_API_KEY: ${GROK_API_KEY}
-      REDIS_URL: redis://redis-prod:6379
     networks:
       - prod-daodao-network
+    profiles:
+      - prod
 
   redis-prod:
     image: redis:alpine
     container_name: daodao-ai-redis-prod
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "6380:6379"
     volumes:
       - ./cache/prod_data:/data
     networks:
       - prod-daodao-network
-
-networks:
-  prod-daodao-network:
-    external: true
-  dev-daodao-network:
-    external: true
+    profiles:
+      - prod
