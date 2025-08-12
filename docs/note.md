@@ -7,9 +7,9 @@
 * **PostgreSQL**
 
   * 儲存使用者、資源、推薦紀錄等結構化資料。
-  * 推薦系統需要追蹤使用者行為（點擊、收藏、分享）和資源特徵（類別、標籤、難度等），這些是典型的關聯式資料。
+  * 推薦系統需要追蹤使用者行為（點擊`click`、收藏`favorite`、分享`share`）和資源特徵（類別`resources.major)category_id, resources.sub_category_id, resources.type`、標籤`entity_tag`、難度`resources.level`等），這些是典型的關聯式資料。
+    * `click`, `favorite`, `share` 目前沒這表
 * **Redis**
-
   * 做熱門推薦快取、使用者推薦列表快取，減少每次都重新計算的開銷。
   * 也可以儲存用戶最近行為，用於即時個人化推薦。
 
@@ -19,7 +19,13 @@
 
 * **Qdrant (Vector DB)**
 
-  * 儲存資源或內容的向量化嵌入（embeddings），支援相似度搜尋（例如找相似課程、找內容相關的教學文章）。
+  * 儲存資源或內容的向量化嵌入（embeddings），支援相似度搜尋（例如找相似資源、專案、找內容相關的教學文章）。
+    * `resources.name` + `resources.description`
+    * `review.mood_description` + `review.learning_feedback`
+    * `post.type` + `post.title` + 
+      * `outcome.content` 
+      * `review.mood_description` + `review.learning_feedback`
+      *  `note.content`
   * 特別適合語義搜尋與內容推薦。
 * **Redis**
 
