@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   test:
@@ -15,8 +15,4 @@ services:
       GROK_API_KEY: ${GROK_API_KEY}
     command: pytest /app/tests/test_review_service.py -v
     networks:
-      - shared-daodao-network
-
-networks:
-  shared-daodao-network:
-    external: true
+      - dev-daodao-network

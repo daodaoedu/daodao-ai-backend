@@ -1,0 +1,33 @@
+networks:
+  dev-daodao-network:
+    external: true
+
+services:
+  backend-dev:
+    build: ./app
+    container_name: daodao-ai-backend-dev
+    ports:
+      - "8002:8000"
+    environment:
+      DATABASE_URL: ${DATABASE_URL_DEV}
+      REDIS_URL: ${REDIS_URL_DEV}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GROK_API_KEY: ${GROK_API_KEY}
+    networks:
+      - dev-daodao-network
+    profiles:
+      - dev
+
+  redis-dev:
+    image: redis:alpine
+    container_name: daodao-ai-redis-dev
+    restart: unless-stopped
+    ports:
+      - "6381:6379"
+    volumes:
+      - ./cache/dev_data:/data
+    networks:
+      - dev-daodao-network
+    profiles:
+      - dev
