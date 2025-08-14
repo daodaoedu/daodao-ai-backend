@@ -1,3 +1,4 @@
+```
 app/
 ├── api/                       # API 路由相關，依功能子目錄拆分
 │   ├── __init__.py
@@ -65,6 +66,7 @@ app/
 ├── requirements.txt
 ├── .env.example
 └── README.md
+```
 
 ```mermaid
 flowchart TB
