@@ -1,0 +1,69 @@
+networks:
+  dev-daodao-network:
+    external: true
+
+services:
+  # Grafana
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana-dev
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_ALERTING_ENABLED: "true"
+    networks:
+      - dev-daodao-network
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
+
+  # Alertmanager
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: alertmanager-dev
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./observability/alertmanager/config.yml:/etc/alertmanager/config.yml
+    networks:
+      - dev-daodao-network
+
+  # Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus-dev
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - dev-daodao-network
+    depends_on:
+      - backend-dev
+      - worker-dev
+
+  # Loki (集中日誌)
+  loki:
+    image: grafana/loki:2.9.1
+    container_name: loki-dev
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ./observability/loki/local-config.yaml:/etc/loki/local-config.yaml
+    networks:
+      - dev-daodao-network
+
+  # Tempo (Distributed Tracing)
+  tempo:
+    image: grafana/tempo:1.8.1
+    container_name: tempo-dev
+    ports:
+      - "3200:3200"
+    volumes:
+      - ./observability/tempo/config.yaml:/etc/tempo/config.yaml
+    networks:
+      - dev-daodao-network

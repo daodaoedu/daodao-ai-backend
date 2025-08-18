@@ -121,3 +121,78 @@ flowchart TB
     J -.-> H
 
 ```
+```mermaid
+flowchart LR
+  %% 顏色定義
+  classDef user fill:#dbeafe,stroke:#3b82f6,color:#1e3a8a
+  classDef app fill:#e0f2fe,stroke:#0284c7,color:#0369a1
+  classDef auth fill:#fde68a,stroke:#f59e0b,color:#78350f
+  classDef data fill:#dcfce7,stroke:#16a34a,color:#065f46
+  classDef worker fill:#fcd5ce,stroke:#ef4444,color:#7f1d1d
+  classDef obs fill:#f3e8ff,stroke:#8b5cf6,color:#4c1d95
+  classDef cicd fill:#fee2e2,stroke:#ef4444,color:#7f1d1d
+  classDef event fill:#fef3c7,stroke:#f59e0b,color:#7c2d12
+
+  %% 使用者層
+  U[使用者 / 前端<br/>Web / Mobile]:::user -->|HTTPS + Token| AUTH_AUTH[Auth 模組<br/>JWT / OAuth2]:::auth
+  AUTH_AUTH -->|驗證成功| LB[Nginx<br/>API Gateway / Load Balancer]:::app
+
+  %% 應用層
+  subgraph APP[應用層]
+    API[Backend API<br/>FastAPI]:::app
+    WORKER[Background Worker<br/>Celery]:::worker
+  end
+  LB -->|路由請求到 API| API
+
+  %% 資料層
+  subgraph DATA[資料層]
+    PG[(PostgreSQL)]
+    REDIS[(Redis)]
+    MINIO[(MinIO)]
+    KAFKA[(Kafka)]
+  end
+
+  %% API 與資料層連線
+  API -->|查詢 / 寫入資料| PG
+  API -->|快取 / Session| REDIS
+  API -->|檔案存取| MINIO
+  API -->|發送事件 Event Publish| KAFKA
+
+  %% Worker 消費事件
+  WORKER -->|讀取事件 Event Consumer| KAFKA
+  WORKER -->|寫結果 / 更新狀態| PG
+  WORKER -->|快取更新| REDIS
+  WORKER -->|檔案存取| MINIO
+
+  %% 觀測性
+  subgraph OBS[觀測性]
+    LOG[Loki<br/>集中日誌]
+    MET[Prometheus<br/>Metrics]
+    TRACE[Tempo<br/>Tracing]
+    GRAF[Grafana + Alertmanager<br/>Dashboard & Alerts]
+  end
+  API -.->|收集 Logs / Metrics / Trace| LOG
+  API -.->|收集 Metrics| MET
+  API -.->|收集 Trace| TRACE
+  WORKER -.->|收集 Logs / Metrics / Trace| LOG
+  WORKER -.->|收集 Metrics| MET
+  WORKER -.->|收集 Trace| TRACE
+  LOG --> GRAF
+  MET --> GRAF
+  TRACE --> GRAF
+
+  %% CI/CD + 基礎設施
+  subgraph CICD[CI/CD + Infra]
+    GIT[Git Repo] --> CI[CI Pipeline<br/>GitHub Actions / GitLab CI]
+    CI --> REG[Container Registry]
+    REG --> DEPLOY[Deploy: Docker / K8s]
+    DEPLOY --> APP
+    DEPLOY --> DATA
+    DEPLOY --> OBS
+    TERRAFORM[Terraform]<-->|管理基礎設施<br/>VM / Network / DB / Redis / Kafka / MinIO| DEPLOY
+  end
+
+  %% Kafka 消費者標註
+  class KAFKA event
+
+```
