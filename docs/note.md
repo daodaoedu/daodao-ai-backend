@@ -7,7 +7,7 @@
 * **PostgreSQL**
 
   * 儲存使用者、資源、推薦紀錄等結構化資料。
-  * 推薦系統需要追蹤使用者行為（點擊`click`、收藏`favorite`、分享`share`）和資源特徵（類別`resources.major)category_id, resources.sub_category_id, resources.type`、標籤`entity_tag`、難度`resources.level`等），這些是典型的關聯式資料。
+  * 推薦系統需要追蹤使用者行為（點擊`click`、收藏`favorite`、分享`share`）和資源特徵（類別`resources.major_category_id, resources.sub_category_id, resources.type`、標籤`entity_tag`、難度`resources.level`等），這些是典型的關聯式資料。
     * `click`, `favorite`, `share` 目前沒這表
 * **Redis**
   * 做熱門推薦快取、使用者推薦列表快取，減少每次都重新計算的開銷。

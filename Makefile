@@ -10,6 +10,7 @@ COMPOSE_PROD = docker compose -f docker-compose.prod.yml
 
 up-dev:
 	$(COMPOSE_DEV) --profile dev up -d
+	$(COMPOSE_DEV) --profile dev up -d
 
 down-dev:
 	$(COMPOSE_DEV) --profile dev down --volumes --rmi all

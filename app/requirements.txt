@@ -18,3 +18,23 @@ httpx>=0.23.0,<0.24.0  # 用於異步HTTP測試
 python-dotenv>=0.19.0,<0.20.0  # 用於環境變量管理
 
 redis
+
+
+langchain>=0.1.17
+langchain-community>=0.0.17
+celery[redis]==5.3.0
+celery-prometheus
+# === Monitoring ===
+prometheus-fastapi-instrumentator
+prometheus_client
+
+opentelemetry-api
+opentelemetry-sdk
+opentelemetry-instrumentation-fastapi
+langfuse
+# === Utility ===
+python-dotenv==1.0.0
+matplotlib
+click
+pytest
+tqdm
