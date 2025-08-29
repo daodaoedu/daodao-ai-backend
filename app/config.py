@@ -22,6 +22,14 @@ LLM_BACKENDS = {
     }
 }
 
+db_config ={
+    "dbname": os.getenv("DEV_DB_NAME", "daodao"),
+    "user": os.getenv("DEV_DB_USER", "daodao"),
+    "password": os.getenv("DEV_DB_PASSWORD", "daodao"),
+    "host": os.getenv("DEV_DB_HOST", "localhost"),
+    "port": os.getenv("DEV_DB_PORT", 5432)
+}
+
 # REDIS = {
 #     'HOST': 'cache',
 #     'PORT': 6379,

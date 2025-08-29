@@ -1,21 +1,18 @@
 # 基本依賴
-fastapi>=0.68.0,<0.69.0
-uvicorn>=0.15.0,<0.16.0
-pydantic>=1.8.0,<2.0.0
-requests>=2.26.0,<3.0.0
+fastapi
+uvicorn
+pydantic
+requests
 
 # 數據庫依賴
-sqlalchemy>=1.4.0,<2.0.0
-alembic>=1.7.0,<2.0.0  # 用於數據庫遷移
-psycopg2-binary>=2.9.0,<3.0.0  # PostgreSQL驅動（如果使用PostgreSQL）
+sqlalchemy
+psycopg2-binary  # PostgreSQL驅動（如果使用PostgreSQL）
 
 # 測試依賴
-pytest>=7.0.0,<8.0.0
-pytest-asyncio>=0.18.0,<0.19.0
-httpx>=0.23.0,<0.24.0  # 用於異步HTTP測試
+pytest-asyncio
+httpx # 用於異步HTTP測試
 
 # 其他工具
-python-dotenv>=0.19.0,<0.20.0  # 用於環境變量管理
 
 redis
 
@@ -31,10 +28,18 @@ prometheus_client
 opentelemetry-api
 opentelemetry-sdk
 opentelemetry-instrumentation-fastapi
-langfuse
+
+langchain>=0.1.17
+langchain-community>=0.0.17
+langchain-ollama
+
+
 # === Utility ===
-python-dotenv==1.0.0
+python-dotenv
+pytest
+
 matplotlib
 click
-pytest
 tqdm
+
+pyjwt

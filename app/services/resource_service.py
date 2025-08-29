@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from models import Review, Post, Resource, User, Category
-from schemas.resource import TopReviewOut, TopContributorOut, TopCategoryOut
+from api.schemas.resource import TopReviewOut, TopContributorOut, TopCategoryOut
 
 
 def get_popular_resources(db: Session, limit: int = 10):

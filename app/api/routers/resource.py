@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from schemas.resource import ResourceOut
+from api.schemas.resource import ResourceOut
 from services.resource_service import (
     get_popular_resources, get_latest_resources, get_recommended_resources
 )
