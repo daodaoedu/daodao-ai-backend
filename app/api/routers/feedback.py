@@ -1,6 +1,6 @@
 from fastapi import HTTPException, Depends, APIRouter, BackgroundTasks
 from models import get_db,  AIReviewFeedback
-from api.schemas.Feedback import ( GenerateFeedbackRequest, GenerateFeedbackResponse, FeedbackDetailResponse)
+from api.schemas.feedback import ( GenerateFeedbackRequest, GenerateFeedbackResponse, FeedbackDetailResponse)
 from services.process_feedback import process_feedback
 from services.feedback import prepare_feedback_context
 from sqlalchemy.orm import Session as ORMSession
