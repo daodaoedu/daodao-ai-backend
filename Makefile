@@ -47,3 +47,5 @@ all:
 rank_feed:
 	$(COMPOSE_PROD) --profile prod exec backend-dev /bin/bash -c "PYTHONPATH=/app python services/rank_feed.py"
 
+review_service:
+	$(COMPOSE_DEV) --profile dev exec backend-dev /bin/bash -c "PYTHONPATH=/app pytest tests/test_review_service.py -v"	

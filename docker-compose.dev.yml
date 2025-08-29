@@ -113,12 +113,12 @@ services:
   #     - "9093:9093" # controller port
   #   networks:
   #     - dev-daodao-network
-  # ollama-dev:
-  #   image: ollama/ollama
-  #   container_name: daodao-ai-backend-ollama
-  #   ports:
-  #     - "11434:11434"
-  #   volumes:
-  #     - ./ollama_models:/root/.ollama
-  #   networks:
-  #     - dev-daodao-network
+  ollama-dev:
+    image: ollama/ollama
+    container_name: daodao-ai-backend-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ./ollama_models:/root/.ollama
+    networks:
+      - dev-daodao-network
