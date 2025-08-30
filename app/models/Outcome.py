@@ -1,6 +1,8 @@
-from sqlalchemy import Column, Integer, Text, String, TIMESTAMP, ForeignKey, ARRAY
+from sqlalchemy import ARRAY, TIMESTAMP, Column, ForeignKey, Integer, String, Text
 from sqlalchemy.sql import func
+
 from .base import Base
+
 
 class Outcome(Base):
     __tablename__ = "outcome"

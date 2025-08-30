@@ -1,12 +1,11 @@
-from sqlalchemy import String, Column, Integer, ForeignKey, Text, DateTime
-from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql import UUID
-
-from datetime import datetime
 import uuid
+from datetime import datetime
+
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
 
 from .base import Base  # 引用分離出的 Base
-
 
 
 class Resource(Base):
@@ -31,4 +30,3 @@ class Resource(Base):
     deleted_at = Column(DateTime)
 
     creator = relationship("User", back_populates="resource")  # 若有對應 User Model
-

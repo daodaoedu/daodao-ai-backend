@@ -1,8 +1,9 @@
-from typing import Dict, List, Optional
 import json
 from datetime import datetime
+from typing import Dict, List, Optional
 
 from utils.llm_router import choose_llm
+
 
 class ReviewService:
     def __init__(self):
@@ -31,14 +32,15 @@ class ReviewService:
         formatted_history = json.dumps(history_data, ensure_ascii=False, indent=2)
 
         return self.review_prompt_template.format(
-            user_data=formatted_user_data,
-            history_data=formatted_history
+            user_data=formatted_user_data, history_data=formatted_history
         )
 
-    def generate_review(self,
-                       user_data: Dict,
-                       history_data: List[Dict],
-                       review_type: Optional[str] = None) -> Dict:
+    def generate_review(
+        self,
+        user_data: Dict,
+        history_data: List[Dict],
+        review_type: Optional[str] = None,
+    ) -> Dict:
         """生成個人化的回饋與建議"""
 
         prompt = self._prepare_review_prompt(user_data, history_data)
@@ -52,18 +54,17 @@ class ReviewService:
             "user_id": user_data.get("user_id"),
             "review_type": review_type or "general",
             "analysis": llm_response,
-            "raw_data": {
-                "user_data": user_data,
-                "history_data": history_data
-            }
+            "raw_data": {"user_data": user_data, "history_data": history_data},
         }
 
         return review_result
 
-    def analyze_progress(self,
-                        user_data: Dict,
-                        history_data: List[Dict],
-                        specific_aspects: Optional[List[str]] = None) -> Dict:
+    def analyze_progress(
+        self,
+        user_data: Dict,
+        history_data: List[Dict],
+        specific_aspects: Optional[List[str]] = None,
+    ) -> Dict:
         """分析使用者的進步情況"""
 
         progress_prompt = f"""
@@ -92,8 +93,5 @@ class ReviewService:
             "user_id": user_data.get("user_id"),
             "progress_analysis": analysis,
             "analyzed_aspects": specific_aspects or ["overall"],
-            "raw_data": {
-                "user_data": user_data,
-                "history_data": history_data
-            }
+            "raw_data": {"user_data": user_data, "history_data": history_data},
         }

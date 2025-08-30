@@ -1,6 +1,7 @@
-from sqlalchemy.orm import Session
-from models import Project
 from fastapi import HTTPException
+from models import Project
+from sqlalchemy.orm import Session
+
 
 def get_project_data(db: Session, project_id: int):
     project = db.query(Project).filter(Project.id == project_id).first()

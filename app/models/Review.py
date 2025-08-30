@@ -1,9 +1,17 @@
+from models import Base
 from sqlalchemy import (
-    Column, Integer, String, Text, SmallInteger, ForeignKey, TIMESTAMP, CheckConstraint, func
+    TIMESTAMP,
+    CheckConstraint,
+    Column,
+    ForeignKey,
+    Integer,
+    SmallInteger,
+    String,
+    Text,
+    func,
 )
 from sqlalchemy.orm import relationship
 
-from models import Base
 # -------------------------------------------------------------------
 # 1. 資料庫設定 (使用 PostgreSQL)
 # -------------------------------------------------------------------
@@ -11,6 +19,7 @@ from models import Base
 # -------------------------------------------------------------------
 # 2. 資料庫模型定義
 # -------------------------------------------------------------------
+
 
 class Review(Base):
     __tablename__ = "review"
@@ -26,19 +35,24 @@ class Review(Base):
     visibility = Column(String(10), default="private")
 
     created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
-    updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
+    updated_at = Column(
+        TIMESTAMP,
+        server_default=func.current_timestamp(),
+        onupdate=func.current_timestamp(),
+    )
 
     # 關聯到 AIReviewFeedback
-    ai_feedback = relationship("AIReviewFeedback", back_populates="review", uselist=False)
+    ai_feedback = relationship(
+        "AIReviewFeedback", back_populates="review", uselist=False
+    )
 
     # 限制 mood 和 visibility
     __table_args__ = (
-        CheckConstraint(mood.in_(['happy', 'calm', 'anxious', 'tired', 'frustrated'])),
+        CheckConstraint(mood.in_(["happy", "calm", "anxious", "tired", "frustrated"])),
         CheckConstraint("stress_level BETWEEN 1 AND 10"),
         CheckConstraint("learning_review BETWEEN 1 AND 10"),
-        CheckConstraint(visibility.in_(['public', 'private'])),
+        CheckConstraint(visibility.in_(["public", "private"])),
     )
-
 
 
 # # 建立資料表 (正式環境建議使用 Alembic 進行 migration)
@@ -53,7 +67,6 @@ class Review(Base):
 # -------------------------------------------------------------------
 
 
-
 # -------------------------------------------------------------------
 # 5. 初始化 OpenAI API
 # -------------------------------------------------------------------
@@ -61,7 +74,6 @@ class Review(Base):
 # -------------------------------------------------------------------
 # 6. API Endpoint 實作
 # -------------------------------------------------------------------
-
 
 
 # -------------------------------------------------------------------

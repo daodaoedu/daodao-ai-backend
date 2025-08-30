@@ -1,11 +1,4 @@
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
-from api.schemas.resource import ResourceOut
-from services.resource_service import (
-    get_popular_resources, get_latest_resources, get_recommended_resources
-)
-from utils.dependencies import get_current_user  # 自行定義
-from models import get_db
+from fastapi import APIRouter
 
 router = APIRouter(prefix="/resources", tags=["resource"])
 

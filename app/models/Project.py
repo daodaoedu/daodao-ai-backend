@@ -1,15 +1,33 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, ARRAY, Boolean, TIMESTAMP, Date, Enum, CheckConstraint, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
-from .base import Base
-from utils.code_enum import motivation_t, strategy_t, outcome_t
 import uuid
 
+from sqlalchemy import (
+    ARRAY,
+    TIMESTAMP,
+    Boolean,
+    CheckConstraint,
+    Column,
+    Date,
+    Enum,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
+from utils.code_enum import motivation_t, outcome_t, strategy_t
+
+from .base import Base
+
+
 class Project(Base):
-    __tablename__ = 'project'
+    __tablename__ = "project"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    external_id = Column(UUID(as_uuid=True), default=uuid.uuid4, unique=True, nullable=False)
+    external_id = Column(
+        UUID(as_uuid=True), default=uuid.uuid4, unique=True, nullable=False
+    )
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     img_url = Column(String(255))
     title = Column(String(255))
@@ -27,13 +45,17 @@ class Project(Base):
     outcome = Column(ARRAY(outcome_t))
     outcome_description = Column(Text)
     is_public = Column(Boolean, default=False)
-    status = Column(Enum('Ongoing', 'Completed', 'Not Started', 'Canceled'), default='Not Started')
+    status = Column(
+        Enum("Ongoing", "Completed", "Not Started", "Canceled"), default="Not Started"
+    )
     start_date = Column(Date)
     end_date = Column(Date)
     interval = Column(Integer)
-    created_at = Column(TIMESTAMP, server_default='CURRENT_TIMESTAMP')
+    created_at = Column(TIMESTAMP, server_default="CURRENT_TIMESTAMP")
     created_by = Column(Integer)
-    updated_at = Column(TIMESTAMP, server_default='CURRENT_TIMESTAMP', onupdate='CURRENT_TIMESTAMP')
+    updated_at = Column(
+        TIMESTAMP, server_default="CURRENT_TIMESTAMP", onupdate="CURRENT_TIMESTAMP"
+    )
     updated_by = Column(Integer)
     version = Column(Integer)
 
@@ -43,7 +65,7 @@ class Project(Base):
         UniqueConstraint("user_id", "title", "version", name="uq_user_project_version"),
     )
 
-    milestones = relationship("Milestone", back_populates="project", cascade="all, delete-orphan")
+    milestones = relationship(
+        "Milestone", back_populates="project", cascade="all, delete-orphan"
+    )
     posts = relationship("Post", back_populates="project", cascade="all, delete-orphan")
-    
-

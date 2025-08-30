@@ -1,10 +1,10 @@
-import psycopg2
+import math
 from datetime import datetime, timezone
 from typing import List
-import math
-from config import db_config
-from api.schemas.recommendation import FeedInfo
 
+import psycopg2
+from api.schemas.recommendation import FeedInfo
+from config import db_config
 from logger import AppLogger
 
 logger = AppLogger(__name__).get_logger()
@@ -28,7 +28,8 @@ def get_feed(limit=100) -> List[FeedInfo]:
     cur = conn.cursor()
 
     # 拉所有資料
-    cur.execute("""
+    cur.execute(
+        """
     SELECT id, type, title, created_at, updated_at,
            COALESCE(resource_count,0) as resource_count,
            COALESCE(streak,0) as streak,
@@ -53,51 +54,63 @@ def get_feed(limit=100) -> List[FeedInfo]:
         LEFT JOIN entity_resources er ON er.entity_id=pr.id::text AND er.entity_type='project'
         GROUP BY pr.id
     ) combined
-    """)
+    """
+    )
 
     rows = cur.fetchall()
     result = []
 
     for r in rows:
-        id, typ, title, created_at, updated_at, resource_count, streak, progress_ratio, base_score = r
-        
+        (
+            id,
+            typ,
+            title,
+            created_at,
+            updated_at,
+            resource_count,
+            streak,
+            progress_ratio,
+            base_score,
+        ) = r
+
         # 使用 UTC aware datetime
         now = datetime.now(timezone.utc)
         days = (now - created_at).days
-        
+
         # 計算新鮮度分數
         freshness_score = 1 / math.log(1 + days) if days > 0 else 0
-        
+
         # 計算活動分數
         resource_count = float(resource_count)
         streak = float(streak)
         progress_ratio = float(progress_ratio)
         activity_score = resource_count * 1 + streak * 0.5 + progress_ratio * 2
-        
+
         # 總分
         score = base_score + freshness_score + activity_score
-        
-        result.append(FeedInfo(
+
+        result.append(
+            FeedInfo(
                 id=id,
                 type=typ,
                 title=title,
                 score=score,
                 freshness_score=freshness_score,
-                activity_score=activity_score
-            ))
+                activity_score=activity_score,
+            )
+        )
 
     # 排序並取前 limit 筆
     result.sort(
-        key=lambda x: (x.score, x.freshness_score, x.activity_score),
-        reverse=True
+        key=lambda x: (x.score, x.freshness_score, x.activity_score), reverse=True
     )
-
 
     top_result = result[:limit]
 
     cur.close()
     conn.close()
     return top_result
+
 
 # 範例使用
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
-from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional
+
+from pydantic import BaseModel
 
 
 class GenerateFeedbackRequest(BaseModel):
@@ -8,10 +9,12 @@ class GenerateFeedbackRequest(BaseModel):
     style: Optional[str] = None
     thinkingMethod: Optional[str] = None
 
+
 class GenerateFeedbackResponse(BaseModel):
     feedbackId: str
     content: str
     # generatedAt: datetime
+
 
 class FeedbackDetailResponse(BaseModel):
     feedbackId: int
@@ -21,6 +24,7 @@ class FeedbackDetailResponse(BaseModel):
     content: str
     tokenUsage: float
     createdAt: datetime
+
 
 class RateFeedbackRequest(BaseModel):
     rating: int  # 1~5

@@ -1,7 +1,9 @@
-from pydantic import BaseModel, HttpUrl
+from datetime import datetime
 from typing import Optional
 from uuid import UUID
-from datetime import datetime
+
+from pydantic import BaseModel, HttpUrl
+
 
 class ResourceBase(BaseModel):
     name: str
@@ -13,9 +15,11 @@ class ResourceBase(BaseModel):
     cost: str
     level: str
 
+
 class ResourceCreate(ResourceBase):
     major_category_id: Optional[int]
     sub_category_id: Optional[int]
+
 
 class ResourceOut(ResourceBase):
     id: int
@@ -30,8 +34,6 @@ class ResourceOut(ResourceBase):
         orm_mode = True
 
 
-
-
 class TopReviewOut(BaseModel):
     review_id: int
     learning_review: int
@@ -41,10 +43,12 @@ class TopReviewOut(BaseModel):
     resource_name: str
     resource_url: str
 
+
 class TopContributorOut(BaseModel):
     id: int
     nickname: Optional[str]
     resource_count: int
+
 
 class TopCategoryOut(BaseModel):
     id: int

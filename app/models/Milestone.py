@@ -1,13 +1,26 @@
-from sqlalchemy import Column, Integer, String, Date, Text, ForeignKey, Boolean, TIMESTAMP
+from sqlalchemy import (
+    TIMESTAMP,
+    Boolean,
+    Column,
+    Date,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
+
 from .base import Base
+
 
 class Milestone(Base):
     __tablename__ = "milestone"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    project_id = Column(UUID(as_uuid=True), ForeignKey("project.id", ondelete="CASCADE"), nullable=False)
+    project_id = Column(
+        UUID(as_uuid=True), ForeignKey("project.id", ondelete="CASCADE"), nullable=False
+    )
     position = Column(Integer, nullable=False)
     name = Column(String(255))
     description = Column(Text)
@@ -15,10 +28,14 @@ class Milestone(Base):
     end_date = Column(Date)
     is_completed = Column(Boolean, default=False)
     is_deleted = Column(Boolean, default=False)
-    created_at = Column(TIMESTAMP, server_default='CURRENT_TIMESTAMP')
-    updated_at = Column(TIMESTAMP, server_default='CURRENT_TIMESTAMP', onupdate='CURRENT_TIMESTAMP')
+    created_at = Column(TIMESTAMP, server_default="CURRENT_TIMESTAMP")
+    updated_at = Column(
+        TIMESTAMP, server_default="CURRENT_TIMESTAMP", onupdate="CURRENT_TIMESTAMP"
+    )
 
     # 關聯：一個 Milestone 屬於 Project
     project = relationship("Project", back_populates="milestones")
     # 關聯：一個 Milestone 有多個 Tasks
-    tasks = relationship("Task", back_populates="milestone", cascade="all, delete-orphan")
+    tasks = relationship(
+        "Task", back_populates="milestone", cascade="all, delete-orphan"
+    )

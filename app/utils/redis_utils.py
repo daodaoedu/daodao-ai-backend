@@ -1,6 +1,7 @@
+import pickle
+
 import redis
 from config import REDIS_URL
-import pickle
 from logger import AppLogger
 
 logger = AppLogger(__name__).get_logger()

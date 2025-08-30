@@ -2,8 +2,8 @@ import os
 
 LLM_BACKENDS = {
     "ollama": {
-        "url": "http://ollama-dev:11434/api/generate", # 單次生成文本, /api/chat : 對話式互動
-        "model": "phi3:mini", # 2.2GB
+        "url": "http://ollama-dev:11434/api/generate",  # 單次生成文本, /api/chat : 對話式互動
+        "model": "phi3:mini",  # 2.2GB
     },
     "openai": {
         "url": "https://api.openai.com/v1/responses",
@@ -19,15 +19,15 @@ LLM_BACKENDS = {
         "url": "https://api.x.ai/v1/chat/completions",
         "model": "grok-2-latest",
         "api_key": os.getenv("GROK_API_KEY"),
-    }
+    },
 }
 
-db_config ={
+db_config = {
     "dbname": os.getenv("DEV_DB_NAME", "daodao"),
     "user": os.getenv("DEV_DB_USER", "daodao"),
     "password": os.getenv("DEV_DB_PASSWORD", "daodao"),
     "host": os.getenv("DEV_DB_HOST", "localhost"),
-    "port": os.getenv("DEV_DB_PORT", 5432)
+    "port": os.getenv("DEV_DB_PORT", 5432),
 }
 
 # REDIS = {
@@ -37,4 +37,4 @@ db_config ={
 #     'DB': 0,
 #     "EXPIRE": 60000
 # }
-REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")

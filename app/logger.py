@@ -2,7 +2,7 @@
 import logging
 import os
 from datetime import datetime, timedelta, timezone
-from logging.handlers import TimedRotatingFileHandler
+
 
 class AppLogger:
     """結構化 Logger，支援 UTC+8 時區、自動建立 log 目錄、console 與 file handler"""
@@ -10,7 +10,9 @@ class AppLogger:
     LOG_DIR = "logs"
     UTC8 = timezone(timedelta(hours=8))
 
-    def __init__(self, name: str = __name__, log_file: str = "app.log", level=logging.INFO):
+    def __init__(
+        self, name: str = __name__, log_file: str = "app.log", level=logging.INFO
+    ):
         self.name = name
         self.log_file = os.path.join(self.LOG_DIR, log_file)
         self.level = level
@@ -23,7 +25,9 @@ class AppLogger:
         self.logger.propagate = False  # 避免重複輸出
 
         # 設定 formatter
-        formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+        formatter = logging.Formatter(
+            "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+        )
         formatter.converter = self._utc8_converter
 
         # console handler

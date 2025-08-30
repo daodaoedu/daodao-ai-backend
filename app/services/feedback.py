@@ -1,13 +1,16 @@
-from sqlalchemy.orm import Session
 from fastapi import HTTPException
-from models import Review, Post, Project, Milestone, Task, Outcome
-from .project import get_project_data
+from models import Outcome, Post, Review
+from sqlalchemy.orm import Session
+
 from .milestone import get_milestones_data
-from .task import get_tasks_stats
+from .project import get_project_data
 from .review import get_review_trends
+from .task import get_tasks_stats
 
 
-def prepare_feedback_context(db: Session, review_id: int, style: str = None, thinking_method: str = None) -> str:
+def prepare_feedback_context(
+    db: Session, review_id: int, style: str = None, thinking_method: str = None
+) -> str:
     """Prepare comprehensive context for feedback generation"""
 
     # Get review and related data
@@ -26,17 +29,27 @@ def prepare_feedback_context(db: Session, review_id: int, style: str = None, thi
     review_trends = get_review_trends(db, post.project_id, review_id)
 
     # Format milestone progress
-    milestone_status = "\n".join([
-        f"- {m.name}: {m.is_completed}" for m in milestones
-    ])
+    milestone_status = "\n".join([f"- {m.name}: {m.is_completed}" for m in milestones])
 
     # Calculate task completion rate
-    task_completion_rate = (tasks_stats_dict['completed'] / tasks_stats_dict['total'] * 100) if tasks_stats_dict['total'] > 0 else 0
+    task_completion_rate = (
+        (tasks_stats_dict["completed"] / tasks_stats_dict["total"] * 100)
+        if tasks_stats_dict["total"] > 0
+        else 0
+    )
 
     # Analyze review trends
     recent_reviews = review_trends[:5]  # Last 5 reviews
-    avg_learning_score = sum(r.learning_review for r in recent_reviews) / len(recent_reviews) if recent_reviews else 0
-    avg_stress_level = sum(r.stress_level for r in recent_reviews) / len(recent_reviews) if recent_reviews else 0
+    avg_learning_score = (
+        sum(r.learning_review for r in recent_reviews) / len(recent_reviews)
+        if recent_reviews
+        else 0
+    )
+    avg_stress_level = (
+        sum(r.stress_level for r in recent_reviews) / len(recent_reviews)
+        if recent_reviews
+        else 0
+    )
 
     # 查詢 outcome 資料
     outcomes = db.query(Outcome).filter(Outcome.post_id == post.id).all()
@@ -48,13 +61,15 @@ def prepare_feedback_context(db: Session, review_id: int, style: str = None, thi
                 outcome_section += f"  圖片：{', '.join(o.image_urls)}\n"
             if o.video_urls:
                 outcome_section += f"  影片：{', '.join(o.video_urls)}\n"
-            outcome_section += f"  可見性：{o.visibility}  建立：{o.created_at}  更新：{o.updated_at}\n"
+            outcome_section += (
+                f"  可見性：{o.visibility}  建立：{o.created_at}  更新：{o.updated_at}\n"
+            )
     else:
         outcome_section = "\n\n📒 學習成果紀錄：無\n"
 
     # 教練風格與思考方法說明
-    style_str = style or '未指定'
-    thinking_method_str = thinking_method or '未指定'
+    style_str = style or "未指定"
+    thinking_method_str = thinking_method or "未指定"
     style_section = f"\n【指定教練風格】：{style_str}\n【指定思考方法】：{thinking_method_str}\n"
 
     # Build final context
