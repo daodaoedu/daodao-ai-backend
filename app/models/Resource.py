@@ -30,5 +30,5 @@ class Resource(Base):
     updated_at = Column(DateTime)
     deleted_at = Column(DateTime)
 
-    creator = relationship("User", back_populates="resources")  # 若有對應 User Model
+    creator = relationship("User", back_populates="resource")  # 若有對應 User Model
 

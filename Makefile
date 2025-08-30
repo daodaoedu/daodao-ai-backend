@@ -11,13 +11,13 @@ up-dev:
 	$(COMPOSE_DEV) --profile dev up -d
 
 down-dev:
-	$(COMPOSE_DEV) --profile dev down --volumes --rmi all
+	$(COMPOSE_DEV) --profile dev down --volumes 
 
 up-prod:
 	$(COMPOSE_PROD) --profile prod up -d
 
 down-prod:
-	$(COMPOSE_PROD) --profile prod down --volumes --rmi all
+	$(COMPOSE_PROD) --profile prod down --volumes 
 
 rebuild-dev: down-dev up-dev
 

@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Integer, String
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.ext.associationproxy import association_proxy
 from .base import Base  # 引用分離出的 Base
 
 
@@ -12,8 +13,8 @@ class Position(Base):
     name = Column(String(100), nullable=False, unique=True)
 
     # 與 UserPosition 關聯
-    users = relationship("User",secondary="user_positions",back_populates="identities", overlaps="user_positions")
-
+    user_positions = relationship("UserPosition", back_populates="position")
+    users = association_proxy("user_positions", "user")
 
     def __repr__(self):
         return f"<Position(id={self.id}, name='{self.name}')>"

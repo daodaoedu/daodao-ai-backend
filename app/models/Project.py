@@ -43,7 +43,7 @@ class Project(Base):
         UniqueConstraint("user_id", "title", "version", name="uq_user_project_version"),
     )
 
-    milestones = relationship("Milestone", back_populates="project")
-    tasks = relationship("Task", secondary="milestone", back_populates="project")
+    milestones = relationship("Milestone", back_populates="project", cascade="all, delete-orphan")
     posts = relationship("Post", back_populates="project", cascade="all, delete-orphan")
+    
 

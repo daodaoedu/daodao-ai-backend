@@ -83,18 +83,18 @@ services:
   #   command: celery -A app.worker worker --loglevel=info
 
   # # Redis for cache & Celery broker
-  # redis-dev:
-  #   image: redis:alpine
-  #   container_name: daodao-ai-redis-dev
-  #   restart: unless-stopped
-  #   ports:
-  #     - "6381:6379"
-  #   volumes:
-  #     - ./cache/dev_data:/data
-  #   networks:
-  #     - dev-daodao-network
-  #   profiles:
-  #     - dev
+  redis-dev:
+    image: redis:alpine
+    container_name: daodao-ai-redis-dev
+    restart: unless-stopped
+    ports:
+      - "6381:6379"
+    volumes:
+      - ./cache/dev_data:/data
+    networks:
+      - dev-daodao-network
+    profiles:
+      - dev
 
   # # Kafka (KRaft mode, 不需要 Zookeeper)
   # kafka-dev:

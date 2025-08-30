@@ -10,5 +10,7 @@ class UserPosition(Base):
     user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), primary_key=True)
     position_id = Column(Integer, ForeignKey('position.id', ondelete='CASCADE'), primary_key=True)
 
-    user = relationship("User", backref="user_positions")
-    position = relationship("Position", backref="user_positions")
+
+
+    user = relationship("User", back_populates="user_positions")
+    position = relationship("Position", back_populates="user_positions")

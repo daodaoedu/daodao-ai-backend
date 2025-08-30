@@ -19,7 +19,7 @@ class FeedbackDetailResponse(BaseModel):
     style: Optional[str]
     thinkingMethod: Optional[str]
     content: str
-    tokenUsage: int
+    tokenUsage: float
     createdAt: datetime
 
 class RateFeedbackRequest(BaseModel):

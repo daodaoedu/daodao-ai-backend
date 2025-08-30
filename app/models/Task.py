@@ -17,5 +17,7 @@ class Task(Base):
     created_at = Column(TIMESTAMP, server_default='CURRENT_TIMESTAMP')
     updated_at = Column(TIMESTAMP, server_default='CURRENT_TIMESTAMP', onupdate='CURRENT_TIMESTAMP')
 
+
+    
+    # 關聯：一個 Task 屬於 Milestone
     milestone = relationship("Milestone", back_populates="tasks")
-    project = relationship("Project", secondary="milestone", back_populates="tasks")

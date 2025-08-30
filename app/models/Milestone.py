@@ -18,5 +18,7 @@ class Milestone(Base):
     created_at = Column(TIMESTAMP, server_default='CURRENT_TIMESTAMP')
     updated_at = Column(TIMESTAMP, server_default='CURRENT_TIMESTAMP', onupdate='CURRENT_TIMESTAMP')
 
+    # 關聯：一個 Milestone 屬於 Project
     project = relationship("Project", back_populates="milestones")
+    # 關聯：一個 Milestone 有多個 Tasks
     tasks = relationship("Task", back_populates="milestone", cascade="all, delete-orphan")

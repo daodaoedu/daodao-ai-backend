@@ -5,6 +5,11 @@ import math
 from config import db_config
 from api.schemas.recommendation import FeedInfo
 
+from logger import AppLogger
+
+logger = AppLogger(__name__).get_logger()
+
+
 def get_feed(limit=100) -> List[FeedInfo]:
     """
     從資料庫抓取 idea / practice / project feed，計算 score 並回傳前 limit 筆結果。
@@ -98,4 +103,4 @@ def get_feed(limit=100) -> List[FeedInfo]:
 if __name__ == "__main__":
     top_100 = get_feed(limit=100)
     for item in top_100:
-        print(item.json())  # Pydantic 提供 json() 方便輸出
+        logger.info(item.json())  # Pydantic 提供 json() 方便輸出

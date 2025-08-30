@@ -2,6 +2,7 @@ from sqlalchemy import create_engine, Column, TIMESTAMP, Integer, String, Boolea
 from sqlalchemy.dialects.postgresql import  UUID
 from sqlalchemy.orm import relationship
 from utils.code_enum import education_stage_t, gender_t
+from sqlalchemy.ext.associationproxy import association_proxy
 
 from .base import Base  # 引用分離出的 Base
 import uuid
@@ -43,11 +44,12 @@ class User(Base):
     contact = relationship("Contact", back_populates="user")
     location = relationship("Location", back_populates="user")
     basic_info = relationship("BasicInfo", back_populates="user")
-    resource = relationship("Resource", back_populates="user")
+    resource = relationship("Resource", back_populates="creator")
     stores = relationship("Store", back_populates="user")
     # 與身份的多對多關聯
-    identities = relationship( "Position", secondary="user_positions", back_populates="users", overlaps="user_positions")
-
+    user_positions = relationship("UserPosition", back_populates="user")
+    identities = association_proxy("user_positions", "position")
+    
     # 用來反向查詢User所創建的群組
     groups_created = relationship("Group", back_populates="created_by_user")
 

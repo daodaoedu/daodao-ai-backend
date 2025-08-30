@@ -1,7 +1,9 @@
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from api.routers import feedback, resource, recommendation
+from utils.redis_utils import check_redis_health
+
 
 app = FastAPI()
 
@@ -35,5 +37,15 @@ app.include_router(recommendation.router, prefix="/api", tags=["recommendation"]
 async def root():
     return {"message": "Welcome to my FastAPI project!"}
 
+
+
+
+
+@app.on_event("startup")
+async def startup_event():
+    # 啟動時檢查 Redis
+    if not check_redis_health():
+        raise RuntimeError("Redis service is unavailable. App startup aborted!")
+    
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
