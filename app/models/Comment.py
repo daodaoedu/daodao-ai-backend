@@ -1,4 +1,4 @@
-from models import Base
+from models.base import Base  # 避免循環 import
 from sqlalchemy import (
     TIMESTAMP,
     CheckConstraint,

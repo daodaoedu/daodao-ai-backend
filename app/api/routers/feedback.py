@@ -61,6 +61,17 @@ async def generate_feedback(
 ):
     """
     生成回饋
+    example:
+    curl -X 'POST' \
+    'http://localhost:8002/api/feedback/generate' \
+    -H 'accept: application/json' \
+    -H 'Authorization: Bearer <YOUR_TOKEN_ID>' \
+    -H 'Content-Type: application/json' \
+    -d '{
+    "reviewId": 1,
+    "style": "string",
+    "thinkingMethod": "string"
+}'
     """
     # Prepare comprehensive context for feedback
     context = prepare_feedback_context(db, req.reviewId, req.style, req.thinkingMethod)

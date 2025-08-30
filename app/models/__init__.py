@@ -1,3 +1,5 @@
+# models/__init__.py
+
 import os
 
 from sqlalchemy import create_engine
