@@ -2,8 +2,8 @@ import os
 
 LLM_BACKENDS = {
     "ollama": {
-        "url": "http://ollama:11434/api/chat",
-        "model": "phi3:latest",
+        "url": "http://ollama-dev:11434/api/generate", # 單次生成文本, /api/chat : 對話式互動
+        "model": "phi3:mini", # 2.2GB
     },
     "openai": {
         "url": "https://api.openai.com/v1/responses",

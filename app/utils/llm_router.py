@@ -101,6 +101,32 @@ def query_gemini(prompt: str) -> tuple[str, float, dict, str]:
         return output, cost, usage, "query_gemini"
     else:
         return f"錯誤：API 請求失敗，狀態碼 {response.status_code}", 0, {}, "query_gemini"
+def query_ollama(prompt: str) -> tuple[str, float, dict, str]:
+    """
+    調用本地 Ollama /api/generate
+    """
+    url = LLM_BACKENDS['ollama']['url']
+    headers = {"Content-Type": "application/json"}
+    payload = {
+        "model": LLM_BACKENDS['ollama']['model'],
+        "prompt": prompt,
+        "max_tokens": 500,
+        "temperature": 0.7
+    }
+    logger.info(f"url: {url}")
+    logger.info(f"payload: {payload}")
+    
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=60)  # 設定 timeout 為 60
+        response.raise_for_status()
+        data = response.json()
+        output = data.get("completion", "未提供回應")
+        tokens = estimate_tokens(prompt + output)
+        cost = estimate_token_cost(tokens, 0.005)  # 假設本地成本極低
+        usage = {"estimated_tokens": tokens}
+        return output, cost, usage, "query_ollama"
+    except Exception as e:
+        return f"錯誤：{str(e)}", 0, {}, "query_ollama"
 
 def query_grok(prompt: str) -> tuple[str, float, dict, str]:
     url = LLM_BACKENDS['grok']['url']

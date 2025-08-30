@@ -1,4 +1,4 @@
-from utils.llm_router import query_gemini
+from utils.llm_router import query_ollama, query_gemini
 from models import Comment, AIReviewFeedback
 from utils.redis_utils import Redis
 from datetime import datetime
@@ -28,14 +28,16 @@ def process_feedback(style, thinking_method, context: str, task_id: str, review_
     # TODO: 處理當前覆盤資料 -> context 太長，做摘要。判斷字數超過300字，則 gemini 進行摘要成300字
 
     try:
+        logger.info(f"feedback:{task_id}, status : pending")
         Redis.write_dict(f"feedback:{task_id}", {"status": "pending"})
         
         if(len(context) > 300):
             context = pre_process_feedback(context, 300)
         # output: str, cost: float, usage: dict
         output, cost, usage, llm_name = query_gemini(context)
-        token_usage = round(cost, 6)
+        token_usage = round(usage.get('estimated_tokens'), 6)
         generated_at = datetime.now().isoformat()
+        logger.info(f"feedback:{task_id}, status : running")
         
         Redis.write_dict(f"feedback:{task_id}", {"status": "running"})
 
