@@ -8,16 +8,10 @@ services:
     container_name: daodao-ai-backend-dev
     ports:
       - "8002:8000"
-    environment:
-      DATABASE_URL: ${DATABASE_URL_DEV}
-      REDIS_URL: ${REDIS_URL_DEV}
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      GEMINI_API_KEY: ${GEMINI_API_KEY}
-      GROK_API_KEY: ${GROK_API_KEY}
     networks:
       - dev-daodao-network
     env_file:
-      - .env
+      - .env.dev
     volumes:
       - ./app:/app
   # --- API Services ---
@@ -72,9 +66,9 @@ services:
   #   build: ./app
   #   container_name: daodao-ai-worker-dev
   #   environment:
-  #     DATABASE_URL: ${DATABASE_URL_DEV}
-  #     REDIS_URL: ${REDIS_URL_DEV}
-  #     KAFKA_BROKER: ${KAFKA_BROKER_DEV}
+  #     DATABASE_URL: ${DATABASE_URL}
+  #     REDIS_URL: ${REDIS_URL}
+  #     KAFKA_BROKER: ${KAFKA_BROKER}
   #   depends_on:
   #     - redis-dev
   #     - kafka-dev

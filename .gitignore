@@ -1,5 +1,7 @@
 *.pyc
 .env
+.env.dev
+.env.prod
 cache*
 obs_data
 ollama_models

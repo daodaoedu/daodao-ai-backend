@@ -3,9 +3,33 @@ from api.routers import feedback, recommendation, resource
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from utils.redis_utils import check_redis_health
+from prometheus_fastapi_instrumentator import Instrumentator, metrics
 
-app = FastAPI()
 
+app = FastAPI(
+    title="DAODAO AI backend API",
+    version="1.0.0",
+    servers=[
+        {"url": "http://127.0.0.1:8002", "description": "dev"},
+        {"url": "http://127.0.0.1:8001", "description": "Production"},
+    ],
+    
+)
+
+
+
+instrumentator = (
+    Instrumentator()
+    .add(
+        metrics.default(
+            metric_namespace="daodao",  # Don't user -
+            metric_subsystem="daodao-ai-backend",
+            custom_labels={"environment": "backend", "app": "daodao-ai-backend"},
+        )
+    )
+    .instrument(app)
+    .expose(app)
+)
 
 origins = [
     "http://localhost.tiangolo.com",
