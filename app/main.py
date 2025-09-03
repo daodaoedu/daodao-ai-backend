@@ -2,9 +2,8 @@ import uvicorn
 from api.routers import feedback, recommendation, resource
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from utils.redis_utils import check_redis_health
 from prometheus_fastapi_instrumentator import Instrumentator, metrics
-
+from utils.redis_utils import check_redis_health
 
 app = FastAPI(
     title="DAODAO AI backend API",
@@ -13,9 +12,7 @@ app = FastAPI(
         {"url": "http://127.0.0.1:8002", "description": "dev"},
         {"url": "http://127.0.0.1:8001", "description": "Production"},
     ],
-    
 )
-
 
 
 instrumentator = (

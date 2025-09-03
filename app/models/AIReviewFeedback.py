@@ -2,7 +2,6 @@
 import uuid
 
 from models.base import Base  # 避免循環 import
-
 from sqlalchemy import TIMESTAMP, Column, Float, ForeignKey, Integer, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
