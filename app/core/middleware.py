@@ -6,7 +6,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator, metrics
 from slowapi import _rate_limit_exceeded_handler
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 
@@ -17,9 +16,18 @@ def setup_middlewares(app: FastAPI):
     app.add_exception_handler(429, _rate_limit_exceeded_handler)
 
     # === CORS ===
+    origins = [
+        "http://localhost.tiangolo.com",
+        "https://localhost.tiangolo.com",
+        "http://localhost",
+        "http://localhost:5173",
+        "http://frontend",  # 使用服務名稱作為來源
+        "http://localhost:8002",
+        
+    ]
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # 先允許所有, 可改為指定 domain
+        allow_origins=origins,  # 先允許所有, 可改為指定 domain
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -27,11 +35,11 @@ def setup_middlewares(app: FastAPI):
 
     # === TrustedHost ===
     app.add_middleware(
-        TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "mcpclient"],
+        TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1"],
     )
 
     # === Session ===
-    app.add_middleware(SessionMiddleware, secret_key="super-secret-session-key")
+    # app.add_middleware(SessionMiddleware, secret_key="super-secret-session-key")
 
     # === Logging Middleware ===
     class LoggingMiddleware(BaseHTTPMiddleware):
@@ -47,13 +55,13 @@ def setup_middlewares(app: FastAPI):
     app.add_middleware(LoggingMiddleware)
 
     # === Prometheus Instrumentator ===
-    instrumentator = (
+    _ = (
         Instrumentator()
         .add(
             metrics.default(
-                metric_namespace="llm_assistance",
-                metric_subsystem="mcpclient",
-                custom_labels={"environment": "mcpclient"},
+                metric_namespace="daodao",  # Don't user -
+                metric_subsystem="daodao-ai-backend",
+                custom_labels={"environment": "backend", "app": "daodao-ai-backend"},
             )
         )
         .instrument(app)

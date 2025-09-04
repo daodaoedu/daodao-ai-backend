@@ -4,7 +4,7 @@ from typing import List
 
 import psycopg2
 from api.schemas.recommendation import FeedInfo
-from config import db_config
+from config import DATABASE_URL
 from logger import AppLogger
 
 logger = AppLogger(__name__).get_logger()
@@ -13,18 +13,9 @@ logger = AppLogger(__name__).get_logger()
 def get_feed(limit=100) -> List[FeedInfo]:
     """
     從資料庫抓取 idea / practice / project feed，計算 score 並回傳前 limit 筆結果。
-
-    db_config 範例：
-    {
-        "dbname": "yourdb",
-        "user": "youruser",
-        "password": "yourpass",
-        "host": "localhost",
-        "port": 5432
-    }
     """
     # db_config = db_config or {}
-    conn = psycopg2.connect(**db_config)
+    conn = psycopg2.connect(DATABASE_URL)
     cur = conn.cursor()
 
     # 拉所有資料

@@ -7,7 +7,7 @@ from api.schemas.feedback import (
 )
 from api.verify_jwt import get_current_user
 from core.limiter import limiter  # 從獨立模組 import
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from logger import AppLogger
 from models import AIReviewFeedback, get_db
 from services.feedback import prepare_feedback_context
@@ -25,7 +25,7 @@ router = APIRouter(prefix="/feedback", tags=["feedback"])
 
 @router.get("/status/{task_id}")
 @limiter.limit("60/minute")
-async def get_feedback_status(task_id: str):
+async def get_feedback_status(request: Request, task_id: str):
     data = Redis.read_dict(f"feedback:{task_id}")
 
     if not data:
@@ -57,6 +57,7 @@ async def get_feedback_status(task_id: str):
 @router.post("/generate", response_model=GenerateFeedbackResponse)
 @limiter.limit("5/minute")
 async def generate_feedback(
+    request: Request, 
     req: GenerateFeedbackRequest,
     background_tasks: BackgroundTasks,
     db: ORMSession = Depends(get_db),
@@ -104,7 +105,7 @@ async def generate_feedback(
 
 @router.get("/{review_id}", response_model=FeedbackDetailResponse)
 @limiter.limit("20/minute")
-async def get_feedback(review_id: int, db: ORMSession = Depends(get_db)):
+async def get_feedback(request: Request, review_id: int, db: ORMSession = Depends(get_db)):
     """
     取得回饋
     """

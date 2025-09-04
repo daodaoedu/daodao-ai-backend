@@ -39,6 +39,8 @@ up: up-dev up-prod
 
 down: down-dev down-prod
 
+restart: down up
+
 rebuild: rebuild-dev rebuild-prod
 
 clean: clean-dev clean-prod
