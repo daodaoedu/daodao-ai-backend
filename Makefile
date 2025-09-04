@@ -61,7 +61,7 @@ format:
 
 # 3️⃣ 代碼檢查
 lint:
-	pylint $(PY_DIRS) || true
+	pylint --rcfile=.pylintrc $(PY_DIRS) || true
 	python -m bandit -r $(PY_DIRS) || true
 	
 # test method
