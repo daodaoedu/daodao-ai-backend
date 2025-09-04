@@ -1,9 +1,9 @@
 from api.schemas.recommendation import FeedItem, FeedResponse
 from api.verify_jwt import get_current_user  # 你的 JWT Dependency
+from core.limiter import limiter
 from fastapi import APIRouter, Depends, HTTPException, Query
 from logger import AppLogger
 from services.rank_feed import get_feed  # 你的 get_feed 函式
-from core.limiter import limiter 
 
 logger = AppLogger(__name__).get_logger()
 

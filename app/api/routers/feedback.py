@@ -6,6 +6,7 @@ from api.schemas.feedback import (
     GenerateFeedbackResponse,
 )
 from api.verify_jwt import get_current_user
+from core.limiter import limiter  # 從獨立模組 import
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from logger import AppLogger
 from models import AIReviewFeedback, get_db
@@ -14,8 +15,6 @@ from services.process_feedback import process_feedback
 from sqlalchemy import desc
 from sqlalchemy.orm import Session as ORMSession
 from utils.redis_utils import Redis
-from core.limiter import limiter  # 從獨立模組 import
-
 
 logger = AppLogger(__name__).get_logger()
 

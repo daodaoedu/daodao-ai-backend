@@ -1,17 +1,18 @@
 import time
+
+from core.limiter import limiter
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.middleware.sessions import SessionMiddleware
-from starlette.middleware.trustedhost import TrustedHostMiddleware
-from starlette.middleware.base import BaseHTTPMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator, metrics
 from slowapi import _rate_limit_exceeded_handler
-from core.limiter import limiter
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.sessions import SessionMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 
 def setup_middlewares(app: FastAPI):
     # === Rate Limiter ===
-    
+
     app.state.limiter = limiter
     app.add_exception_handler(429, _rate_limit_exceeded_handler)
 
@@ -26,8 +27,7 @@ def setup_middlewares(app: FastAPI):
 
     # === TrustedHost ===
     app.add_middleware(
-        TrustedHostMiddleware,
-        allowed_hosts=["localhost", "127.0.0.1", "mcpclient"], 
+        TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "mcpclient"],
     )
 
     # === Session ===
