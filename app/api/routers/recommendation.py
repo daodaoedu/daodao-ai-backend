@@ -3,6 +3,7 @@ from api.verify_jwt import get_current_user  # 你的 JWT Dependency
 from fastapi import APIRouter, Depends, HTTPException, Query
 from logger import AppLogger
 from services.rank_feed import get_feed  # 你的 get_feed 函式
+from core.limiter import limiter 
 
 logger = AppLogger(__name__).get_logger()
 
@@ -11,6 +12,7 @@ router = APIRouter(prefix="/recommendation", tags=["recommendation"])
 
 
 @router.post("/rank_feed", response_model=FeedResponse)
+@limiter.limit("5/minute")
 def recommendation_feed(
     limit: int = Query(100, description="最多取得幾筆 feed"),
     current_user: dict = Depends(get_current_user),  # 自動取得驗證後的 payload

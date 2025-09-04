@@ -14,6 +14,8 @@ from services.process_feedback import process_feedback
 from sqlalchemy import desc
 from sqlalchemy.orm import Session as ORMSession
 from utils.redis_utils import Redis
+from core.limiter import limiter  # 從獨立模組 import
+
 
 logger = AppLogger(__name__).get_logger()
 
@@ -23,6 +25,7 @@ router = APIRouter(prefix="/feedback", tags=["feedback"])
 
 
 @router.get("/status/{task_id}")
+@limiter.limit("60/minute")
 async def get_feedback_status(task_id: str):
     data = Redis.read_dict(f"feedback:{task_id}")
 
@@ -53,6 +56,7 @@ async def get_feedback_status(task_id: str):
 
 
 @router.post("/generate", response_model=GenerateFeedbackResponse)
+@limiter.limit("5/minute")
 async def generate_feedback(
     req: GenerateFeedbackRequest,
     background_tasks: BackgroundTasks,
@@ -100,6 +104,7 @@ async def generate_feedback(
 
 
 @router.get("/{review_id}", response_model=FeedbackDetailResponse)
+@limiter.limit("20/minute")
 async def get_feedback(review_id: int, db: ORMSession = Depends(get_db)):
     """
     取得回饋
