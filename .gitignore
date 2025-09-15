@@ -2,6 +2,6 @@
 .env
 .env.dev
 .env.prod
-cache*
+cache_data
 obs_data
 ollama_models

@@ -30,10 +30,10 @@ rebuild-dev: down-dev up-dev
 rebuild-prod: down-prod up-prod
 
 clean-dev:
-	rm -rf ./cache/dev_data
+	rm -rf ./cache_data/dev_data
 
 clean-prod:
-	rm -rf ./cache/prod_data
+	rm -rf ./cache_data/prod_data
 
 up: up-dev up-prod
 

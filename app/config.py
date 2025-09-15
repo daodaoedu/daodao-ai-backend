@@ -27,6 +27,23 @@ class LLMBackendConfig(BaseConfigSettings):
 
 
 
+class RedisSettings(BaseConfigSettings):
+    model_config = SettingsConfigDict(
+        env_file=[".env", str(ENV_FILE_PATH)],
+        env_prefix="REDIS_",
+        extra="ignore",
+        frozen=True,
+        case_sensitive=False,
+    )
+
+    url : str = "redis://localhost:6379/0"
+    
+
+    # Cache settings
+    ttl_hours: int = 6  # Cache TTL in hours
+
+
+
 
 class Settings(BaseConfigSettings):
     app_version: str = "0.1.0"
@@ -34,7 +51,7 @@ class Settings(BaseConfigSettings):
     environment: Literal["development", "staging", "production"] = "development"
     service_name: str = "daodao-ai-backend-api"
     
-    redis_url : str = "redis://localhost:6379/0"
+    redis: RedisSettings = Field(default_factory=RedisSettings)
     llm_backend = Dict[str, LLMBackendConfig] = Field(
         default_factory=lambda: {
             "ollama": LLMBackendConfig(

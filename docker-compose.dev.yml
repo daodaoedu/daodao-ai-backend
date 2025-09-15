@@ -85,7 +85,7 @@ services:
     ports:
       - "6381:6379"
     volumes:
-      - ./cache/dev_data:/data
+      - ./cache_data/dev_data:/data
     networks:
       - dev-daodao-network
     profiles:

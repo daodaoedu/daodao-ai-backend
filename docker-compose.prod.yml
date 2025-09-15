@@ -23,7 +23,7 @@ services:
     ports:
       - "6380:6379"
     volumes:
-      - ./cache/prod_data:/data
+      - ./cache_data/prod_data:/data
     networks:
       - prod-daodao-network
     profiles:
