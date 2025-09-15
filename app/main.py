@@ -1,8 +1,56 @@
 import uvicorn
+from contextlib import asynccontextmanager
 from api.routers import feedback, recommendation, resource
 from fastapi import FastAPI
 from utils.redis_utils import check_redis_health
 from core.middleware import setup_middlewares
+from services.llm.factory import make_llm_client
+from services.qdrant.factory import make_qdrant_client
+from config import get_settings
+from logger import AppLogger
+
+logger = AppLogger(__name__).get_logger()
+
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Lifespan for the API.
+    # 啟動前
+    yield
+    # 關閉前
+
+    """
+    logger.info("Starting daodao ai backend API...")
+    logger.info("API ready")
+    
+    
+    # 啟動時檢查 Redis
+    if not check_redis_health():
+        raise RuntimeError("Redis service is unavailable. App startup aborted!")
+
+    
+    settings = get_settings()
+    app.state.settings = settings
+    
+    
+    qdrant_client = make_qdrant_client()
+    app.state.qdrant_client = qdrant_client
+    
+    llm_client = make_llm_client()
+    app.state.llm_client = llm_client
+    
+    
+
+    yield
+
+    # Cleanup
+    
+    # database.teardown()
+    logger.info("API shutdown complete")
+
+
 
 app = FastAPI(
     title="DAODAO AI backend API",
@@ -11,6 +59,8 @@ app = FastAPI(
         {"url": "http://127.0.0.1:8002", "description": "dev"},
         {"url": "http://127.0.0.1:8001", "description": "Production"},
     ],
+    lifespan=lifespan,
+    
 )
 
 setup_middlewares(app)
@@ -25,10 +75,4 @@ app.include_router(recommendation.router, prefix="/api", tags=["recommendation"]
 async def root():
     return {"message": "Welcome to my FastAPI project!"}
 
-
-@app.on_event("startup")
-async def startup_event():
-    # 啟動時檢查 Redis
-    if not check_redis_health():
-        raise RuntimeError("Redis service is unavailable. App startup aborted!")
-
+    

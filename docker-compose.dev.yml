@@ -6,6 +6,7 @@ services:
   backend-dev:
     build: ./app
     container_name: daodao-ai-backend-dev
+    image: daodao-ai-backend-dev
     ports:
       - "8002:8000"
     networks:
