@@ -43,6 +43,18 @@ class RedisSettings(BaseConfigSettings):
     ttl_hours: int = 6  # Cache TTL in hours
 
 
+class PostgreSQLSettings(BaseSettings):
+    """PostgreSQL configuration settings."""
+
+    database_url: str = Field(
+        default="postgresql+psycopg2://username:passweord@localhost:5432/db", description="PostgreSQL database URL"
+    )
+    echo_sql: bool = Field(default=False, description="Enable SQL query logging")
+    pool_size: int = Field(default=20, description="Database connection pool size")
+    max_overflow: int = Field(default=0, description="Maximum pool overflow")
+
+    class Config:
+        env_prefix = "POSTGRES_"
 
 
 class Settings(BaseConfigSettings):
@@ -52,6 +64,7 @@ class Settings(BaseConfigSettings):
     service_name: str = "daodao-ai-backend-api"
     
     redis: RedisSettings = Field(default_factory=RedisSettings)
+    postgresql: PostgreSQLSettings = Field(default_factory=PostgreSQLSettings)
     llm_backend = Dict[str, LLMBackendConfig] = Field(
         default_factory=lambda: {
             "ollama": LLMBackendConfig(
@@ -94,7 +107,7 @@ class Settings(BaseConfigSettings):
     qdrant_url: str = "http://qdrant-dev:6333"
     collection_name: str = "arxiv_collection"
         
-     
+    
 def get_settings() -> Settings:
     return Settings()   
         

@@ -3,7 +3,7 @@ from datetime import datetime
 from logger import AppLogger
 from models import AIReviewFeedback
 from sqlalchemy.orm import Session as ORMSession
-from utils.llm_router import query_gemini
+# from utils.llm_router import query_gemini
 from utils.redis_utils import Redis
 
 logger = AppLogger(__name__).get_logger()

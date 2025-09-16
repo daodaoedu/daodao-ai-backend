@@ -2,9 +2,10 @@ import uvicorn
 from contextlib import asynccontextmanager
 from api.routers import feedback, recommendation, resource
 from fastapi import FastAPI
-from utils.redis_utils import check_redis_health
+
 from core.middleware import setup_middlewares
 
+from services.db.factory import make_database
 from services.llm.factory import make_llm_client
 from services.cache.factory import make_cache_client
 from services.qdrant.factory import make_qdrant_client
@@ -31,6 +32,8 @@ async def lifespan(app: FastAPI):
   
     settings = get_settings()
     app.state.settings = settings
+    
+    app.state.database = make_database()
     
     
     qdrant_client = make_qdrant_client()

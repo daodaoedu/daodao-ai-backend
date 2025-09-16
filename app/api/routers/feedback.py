@@ -8,6 +8,7 @@ from api.schemas.feedback import (
 from api.verify_jwt import get_current_user
 from core.limiter import limiter  # 從獨立模組 import
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from dependencies import LLMDep
 from logger import AppLogger
 from models import AIReviewFeedback, get_db
 from services.feedback import prepare_feedback_context

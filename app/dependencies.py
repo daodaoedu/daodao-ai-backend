@@ -1,4 +1,8 @@
-from typing import Annotated
+from typing import Annotated, Generator
+
+
+from sqlalchemy.orm import Session
+from services.db.interface_db import BaseDatabase
 
 from config import Settings, get_settings
 from fastapi import Depends, Request
@@ -7,19 +11,23 @@ from services.llm.client import LLMClient
 from services.qdrant.client import QdrantClient
 
 
+
+def get_database(request: Request) -> BaseDatabase:
+    """Get database from the request state."""
+    return request.app.state.database
+
+
+def get_db_session(database: Annotated[BaseDatabase, Depends(get_database)]) -> Generator[Session, None, None]:
+    """Get database session dependency."""
+    with database.get_session() as session:
+        yield session
+
+
+
+
 def get_llm_client(request: Request) -> LLMClient:
     """Get Ollama client from the request state."""
     return request.app.state.ollama_client
-
-
-def get_user_cache_client(request: Request) -> CacheClient | None:
-    """Get cache client from the request state."""
-    return getattr(request.app.state, "cache_user_client", None)
-
-
-def get_paper_cache_client(request: Request) -> CacheClient | None:
-    """Get cache client from the request state."""
-    return getattr(request.app.state, "cache_paper_client", None)
 
 
 def get_qdrant_client(request: Request) -> QdrantClient:
@@ -27,24 +35,15 @@ def get_qdrant_client(request: Request) -> QdrantClient:
     return request.app.state.qdrant_client
 
 
-def get_minio_client(request: Request) -> MinioClient:
-    """Get OpenSearch client from the request state."""
-    return request.app.state.minio_client
-
-
-def get_langfuse_tracer(request: Request) -> LangfuseTracer:
-    """Get Langfuse tracer from the request state."""
-    return request.app.state.langfuse_tracer
-
 
 # Dependency annotations
-QdrantDep = Annotated[QdrantClient, Depends(get_qdrant_client)]
-MinioDep = Annotated[MinioClient, Depends(get_minio_client)]
+
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
-OllamaDep = Annotated[OllamaClient, Depends(get_ollama_client)]
-LangchainDep = Annotated[LangChainClient, Depends(get_langchain_client)]
-LangfuseDep = Annotated[LangfuseTracer, Depends(get_langfuse_tracer)]
 
-UserCacheDep = Annotated[CacheClient | None, Depends(get_user_cache_client)]
-PaperCacheDep = Annotated[CacheClient | None, Depends(get_paper_cache_client)]
+LLMDep = Annotated[LLMClient, Depends(get_llm_client)]
+
+QdrantDep = Annotated[QdrantClient, Depends(get_qdrant_client)]
+
+DatabaseDep = Annotated[BaseDatabase, Depends(get_database)]
+SessionDep = Annotated[Session, Depends(get_db_session)]
