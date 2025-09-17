@@ -1,1 +1,1 @@
-from modele.ai_review_feedback import AIReviewFeedback
+from modele import AIReviewFeedback

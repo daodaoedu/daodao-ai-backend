@@ -1,1 +1,1 @@
-from models.Review import Review
+from models import Review

@@ -1,1 +1,1 @@
-from models.Outcome import Outcome
+from models import Outcome
