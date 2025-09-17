@@ -16,6 +16,7 @@ from services.process_feedback import process_feedback
 from sqlalchemy import desc
 from sqlalchemy.orm import Session as ORMSession
 from utils.redis_utils import Redis
+from dependencies import LLMDep, SessionDep, get_db_session
 
 logger = AppLogger(__name__).get_logger()
 
@@ -61,8 +62,9 @@ async def generate_feedback(
     request: Request, 
     req: GenerateFeedbackRequest,
     background_tasks: BackgroundTasks,
-    db: ORMSession = Depends(get_db),
+    db: SessionDep,
     current_user: dict = Depends(get_current_user),  # 自動取得驗證後的 payload
+    llm_client: LLMDep,
 ):
     """
     生成回饋
@@ -79,7 +81,7 @@ async def generate_feedback(
 }'
     """
     # Prepare comprehensive context for feedback
-    context = prepare_feedback_context(db, req.reviewId, req.style, req.thinkingMethod)
+    context = prepare_feedback_context(db, req, llm_client)
     logger.info(f"context {context}")
     logger.info("-" * 36)
 
@@ -87,11 +89,10 @@ async def generate_feedback(
     task_id = str(uuid.uuid4())
     background_tasks.add_task(
         process_feedback,
-        req.style,
-        req.thinkingMethod,
+        req,
+        llm_client,
         context,
         task_id,
-        req.reviewId,
         db,
     )
 

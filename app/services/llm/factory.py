@@ -13,5 +13,5 @@ def make_llm_client():
         OllamaClient: Configured Ollama client
     """
     settings = get_settings()
-    return LLMClient(settings)
+    return LLMClient(settings, "gemini")
     

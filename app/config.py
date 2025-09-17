@@ -71,21 +71,21 @@ class Settings(BaseConfigSettings):
                 url="http://ollama-dev:11434/api/generate",
                 model="phi3:mini",
             ),
-            "openai": LLMBackendConfig(
-                url="https://api.openai.com/v1/responses",
-                model="gpt-4",
-                api_key=os.getenv("OPENAI_API_KEY"),
-            ),
+            # "openai": LLMBackendConfig(
+            #     url="https://api.openai.com/v1/responses",
+            #     model="gpt-4",
+            #     api_key=os.getenv("OPENAI_API_KEY"),
+            # ),
             "gemini": LLMBackendConfig(
                 url="https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
                 model="gemini",
                 api_key=os.getenv("GEMINI_API_KEY"),
             ),
-            "grok": LLMBackendConfig(
-                url="https://api.x.ai/v1/chat/completions",
-                model="grok-2-latest",
-                api_key=os.getenv("GROK_API_KEY"),
-            ),
+            # "grok": LLMBackendConfig(
+            #     url="https://api.x.ai/v1/chat/completions",
+            #     model="grok-2-latest",
+            #     api_key=os.getenv("GROK_API_KEY"),
+            # ),
         }
     )
     

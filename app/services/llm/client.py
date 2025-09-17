@@ -1,6 +1,6 @@
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple, Any
 import httpx
-from config import Settings
+from config import LLMBackendConfig
 from logger import AppLogger
 from qdrant_client import QdrantClient as Client
 from qdrant_client import models
@@ -12,32 +12,32 @@ logger = AppLogger(__name__).get_logger()
 
 
 class LLMClient:
-    def __init__(self, settings: Settings, backend: str):
-        self.settings = settings
+    def __init__(self, settings: LLMBackendConfig, backend: str):
+        self.settings = settings.llm_backend[backend]  # e.g. settings.llm_backend["openai"]
         self.backend = backend
-        self.conf = settings.llm_backend[backend]  # e.g. settings.llm_backend["openai"]
 
         self.timeout = httpx.Timeout(300)
         self.prompt_builder = RAGPromptBuilder()
         self.response_parser = ResponseParser()
 
     def _estimate_cost(self, prompt: str, output: str, usage: dict) -> float:
-        if self.backend == "openai":
+        
+        if self.backend == "gemini":
+            tokens = self._estimate_tokens(prompt + output)
+            return self._estimate_token_cost(tokens, 0.01)
+        elif self.backend == "ollama":
+            tokens = self._estimate_tokens(prompt + output)
+            return self._estimate_token_cost(tokens, 0.005)
+        elif self.backend == "openai":
             # OpenAI 有 usage，照實算
             if usage:
                 return self._estimate_openai_cost(usage)
             # 沒有 usage，fallback
             tokens = self._estimate_tokens(prompt + output)
             return self._estimate_token_cost(tokens, 0.09)
-        elif self.backend == "gemini":
-            tokens = self._estimate_tokens(prompt + output)
-            return self._estimate_token_cost(tokens, 0.01)
-        elif self.backend == "ollama":
-            tokens = self._estimate_tokens(prompt + output)
-            return self._estimate_token_cost(tokens, 0.005)
-        elif self.backend == "grok":
-            tokens = self._estimate_tokens(prompt + output)
-            return self._estimate_token_cost(tokens, 0.01)
+        # elif self.backend == "grok":
+        #     tokens = self._estimate_tokens(prompt + output)
+        #     return self._estimate_token_cost(tokens, 0.01)
         return 0.0
 
     def _estimate_openai_cost(self, usage: dict) -> float:
@@ -75,12 +75,12 @@ class LLMClient:
         回傳 (output, cost, usage, backend_name)
         """
         if self.backend == "openai":
-            url = self.conf["url"]
+            url = self.settings["url"]
             headers = {
                 "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.conf['api_key']}",
+                "Authorization": f"Bearer {self.settings['api_key']}",
             }
-            payload = {"model": self.conf["model"], "input": prompt}
+            payload = {"model": self.settings["model"], "input": prompt}
 
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 resp = await client.post(url, headers=headers, json=payload)
@@ -95,7 +95,7 @@ class LLMClient:
                 return output, cost, usage, "openai"
 
         elif self.backend == "gemini":
-            url = f"{self.conf['url']}/?key={self.conf['api_key']}"
+            url = f"{self.settings['url']}/?key={self.settings['api_key']}"
             headers = {"Content-Type": "application/json"}
             payload = {"contents": [{"parts": [{"text": prompt}]}]}
             async with httpx.AsyncClient(timeout=self.timeout) as client:
@@ -114,10 +114,10 @@ class LLMClient:
                 return output, cost, {"estimated_tokens": tokens}, "gemini"
 
         elif self.backend == "ollama":
-            url = self.conf["url"]
+            url = self.settings["url"]
             headers = {"Content-Type": "application/json"}
             payload = {
-                "model": self.conf["model"],
+                "model": self.settings["model"],
                 "prompt": prompt,
                 "max_tokens": kwargs.get("max_tokens", 500),
                 "temperature": kwargs.get("temperature", 0.7),
@@ -135,17 +135,17 @@ class LLMClient:
                 return output, cost, {"estimated_tokens": tokens}, "ollama"
 
         elif self.backend == "grok":
-            url = self.conf["url"]
+            url = self.settings["url"]
             headers = {
                 "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.conf['api_key']}",
+                "Authorization": f"Bearer {self.settings['api_key']}",
             }
             payload = {
                 "messages": [
                     {"role": "system", "content": "You are a test assistant."},
                     {"role": "user", "content": prompt},
                 ],
-                "model": self.conf["model"],
+                "model": self.settings["model"],
                 "stream": False,
                 "temperature": 0,
             }

@@ -1,0 +1,39 @@
+{style_section}
+你是一位學習教練，請根據以下使用者輸入內容，給出「個人化」、「實用」、「具體可行」的學習回饋與建議：
+
+🧠 覆盤回顧內容：
+- 學習心得評分（1-10）：{review.learning_review}
+- 覆盤內容：{review.learning_feedback}
+- 調整與規劃：{review.adjustment_plan}
+- 心情狀態：{review.mood}（說明：{review.mood_description}）
+- 壓力等級（1-10）：{review.stress_level}
+
+📊 學習趨勢分析：
+- 近期平均學習評分：{avg_learning_score:.1f}
+- 近期平均壓力指數：{avg_stress_level:.1f}
+
+📘 專案資訊：
+- 專案標題：{project.title}
+- 專案描述：{project.description}
+- 專案目標：{project.goal or '未提供'}
+- 動機說明：{project.motivation_description or '未提供'}
+- 策略說明：{project.strategy_description or '未提供'}
+- 預期成果說明：{project.outcome_description or '未提供'}
+- 專案狀態：{project.status}
+- 起訖日期：{project.start_date} ~ {project.end_date}（週期：{project.interval} 天）
+
+📈 專案進度：
+- 任務完成率：{task_completion_rate:.1f}%
+里程碑狀態：
+{milestone_status}
+
+📝 本週貼文資訊：
+- 標題：{post.title}
+- 週次：{post.week}
+- 日期：{post.date}
+{outcome_section}
+
+請回覆給使用者一段清楚、貼心、專屬的建議與鼓勵。特別注意：
+1. 根據學習趨勢給出針對性建議
+2. 參考專案進度提供實際可行的改進方向
+3. 結合里程碑完成情況給出下一步建議
