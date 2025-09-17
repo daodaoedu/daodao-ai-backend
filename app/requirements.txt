@@ -58,3 +58,12 @@ aioredis==2.0.1
 
 # === Rate Limiting (可選) ===
 slowapi==0.1.8
+
+# === Embeddings / Vector DB ===
+qdrant-client
+fastembed
+sentence-transformers==5.1.0
+
+#
+clickhouse-connect
+clickhouse_driver

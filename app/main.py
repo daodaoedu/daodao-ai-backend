@@ -5,10 +5,11 @@ from fastapi import FastAPI
 
 from core.middleware import setup_middlewares
 
-from services.db.factory import make_database
+from db.factory import make_database
 from services.llm.factory import make_llm_client
 from services.cache.factory import make_cache_client
 from services.qdrant.factory import make_qdrant_client
+from services.clickhouse.factory import make_clickhouse_client
 
 from config import get_settings
 from logger import AppLogger
@@ -38,6 +39,9 @@ async def lifespan(app: FastAPI):
     
     qdrant_client = make_qdrant_client()
     app.state.qdrant_client = qdrant_client
+    
+    clickhouse_client = make_clickhouse_client()
+    app.state.clickhouse_client = clickhouse_client
     
     llm_client = make_llm_client()
     app.state.llm_client = llm_client

@@ -2,10 +2,8 @@ from typing import Dict, List, Optional, Tuple, Any
 import httpx
 from config import LLMBackendConfig
 from logger import AppLogger
-from qdrant_client import QdrantClient as Client
-from qdrant_client import models
-from qdrant_client.http.exceptions import UnexpectedResponse
-from prompt import RAGPromptBuilder, ResponseParser
+
+from services.prompts.prompts import RAGPromptBuilder, ResponseParser
 
 
 logger = AppLogger(__name__).get_logger()

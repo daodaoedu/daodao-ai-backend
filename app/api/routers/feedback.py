@@ -63,8 +63,8 @@ async def generate_feedback(
     req: GenerateFeedbackRequest,
     background_tasks: BackgroundTasks,
     db: SessionDep,
-    current_user: dict = Depends(get_current_user),  # 自動取得驗證後的 payload
     llm_client: LLMDep,
+    current_user: dict = Depends(get_current_user),  # 自動取得驗證後的 payload
 ):
     """
     生成回饋
@@ -87,7 +87,7 @@ async def generate_feedback(
 
     # Generate unique task ID and trigger background processing
     task_id = str(uuid.uuid4())
-    background_tasks.add_task(
+    background_tasks.add_task( # TODOS : use celery task
         process_feedback,
         req,
         llm_client,

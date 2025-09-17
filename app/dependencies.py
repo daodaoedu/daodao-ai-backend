@@ -2,7 +2,7 @@ from typing import Annotated, Generator
 
 
 from sqlalchemy.orm import Session
-from services.db.interface_db import BaseDatabase
+from db.interface_db import BaseDatabase
 
 from config import Settings, get_settings
 from fastapi import Depends, Request
@@ -27,7 +27,7 @@ def get_db_session(database: Annotated[BaseDatabase, Depends(get_database)]) -> 
 
 def get_llm_client(request: Request) -> LLMClient:
     """Get Ollama client from the request state."""
-    return request.app.state.ollama_client
+    return request.app.state.llm_client
 
 
 def get_qdrant_client(request: Request) -> QdrantClient:

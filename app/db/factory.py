@@ -1,6 +1,6 @@
 from config import get_settings
-from services.db.interface_db import BaseDatabase
-from services.db.postgresql import PostgreSQLDatabase
+from db.interface_db import BaseDatabase
+from db.postgresql import PostgreSQLDatabase
 
 
 def make_database() -> BaseDatabase:
