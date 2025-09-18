@@ -7,7 +7,7 @@ from services.project import get_project_data
 from services.review import get_review_trends
 from services.task import get_tasks_stats
 from api.schemas.feedback import GenerateFeedbackRequest
-from services.prompts import RAGPromptBuilder
+from services.prompts.prompts import RAGPromptBuilder
 
 
 def prepare_feedback_context(

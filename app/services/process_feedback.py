@@ -4,8 +4,9 @@ from logger import AppLogger
 from models import AIReviewFeedback
 from sqlalchemy.orm import Session
 # from utils.llm_router import query_gemini
-from utils.redis_utils import Redis
+# from utils.redis_utils import Redis
 from services.llm.client import LLMClient
+from services.cache.client import CacheClient
 from api.schemas.feedback import GenerateFeedbackRequest
 
 logger = AppLogger(__name__).get_logger()
@@ -26,6 +27,7 @@ def process_feedback(
     llm_client: LLMClient,
     context: str, 
     task_id: str, 
+    cache_clent: CacheClient,
     db: Session
 ):
     """
@@ -36,7 +38,7 @@ def process_feedback(
 
     try:
         logger.info(f"feedback:{task_id}, status : pending")
-        Redis.write_dict(f"feedback:{task_id}", {"status": "pending"})
+        cache_clent.write_dict(f"feedback:{task_id}", {"status": "pending"})
 
         if len(context) > 300:
             context = pre_process_feedback(llm_client=llm_client, context=context, wordNum = 300)
@@ -46,7 +48,7 @@ def process_feedback(
         generated_at = datetime.now().isoformat()
         logger.info(f"feedback:{task_id}, status : running")
 
-        Redis.write_dict(f"feedback:{task_id}", {"status": "running"})
+        cache_clent.write_dict(f"feedback:{task_id}", {"status": "running"})
 
         # 儲存至資料庫
         ai_feedback = AIReviewFeedback(
@@ -65,7 +67,7 @@ def process_feedback(
         )
 
         # 儲存至 Redis
-        Redis.write_dict(
+        cache_clent.write_dict(
             f"feedback:{task_id}",
             {
                 "status": "done",
@@ -79,4 +81,4 @@ def process_feedback(
     except Exception as e:
         if "db" in locals():
             db.rollback()
-        Redis.write_dict(f"feedback:{task_id}", {"status": "error", "message": str(e)})
+        cache_clent.write_dict(f"feedback:{task_id}", {"status": "error", "message": str(e)})

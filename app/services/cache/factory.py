@@ -16,7 +16,7 @@ def make_redis_client(settings: Settings) -> redis.Redis:
 
         # Test connection
         client.ping()
-        logger.info(f"Connected to Redis at {redis_settings.host}:{redis_settings.port}")
+        logger.info(f"Connected to Redis at {redis_settings.url}")
         return client
 
     except redis.ConnectionError as e:

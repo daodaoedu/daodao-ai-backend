@@ -109,10 +109,7 @@ class Settings(BaseConfigSettings):
     
 
 
-    database_url : str = os.getenv(
-        "DATABASE_URL",
-        "postgresql+psycopg2://username:passweord@localhost:5432/db"
-    )
+    
     
     jwt_security: str = "xxxxxxxxxxxxxxxx"
     jwt_expiration: str = "1h"

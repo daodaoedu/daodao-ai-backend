@@ -11,7 +11,6 @@ from services.llm.client import LLMClient
 from services.qdrant.client import QdrantClient
 
 
-
 def get_database(request: Request) -> BaseDatabase:
     """Get database from the request state."""
     return request.app.state.database
@@ -22,8 +21,9 @@ def get_db_session(database: Annotated[BaseDatabase, Depends(get_database)]) -> 
     with database.get_session() as session:
         yield session
 
-
-
+def get_cache_client(request: Request) -> CacheClient:
+    """Get Ollama client from the request state."""
+    return request.app.state.cache_client
 
 def get_llm_client(request: Request) -> LLMClient:
     """Get Ollama client from the request state."""
@@ -44,6 +44,7 @@ SettingsDep = Annotated[Settings, Depends(get_settings)]
 LLMDep = Annotated[LLMClient, Depends(get_llm_client)]
 
 QdrantDep = Annotated[QdrantClient, Depends(get_qdrant_client)]
+CacheDep = Annotated[CacheClient, Depends(get_cache_client)]
 
 DatabaseDep = Annotated[BaseDatabase, Depends(get_database)]
 SessionDep = Annotated[Session, Depends(get_db_session)]

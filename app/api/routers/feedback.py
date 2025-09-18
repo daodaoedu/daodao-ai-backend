@@ -15,8 +15,7 @@ from services.feedback import prepare_feedback_context
 from services.process_feedback import process_feedback
 from sqlalchemy import desc
 from sqlalchemy.orm import Session as ORMSession
-from utils.redis_utils import Redis
-from dependencies import LLMDep, SessionDep, get_db_session
+from dependencies import LLMDep, SessionDep, CacheDep
 
 logger = AppLogger(__name__).get_logger()
 
@@ -27,8 +26,8 @@ router = APIRouter(prefix="/feedback", tags=["feedback"])
 
 @router.get("/status/{task_id}")
 @limiter.limit("60/minute")
-async def get_feedback_status(request: Request, task_id: str):
-    data = Redis.read_dict(f"feedback:{task_id}")
+async def get_feedback_status(request: Request, task_id: str, cache_client: CacheDep):
+    data = cache_client.read_dict(f"feedback:{task_id}")
 
     if not data:
         return {"status": "unknown", "result": None}
