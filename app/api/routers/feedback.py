@@ -15,7 +15,9 @@ from services.feedback import prepare_feedback_context
 from services.process_feedback import process_feedback
 from sqlalchemy import desc
 from sqlalchemy.orm import Session as ORMSession
-from dependencies import LLMDep, SessionDep, CacheDep
+from dependencies import LLMDep, SessionDep, CacheDep, UserDep
+
+
 
 logger = AppLogger(__name__).get_logger()
 
@@ -26,7 +28,11 @@ router = APIRouter(prefix="/feedback", tags=["feedback"])
 
 @router.get("/status/{task_id}")
 @limiter.limit("60/minute")
-async def get_feedback_status(request: Request, task_id: str, cache_client: CacheDep):
+async def get_feedback_status(
+    request: Request, 
+    task_id: str, 
+    cache_client: CacheDep
+    ):
     data = cache_client.read_dict(f"feedback:{task_id}")
 
     if not data:
@@ -59,11 +65,11 @@ async def get_feedback_status(request: Request, task_id: str, cache_client: Cach
 @limiter.limit("5/minute")
 async def generate_feedback(
     request: Request, 
+    current_user: UserDep,
     req: GenerateFeedbackRequest,
     background_tasks: BackgroundTasks,
     db: SessionDep,
     llm_client: LLMDep,
-    current_user: dict = Depends(get_current_user),  # 自動取得驗證後的 payload
 ):
     """
     生成回饋
@@ -106,7 +112,10 @@ async def generate_feedback(
 
 @router.get("/{review_id}", response_model=FeedbackDetailResponse)
 @limiter.limit("20/minute")
-async def get_feedback(request: Request, review_id: int, db: ORMSession = Depends(get_db)):
+async def get_feedback(
+    request: Request, 
+    review_id: int, 
+    db: ORMSession = Depends(get_db)):
     """
     取得回饋
     """

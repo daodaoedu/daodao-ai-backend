@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from logger import AppLogger
 from services.rank_feed import get_feed  # 你的 get_feed 函式
 from api.template import api_response_decorator
-
+from dependencies import UserDep 
 
 logger = AppLogger(__name__).get_logger()
 
@@ -19,8 +19,8 @@ router = APIRouter(prefix="/recommendation", tags=["recommendation"])
 @api_response_decorator
 def recommendation_feed(
     request: Request, 
+    current_user: UserDep,
     limit: int = Query(100, description="最多取得幾筆 feed"),
-    current_user: dict = Depends(get_current_user),  # 自動取得驗證後的 payload
 ):
     """
     推薦 feed API
@@ -33,7 +33,7 @@ def recommendation_feed(
 
     """
 
-    logger.info(f"current_user: {current_user['_id']}")
+    logger.info(f"current_user:  {current_user}")
 
     try:
         top_feed = get_feed(limit=limit)

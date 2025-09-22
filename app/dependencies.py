@@ -1,14 +1,44 @@
 from typing import Annotated, Generator
 
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from sqlalchemy.orm import Session
 from db.interface_db import BaseDatabase
 
 from config import Settings, get_settings
-from fastapi import Depends, Request
+from fastapi import Depends, Request, HTTPException, status
 from services.cache.client import CacheClient
 from services.llm.client import LLMClient
 from services.qdrant.client import QdrantClient
+from api.verify_jwt import verify
+
+
+security = HTTPBearer()
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
+
+    # def get_current_user(authorization: Optional[str] = Header(None)):
+
+    """
+    FastAPI Dependency: 驗證 JWT 並回傳 payload
+    """
+    token = credentials.credentials  # 自動取 token，不用 Bearer 前綴
+    try:
+        decoded = verify(token)  # 這裡可能丟錯誤
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, # token 無效/過期。
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if not decoded:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, # 有 token，但驗證不通過（可能缺權限）。
+            detail="Could not validate credentials",
+        )
+    
+    return decoded.get("_id", "unknown")
+
+
 
 
 def get_database(request: Request) -> BaseDatabase:
@@ -34,8 +64,6 @@ def get_qdrant_client(request: Request) -> QdrantClient:
     """Get OpenSearch client from the request state."""
     return request.app.state.qdrant_client
 
-
-
 # Dependency annotations
 
 
@@ -48,3 +76,4 @@ CacheDep = Annotated[CacheClient, Depends(get_cache_client)]
 
 DatabaseDep = Annotated[BaseDatabase, Depends(get_database)]
 SessionDep = Annotated[Session, Depends(get_db_session)]
+UserDep = Annotated[str, Depends(get_current_user)]
