@@ -26,7 +26,7 @@ class QdrantClient:
                     size=768, distance=models.Distance.COSINE
                 ),
             )
-            print(
+            logger.info(
                 f"✅ Qdrant collection `{self.settings.collection_name}` created successfully."
             )
         except UnexpectedResponse as e:

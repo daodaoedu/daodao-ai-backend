@@ -1,6 +1,6 @@
-from fastapi import APIRouter
+# from fastapi import APIRouter
 
-router = APIRouter(prefix="/resources", tags=["resource"])
+# router = APIRouter(prefix="/v1/resources", tags=["resource"])
 
 
 # 熱門心得 resource_review

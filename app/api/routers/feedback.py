@@ -5,7 +5,7 @@ from api.schemas.feedback import (
     GenerateFeedbackRequest,
     GenerateFeedbackResponse,
 )
-from api.verify_jwt import get_current_user
+
 from core.limiter import limiter  # 從獨立模組 import
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from dependencies import LLMDep
@@ -23,7 +23,7 @@ logger = AppLogger(__name__).get_logger()
 
 
 # router = APIRouter()
-router = APIRouter(prefix="/feedback", tags=["feedback"])
+router = APIRouter(prefix="/v1/feedback", tags=["feedback"])
 
 
 @router.get("/status/{task_id}")
@@ -75,7 +75,7 @@ async def generate_feedback(
     生成回饋
     example:
     curl -X 'POST' \
-    'http://localhost:8002/api/feedback/generate' \
+    'http://localhost:8002/api/v1/feedback/generate' \
     -H 'accept: application/json' \
     -H 'Authorization: Bearer <YOUR_TOKEN_ID>' \
     -H 'Content-Type: application/json' \
@@ -110,7 +110,7 @@ async def generate_feedback(
     }
 
 
-@router.get("/{review_id}", response_model=FeedbackDetailResponse)
+@router.get("/v1/{review_id}", response_model=FeedbackDetailResponse)
 @limiter.limit("20/minute")
 async def get_feedback(
     request: Request, 

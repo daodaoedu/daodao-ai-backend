@@ -1,7 +1,8 @@
 import uvicorn
 from contextlib import asynccontextmanager
-from api.routers import feedback, recommendation, resource
+from api.routers import feedback, recommendation, ping
 from fastapi import FastAPI
+from starlette.concurrency import run_in_threadpool
 
 from core.middleware import setup_middlewares
 
@@ -58,6 +59,10 @@ async def lifespan(app: FastAPI):
 
     
     
+    logger.info("🚀 startup_event triggered")
+    await run_in_threadpool(app.state.qdrant_client.create_collection)
+    logger.info("✅ daodao_collection ready")
+
     
 
     yield
@@ -84,8 +89,9 @@ setup_middlewares(app)
 
 
 app.include_router(feedback.router, prefix="/api", tags=["feedback"])
-app.include_router(resource.router, prefix="/api", tags=["resource"])
+# app.include_router(resource.router, prefix="/api", tags=["resource"])
 app.include_router(recommendation.router, prefix="/api", tags=["recommendation"])
+app.include_router(ping.router,prefix="/api", tags=["Health"])
 
 
 @app.get("/")

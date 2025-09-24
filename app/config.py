@@ -120,7 +120,7 @@ class Settings(BaseConfigSettings):
         
     # Qdrant
     qdrant_url: str = "http://qdrant-dev:6333"
-    collection_name: str = "arxiv_collection"
+    collection_name: str = "daodao_collection"
     
         
     

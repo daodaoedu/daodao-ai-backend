@@ -10,6 +10,8 @@ from fastapi import Depends, Request, HTTPException, status
 from services.cache.client import CacheClient
 from services.llm.client import LLMClient
 from services.qdrant.client import QdrantClient
+from services.clickhouse.client import ClickHouseClient
+
 from api.verify_jwt import verify
 
 
@@ -64,6 +66,10 @@ def get_qdrant_client(request: Request) -> QdrantClient:
     """Get OpenSearch client from the request state."""
     return request.app.state.qdrant_client
 
+
+def get_clickhouse_client(request: Request) -> ClickHouseClient:
+    return request.app.state.clickhouse_client
+
 # Dependency annotations
 
 
@@ -73,6 +79,7 @@ LLMDep = Annotated[LLMClient, Depends(get_llm_client)]
 
 QdrantDep = Annotated[QdrantClient, Depends(get_qdrant_client)]
 CacheDep = Annotated[CacheClient, Depends(get_cache_client)]
+ClickHouseDep = Annotated[ClickHouseClient, Depends(get_clickhouse_client)]
 
 DatabaseDep = Annotated[BaseDatabase, Depends(get_database)]
 SessionDep = Annotated[Session, Depends(get_db_session)]

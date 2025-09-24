@@ -1,6 +1,5 @@
 from api.schemas.recommendation import FeedItem, FeedResponse
 from api.schemas.api_response import APIResponse
-from api.verify_jwt import get_current_user  # 你的 JWT Dependency
 from core.limiter import limiter
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from logger import AppLogger
@@ -11,7 +10,7 @@ from dependencies import UserDep
 logger = AppLogger(__name__).get_logger()
 
 
-router = APIRouter(prefix="/recommendation", tags=["recommendation"])
+router = APIRouter(prefix="/v1/recommendation", tags=["recommendation"])
 
 
 @router.post("/rank_feed", response_model=APIResponse)
