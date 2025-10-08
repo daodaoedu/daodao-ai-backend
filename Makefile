@@ -113,7 +113,7 @@ lint: ## 靜態檢查 (pylint + bandit)
 # =========================================
 
 rank_feed: ## 執行 rank_feed 測試腳本
-	$(COMPOSE_PROD) --profile prod exec backend-dev /bin/bash -c "PYTHONPATH=/app python services/rank_feed.py"
+	$(COMPOSE_PROD) --profile prod exec backend-dev /bin/bash -c "PYTHONPATH=/app python services/rank_feed.py  --to 50"
 
 
 verify: ## 驗證 JWT 腳本

@@ -1,6 +1,7 @@
 import math
 from datetime import datetime, timezone
 from typing import List
+import click
 
 import psycopg2
 from api.schemas.recommendation import FeedInfo
@@ -14,6 +15,7 @@ def get_feed(limit=100) -> List[FeedInfo]:
     """
     從資料庫抓取 idea / practice / project feed，計算 score 並回傳前 limit 筆結果。
     """
+    print(f"limit: {limit}")
     # db_config = db_config or {}
     conn = psycopg2.connect(get_settings().postgresql.database_url)
     cur = conn.cursor()
@@ -27,22 +29,22 @@ def get_feed(limit=100) -> List[FeedInfo]:
            COALESCE(progress_ratio,0) as progress_ratio,
            base_score
     FROM (
-        SELECT i.id::text, 'idea' as type, i.content as title, i.created_at, i.updated_at,
+        SELECT i.id, 'idea' as type, i.content as title, i.created_at, i.updated_at,
                COUNT(er.entity_id) as resource_count, 0 as streak, 0 as progress_ratio, 1 as base_score
         FROM ideas i
-        LEFT JOIN entity_resources er ON er.entity_id=i.id::text AND er.entity_type='idea'
+        LEFT JOIN entity_resources er ON er.entity_id=i.id AND er.entity_type='idea'
         GROUP BY i.id
         UNION ALL
-        SELECT p.id::text, 'practice', p.title, p.created_at, p.updated_at,
+        SELECT p.id, 'practice', p.title, p.created_at, p.updated_at,
                COUNT(er.entity_id), COALESCE(p.streak,0), COALESCE(p.current_progress/NULLIF(p.total_amount,0),0), 2
         FROM practices p
-        LEFT JOIN entity_resources er ON er.entity_id=p.id::text AND er.entity_type='practice'
+        LEFT JOIN entity_resources er ON er.entity_id=p.id AND er.entity_type='practice'
         GROUP BY p.id
         UNION ALL
-        SELECT pr.id::text, 'project', pr.title, pr.created_at, pr.updated_at,
+        SELECT pr.id, 'project', pr.title, pr.created_at, pr.updated_at,
                COUNT(er.entity_id), 0, 0, 3
         FROM project pr
-        LEFT JOIN entity_resources er ON er.entity_id=pr.id::text AND er.entity_type='project'
+        LEFT JOIN entity_resources er ON er.entity_id=pr.id AND er.entity_type='project'
         GROUP BY pr.id
     ) combined
     """
@@ -103,8 +105,13 @@ def get_feed(limit=100) -> List[FeedInfo]:
     return top_result
 
 
-# 範例使用
-if __name__ == "__main__":
-    top_100 = get_feed(limit=100)
+
+@click.command()
+@click.option('-t', '--to', 'to', type=int, default=100, help='limit')
+def main(to):
+    top_100 = get_feed(limit=to)
     for item in top_100:
         logger.info(item.json())  # Pydantic 提供 json() 方便輸出
+# 範例使用
+if __name__ == "__main__":
+    main()

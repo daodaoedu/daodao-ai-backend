@@ -4,13 +4,13 @@ from pydantic import BaseModel
 
 
 class FeedItem(BaseModel):
-    id: str
+    id: int
     type: str
     model_config = {"from_attributes": True}
 
 
 class FeedInfo(BaseModel):
-    id: str
+    id: int
     type: str
     title: str
     score: float
