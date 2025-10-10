@@ -1,15 +1,19 @@
 import math
 from datetime import datetime, timezone
 from typing import List
-import click
 
+import click
 import psycopg2
+from api.schemas.entity_resource_response import (
+    BasePost,
+    InteractionStats,
+    UserBasicInfo,
+)
 from api.schemas.recommendation import FeedInfo
-from api.schemas.entity_resource_response import BasePost, InteractionStats, UserBasicInfo
-from sqlalchemy.orm import Session
-from models import Idea, Practice, Project, User, BasicInfo, EntityResource, Resource
 from config import get_settings
 from logger import AppLogger
+from models import BasicInfo, EntityResource, Idea, Practice, Project, Resource, User
+from sqlalchemy.orm import Session
 
 logger = AppLogger(__name__).get_logger()
 
@@ -107,6 +111,7 @@ def get_feed(limit=100) -> List[FeedInfo]:
     conn.close()
     return top_result
 
+
 def get_tags_from_post(post):
     """
     根據貼文類型（Idea / Practice / Project）取得標籤列表。
@@ -114,8 +119,12 @@ def get_tags_from_post(post):
     if hasattr(post, "custom_content_type") and post.custom_content_type:
         # Practice 類型
         return [t.strip() for t in post.custom_content_type.split(",") if t.strip()]
-    
-    elif hasattr(post, "strategy") or hasattr(post, "motivation") or hasattr(post, "outcome"):
+
+    elif (
+        hasattr(post, "strategy")
+        or hasattr(post, "motivation")
+        or hasattr(post, "outcome")
+    ):
         # Project 類型
         tags = []
         for field in ["strategy", "motivation", "outcome"]:
@@ -133,7 +142,8 @@ def get_tags_from_post(post):
 
     return []
 
-def get_posts( id_type_list : List[dict] , session:Session)  -> List[BasePost]:
+
+def get_posts(id_type_list: List[dict], session: Session) -> List[BasePost]:
     """
     根據多筆 {id, type} 清單，從資料庫撈出對應貼文內容（idea / practice / project），
     整合作者、標籤、資源、互動統計等資訊，並轉換成 BasePost 格式回傳。
@@ -156,35 +166,37 @@ def get_posts( id_type_list : List[dict] , session:Session)  -> List[BasePost]:
     #   },
     # ]
     type_map = {
-        'idea': Idea,
-        'practice': Practice,
-        'project': Project,
+        "idea": Idea,
+        "practice": Practice,
+        "project": Project,
     }
 
-    
     ret = []
     for item in id_type_list:
-        post_type = item['type']
-        post_id = item['id']
+        post_type = item["type"]
+        post_id = item["id"]
         model = type_map.get(post_type)
         if not model:
             continue
-        
+
         post = session.get(model, post_id)
         if not post:
             continue
-        
+
         user = session.get(User, post.user_id)
         basic_info = session.query(BasicInfo).filter_by(user_id=post.user_id).first()
         resources = (
             session.query(EntityResource, Resource)
             .join(Resource, Resource.id == EntityResource.resource_id)
-            .filter(EntityResource.entity_id == post.id, EntityResource.entity_type == post_type)
+            .filter(
+                EntityResource.entity_id == post.id,
+                EntityResource.entity_type == post_type,
+            )
             .all()
         )
         resource_pairs = {r.Resource.name: r.Resource.url for r in resources}
-        share_list = basic_info.share_list.split(',') if basic_info.share_list else []
-        
+        share_list = basic_info.share_list.split(",") if basic_info.share_list else []
+
         ret.append(
             BasePost(
                 id=post.id,
@@ -195,45 +207,42 @@ def get_posts( id_type_list : List[dict] , session:Session)  -> List[BasePost]:
                     id=user.id,
                     name=user.nickname,
                     tag_list=user.tag_list,
-                    share_list=share_list
+                    share_list=share_list,
                 ),
                 status=post.status,
-                stats=InteractionStats( # TODO
-                    like_count = 0,
-                    comment_count = 0,
-                    share_count = 0,
-                    view_count = 0,
+                stats=InteractionStats(  # TODO
+                    like_count=0,
+                    comment_count=0,
+                    share_count=0,
+                    view_count=0,
                 ),
                 created_at=post.created_at,
                 updated_at=post.updated_at,
-                resources=resource_pairs
+                resources=resource_pairs,
             )
         )
     return ret
 
 
-
 @click.command()
-@click.option('-t', '--to', 'to', type=int, default=100, help='limit')
+@click.option("-t", "--to", "to", type=int, default=100, help="limit")
 def main(to):
     top = get_feed(limit=to)
     for item in top:
         logger.info(item.json())  # Pydantic 提供 json() 方便輸出
-    logger.info('-'*80)
-    
-    filtered_feed = [{"id":item.id, "type":item.type} for item in top]
+    logger.info("-" * 80)
+
+    filtered_feed = [{"id": item.id, "type": item.type} for item in top]
     logger.info(f"filtered_feed: {filtered_feed}")
-    logger.info('-'*80)
-    
-    from dependencies import get_db_session
+    logger.info("-" * 80)
+
     from db.factory import make_database
-    posts = get_posts(
-        filtered_feed,
-        session=get_db_session(make_database())
-    )
+    from dependencies import get_db_session
+
+    posts = get_posts(filtered_feed, session=get_db_session(make_database()))
     logger.info(f"posts: {posts}")
-        
-    
+
+
 # 範例使用
 if __name__ == "__main__":
     main()

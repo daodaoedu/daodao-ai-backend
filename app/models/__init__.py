@@ -1,9 +1,5 @@
 # models/__init__.py
-
-import os
-
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session
 
 from .AIReviewFeedback import AIReviewFeedback
 from .base import Base  # 導出 Base 供其他代碼使用
@@ -13,8 +9,11 @@ from .Comment import Comment
 from .Contact import Contact
 from .Country import Country
 from .Eligibility import Eligibility
+from .EntityResource import EntityResource
+from .EntityTag import EntityTag
 from .FeePlan import FeePlan
 from .Group import Group
+from .Idea import Idea
 from .Location import Location
 from .Marathon import Marathon
 from .MentorParticipants import MentorParticipants
@@ -22,6 +21,7 @@ from .Milestone import Milestone
 from .Outcome import Outcome
 from .Position import Position
 from .Post import Post
+from .Practice import Practice
 from .Project import Project
 from .ProjectMarathon import ProjectMarathon
 from .Resource import Resource
@@ -33,21 +33,8 @@ from .UserJoinGroup import UserJoinGroup
 from .UserPosition import UserPosition
 from .UserProfile import UserProfile
 from .UserProject import UserProject
-from .Practice import Practice
-from .Idea import Idea
-from .EntityResource import EntityResource
-from .EntityTag import EntityTag
 
-# DATABASE_URL = os.getenv("DATABASE_URL")
-# if not DATABASE_URL:
-#     raise Exception("請設定環境變數 DATABASE_URL 為 PostgreSQL 連線字串")
-# engine = create_engine(
-#     f"{os.getenv('DATABASE_URL')}", pool_size=5, pool_timeout=10, echo=False
-# )  # echo=True for debug
-
-# 創建 Session 類別
-# Session = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
+#
 
 # 導出所有類別
 __all__ = [
@@ -88,7 +75,6 @@ __all__ = [
 
 
 def get_db():
-
     db = Session()
     try:
         yield db

@@ -14,4 +14,3 @@ def make_llm_client():
     """
     settings = get_settings()
     return LLMClient(settings, "gemini")
-    

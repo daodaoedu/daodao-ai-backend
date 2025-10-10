@@ -1,18 +1,23 @@
 from datetime import datetime
 
+from api.schemas.feedback import GenerateFeedbackRequest
 from logger import AppLogger
 from models import AIReviewFeedback
-from sqlalchemy.orm import Session
+from services.cache.client import CacheClient
+
 # from utils.llm_router import query_gemini
 # from utils.redis_utils import Redis
 from services.llm.client import LLMClient
-from services.cache.client import CacheClient
-from api.schemas.feedback import GenerateFeedbackRequest
+from sqlalchemy.orm import Session
 
 logger = AppLogger(__name__).get_logger()
 
 
-def pre_process_feedback(llm_client: LLMClient, context: str, wordNum: int = 300,) -> str:
+def pre_process_feedback(
+    llm_client: LLMClient,
+    context: str,
+    wordNum: int = 300,
+) -> str:
     prompt = f"你是一個專業的摘要生成工具，能夠讀取一段文字並將其精簡成重點，並且保持原始意圖不變。請將以下內容進行摘要，並保持字數在 {wordNum} 字以內：\n\n{context}\n\n請給出精簡的版本。"
 
     output, cost, usage, llm_name = llm_client.generate(prompt)
@@ -23,12 +28,12 @@ def pre_process_feedback(llm_client: LLMClient, context: str, wordNum: int = 300
 
 
 def process_feedback(
-    req: GenerateFeedbackRequest, 
+    req: GenerateFeedbackRequest,
     llm_client: LLMClient,
-    context: str, 
-    task_id: str, 
+    context: str,
+    task_id: str,
     cache_clent: CacheClient,
-    db: Session
+    db: Session,
 ):
     """
     背景任務：產生回饋並儲存至 Redis 和資料庫
@@ -41,7 +46,9 @@ def process_feedback(
         cache_clent.write_dict(f"feedback:{task_id}", {"status": "pending"})
 
         if len(context) > 300:
-            context = pre_process_feedback(llm_client=llm_client, context=context, wordNum = 300)
+            context = pre_process_feedback(
+                llm_client=llm_client, context=context, wordNum=300
+            )
         # output: str, cost: float, usage: dict
         output, cost, usage, llm_name = llm_client.generate(context)
         token_usage = round(usage.get("estimated_tokens"), 6)
@@ -81,4 +88,6 @@ def process_feedback(
     except Exception as e:
         if "db" in locals():
             db.rollback()
-        cache_clent.write_dict(f"feedback:{task_id}", {"status": "error", "message": str(e)})
+        cache_clent.write_dict(
+            f"feedback:{task_id}", {"status": "error", "message": str(e)}
+        )

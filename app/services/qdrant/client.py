@@ -61,7 +61,5 @@ class QdrantClient:
         categories: Optional[List[str]] = None,
         min_score: float = 0.25,
     ) -> tuple[List[Dict], List[str], str, List[str], int]:
-        
         # Implements Qdrant search logic
         return
-    

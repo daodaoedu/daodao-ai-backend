@@ -1,19 +1,15 @@
+from api.schemas.feedback import GenerateFeedbackRequest
 from fastapi import HTTPException
 from models import Outcome, Post, Review
-from sqlalchemy.orm import Session
-
 from services.milestone import get_milestones_data
 from services.project import get_project_data
+from services.prompts.prompts import RAGPromptBuilder
 from services.review import get_review_trends
 from services.task import get_tasks_stats
-from api.schemas.feedback import GenerateFeedbackRequest
-from services.prompts.prompts import RAGPromptBuilder
+from sqlalchemy.orm import Session
 
 
-def prepare_feedback_context(
-    db: Session, 
-    req: GenerateFeedbackRequest
-) -> str:
+def prepare_feedback_context(db: Session, req: GenerateFeedbackRequest) -> str:
     """Prepare comprehensive context for feedback generation"""
 
     # Get review and related data
@@ -64,18 +60,17 @@ def prepare_feedback_context(
                 outcome_section += f"  圖片：{', '.join(o.image_urls)}\n"
             if o.video_urls:
                 outcome_section += f"  影片：{', '.join(o.video_urls)}\n"
-            outcome_section += (
-                f"  可見性：{o.visibility}  建立：{o.created_at}  更新：{o.updated_at}\n"
-            )
+            outcome_section += f"  可見性：{o.visibility}  建立：{o.created_at}  更新：{o.updated_at}\n"
     else:
         outcome_section = "\n\n📒 學習成果紀錄：無\n"
 
     # 教練風格與思考方法說明
     style_str = req.style or "未指定"
     thinking_method_str = req.thinking_method or "未指定"
-    style_section = f"\n【指定教練風格】：{style_str}\n【指定思考方法】：{thinking_method_str}\n"
+    style_section = (
+        f"\n【指定教練風格】：{style_str}\n【指定思考方法】：{thinking_method_str}\n"
+    )
 
-    
     if outcomes:
         outcome_section = "\n\n📒 學習成果紀錄：\n"
         for o in outcomes:
@@ -87,12 +82,13 @@ def prepare_feedback_context(
             outcome_section += f"  可見性：{o.visibility}  建立：{o.created_at}  更新：{o.updated_at}\n"
     else:
         outcome_section = "\n\n📒 學習成果紀錄：無\n"
-        
+
     # 教練風格與思考方法說明
     style_str = req.style or "未指定"
     thinking_method_str = req.thinking_method or "未指定"
-    style_section = f"\n【指定教練風格】：{style_str}\n【指定思考方法】：{thinking_method_str}\n"
-
+    style_section = (
+        f"\n【指定教練風格】：{style_str}\n【指定思考方法】：{thinking_method_str}\n"
+    )
 
     builder = RAGPromptBuilder()
     prompt = builder.create_rag_prompt(
@@ -104,9 +100,7 @@ def prepare_feedback_context(
         task_completion_rate=task_completion_rate,
         milestone_status=milestone_status,
         post=post,
-        outcome_section=outcome_section
+        outcome_section=outcome_section,
     )
-
-
 
     return prompt

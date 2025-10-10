@@ -1,24 +1,23 @@
 from typing import Annotated, Generator
 
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-
-from sqlalchemy.orm import Session
+from api.verify_jwt import verify
+from config import Settings, get_settings
 from db.interface_db import BaseDatabase
 from db.postgresql import PostgreSQLDatabase
-
-from config import Settings, get_settings
-from fastapi import Depends, Request, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from services.cache.client import CacheClient
+from services.clickhouse.client import ClickHouseClient
 from services.llm.client import LLMClient
 from services.qdrant.client import QdrantClient
-from services.clickhouse.client import ClickHouseClient
-
-from api.verify_jwt import verify
-
+from sqlalchemy.orm import Session
 
 security = HTTPBearer()
-def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
 
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+) -> str:
     # def get_current_user(authorization: Optional[str] = Header(None)):
 
     """
@@ -29,24 +28,23 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
         decoded = verify(token)  # 這裡可能丟錯誤
     except Exception:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, # token 無效/過期。
+            status_code=status.HTTP_401_UNAUTHORIZED,  # token 無效/過期。
             detail="Invalid or expired token",
             headers={"WWW-Authenticate": "Bearer"},
         )
     if not decoded:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, # 有 token，但驗證不通過（可能缺權限）。
+            status_code=status.HTTP_403_FORBIDDEN,  # 有 token，但驗證不通過（可能缺權限）。
             detail="Could not validate credentials",
         )
-    
+
     return decoded.get("_id", "unknown")
-
-
 
 
 def get_database(request: Request) -> BaseDatabase:
     """Get database from the request state."""
     return request.app.state.database
+
 
 def get_database_postgres(request: Request) -> PostgreSQLDatabase:
     """Get PostgreSQLDatabase from app state."""
@@ -56,14 +54,18 @@ def get_database_postgres(request: Request) -> PostgreSQLDatabase:
     return db
 
 
-def get_db_session(database: Annotated[PostgreSQLDatabase, Depends(get_database)]) -> Generator[Session, None, None]:
+def get_db_session(
+    database: Annotated[PostgreSQLDatabase, Depends(get_database)],
+) -> Generator[Session, None, None]:
     """Get database session dependency."""
     with database.get_session() as session:
         yield session
 
+
 def get_cache_client(request: Request) -> CacheClient:
     """Get Ollama client from the request state."""
     return request.app.state.cache_client
+
 
 def get_llm_client(request: Request) -> LLMClient:
     """Get Ollama client from the request state."""
@@ -77,6 +79,7 @@ def get_qdrant_client(request: Request) -> QdrantClient:
 
 def get_clickhouse_client(request: Request) -> ClickHouseClient:
     return request.app.state.clickhouse_client
+
 
 # Dependency annotations
 

@@ -77,7 +77,7 @@ class ReviewService:
         {json.dumps(history_data, ensure_ascii=False, indent=2)}
 
         需要特別關注的方面：
-        {json.dumps(specific_aspects, ensure_ascii=False, indent=2) if specific_aspects else '所有方面'}
+        {json.dumps(specific_aspects, ensure_ascii=False, indent=2) if specific_aspects else "所有方面"}
 
         請提供：
         1. 各個方面的進步程度評估

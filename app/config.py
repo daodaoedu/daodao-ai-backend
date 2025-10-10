@@ -1,10 +1,9 @@
 import os
-
 from pathlib import Path
-from typing import Literal, Optional, Dict
-from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing import Dict, Literal, Optional
 
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).parent.parent
 ENV_FILE_PATH = PROJECT_ROOT / ".env"
@@ -26,7 +25,6 @@ class LLMBackendConfig(BaseConfigSettings):
     api_key: Optional[str] = None
 
 
-
 class RedisSettings(BaseConfigSettings):
     model_config = SettingsConfigDict(
         env_file=[".env", str(ENV_FILE_PATH)],
@@ -36,8 +34,7 @@ class RedisSettings(BaseConfigSettings):
         case_sensitive=False,
     )
 
-    url : str = "redis://localhost:6379/0"
-    
+    url: str = "redis://localhost:6379/0"
 
     # Cache settings
     ttl_hours: int = 6  # Cache TTL in hours
@@ -47,7 +44,8 @@ class PostgreSQLSettings(BaseSettings):
     """PostgreSQL configuration settings."""
 
     database_url: str = Field(
-        default="postgresql+psycopg2://username:passweord@localhost:5432/db", description="PostgreSQL database URL"
+        default="postgresql+psycopg2://username:passweord@localhost:5432/db",
+        description="PostgreSQL database URL",
     )
     echo_sql: bool = Field(default=False, description="Enable SQL query logging")
     pool_size: int = Field(default=20, description="Database connection pool size")
@@ -70,20 +68,19 @@ class ClickHouseSettings(BaseSettings):
     user: str = Field(default="default", description="ClickHouse 使用者帳號")
     password: str = Field(default="", description="ClickHouse 使用者密碼")
     database: str = Field(default="default", description="ClickHouse 資料庫名稱")
-    
-    
+
+
 class Settings(BaseConfigSettings):
     app_version: str = "0.1.0"
     debug: bool = True
     environment: Literal["development", "staging", "production"] = "development"
     service_name: str = "daodao-ai-backend-api"
-    
+
     redis: RedisSettings = Field(default_factory=RedisSettings)
     postgresql: PostgreSQLSettings = Field(default_factory=PostgreSQLSettings)
-    clickhouse:ClickHouseSettings = Field(default_factory=ClickHouseSettings)
-    
-    
-    llm_backend : Dict[str, LLMBackendConfig] = Field(
+    clickhouse: ClickHouseSettings = Field(default_factory=ClickHouseSettings)
+
+    llm_backend: Dict[str, LLMBackendConfig] = Field(
         default_factory=lambda: {
             "ollama": LLMBackendConfig(
                 url="http://ollama-dev:11434/api/generate",
@@ -106,28 +103,22 @@ class Settings(BaseConfigSettings):
             # ),
         }
     )
-    
 
-
-    
-    
     jwt_security: str = "xxxxxxxxxxxxxxxx"
     jwt_expiration: str = "1h"
-    
-    
+
     class Config:
         validate_assignment = True  # 允許設定後驗證
-        
+
     # Qdrant
     qdrant_url: str = "http://qdrant-dev:6333"
     collection_name: str = "daodao_collection"
-    
-        
-    
+
+
 def get_settings() -> Settings:
-    return Settings()   
-        
-        
+    return Settings()
+
+
 if __name__ == "main":
     # --- 使用方式 ---
     settings = Settings()

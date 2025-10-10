@@ -5,19 +5,15 @@ from api.schemas.feedback import (
     GenerateFeedbackRequest,
     GenerateFeedbackResponse,
 )
-
 from core.limiter import limiter  # 從獨立模組 import
+from dependencies import CacheDep, LLMDep, SessionDep, UserDep
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
-from dependencies import LLMDep
 from logger import AppLogger
 from models import AIReviewFeedback, get_db
 from services.feedback import prepare_feedback_context
 from services.process_feedback import process_feedback
 from sqlalchemy import desc
 from sqlalchemy.orm import Session as ORMSession
-from dependencies import LLMDep, SessionDep, CacheDep, UserDep
-
-
 
 logger = AppLogger(__name__).get_logger()
 
@@ -28,11 +24,7 @@ router = APIRouter(prefix="/v1/feedback", tags=["feedback"])
 
 @router.get("/status/{task_id}")
 @limiter.limit("60/minute")
-async def get_feedback_status(
-    request: Request, 
-    task_id: str, 
-    cache_client: CacheDep
-    ):
+async def get_feedback_status(request: Request, task_id: str, cache_client: CacheDep):
     data = cache_client.read_dict(f"feedback:{task_id}")
 
     if not data:
@@ -64,7 +56,7 @@ async def get_feedback_status(
 @router.post("/generate", response_model=GenerateFeedbackResponse)
 @limiter.limit("5/minute")
 async def generate_feedback(
-    request: Request, 
+    request: Request,
     current_user: UserDep,
     req: GenerateFeedbackRequest,
     background_tasks: BackgroundTasks,
@@ -92,7 +84,7 @@ async def generate_feedback(
 
     # Generate unique task ID and trigger background processing
     task_id = str(uuid.uuid4())
-    background_tasks.add_task( # TODOS : use celery task
+    background_tasks.add_task(  # TODOS : use celery task
         process_feedback,
         req,
         llm_client,
@@ -113,9 +105,8 @@ async def generate_feedback(
 @router.get("/v1/{review_id}", response_model=FeedbackDetailResponse)
 @limiter.limit("20/minute")
 async def get_feedback(
-    request: Request, 
-    review_id: int, 
-    db: ORMSession = Depends(get_db)):
+    request: Request, review_id: int, db: ORMSession = Depends(get_db)
+):
     """
     取得回饋
     """

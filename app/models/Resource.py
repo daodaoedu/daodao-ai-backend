@@ -31,7 +31,5 @@ class Resource(Base):
 
     creator = relationship("User", back_populates="resource")  # 若有對應 User Model
     entity_links = relationship(
-        "EntityResource",
-        back_populates="resource",
-        cascade="all, delete-orphan"
+        "EntityResource", back_populates="resource", cascade="all, delete-orphan"
     )

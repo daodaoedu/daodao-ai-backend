@@ -1,15 +1,11 @@
 from api.auto_metrics import observe_api
 from api.schemas.health import HealthResponse, ServiceStatus
-from dependencies import QdrantDep, SettingsDep, ClickHouseDep, SessionDep
+from dependencies import ClickHouseDep, QdrantDep, SessionDep, SettingsDep
 from fastapi import APIRouter, Request
 from qdrant_client.http.exceptions import UnexpectedResponse
 from sqlalchemy import text
 
-
-
 router = APIRouter(prefix="/v1")
-
-
 
 
 @router.get("/ping")
@@ -52,11 +48,10 @@ async def health_check(
             overall_status = "degraded"
 
     # Database check
-    
+
     def _check_database():
         db.execute(text("SELECT 1"))
         return ServiceStatus(status="healthy", message="Connected successfully")
-
 
     def _check_qdrant():
         try:
@@ -74,7 +69,6 @@ async def health_check(
 
     def _check_clickhouse():
         try:
-            
             result = clickhouse_client.client.execute("SELECT 1")
             if result and result[0][0] == 1:
                 return ServiceStatus(status="healthy", message="ClickHouse reachable")
@@ -89,7 +83,6 @@ async def health_check(
     _check_service("database", _check_database)
     _check_service("qdrant", _check_qdrant)
     _check_service("clickhouse", _check_clickhouse)
-
 
     return HealthResponse(
         status=overall_status,

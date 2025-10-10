@@ -2,12 +2,12 @@ import logging
 from contextlib import contextmanager
 from typing import Generator, Optional
 
+from config import PostgreSQLSettings
+from db.interface_db import BaseDatabase
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session, sessionmaker
-from db.interface_db import BaseDatabase
-from config import PostgreSQLSettings
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,9 @@ class PostgreSQLDatabase(BaseDatabase):
                 pool_pre_ping=True,  # Verify connections before use
             )
 
-            self.session_factory = sessionmaker(bind=self.engine, expire_on_commit=False)
+            self.session_factory = sessionmaker(
+                bind=self.engine, expire_on_commit=False
+            )
 
             # Test the connection
             assert self.engine is not None
@@ -66,7 +68,9 @@ class PostgreSQLDatabase(BaseDatabase):
             logger.info("PostgreSQL database initialized successfully")
             assert self.engine is not None
             logger.info(f"Database: {self.engine.url.database}")
-            logger.info(f"Total tables: {', '.join(updated_tables) if updated_tables else 'None'}")
+            logger.info(
+                f"Total tables: {', '.join(updated_tables) if updated_tables else 'None'}"
+            )
             logger.info("Database connection established")
 
         except Exception as e:

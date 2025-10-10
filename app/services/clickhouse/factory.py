@@ -14,4 +14,3 @@ def make_clickhouse_client():
     """
     settings = get_settings()
     return ClickHouseClient(settings.clickhouse)
-    

@@ -80,15 +80,11 @@ class User(Base):
     practices = relationship("Practice", back_populates="user", cascade="all, delete")
     # 在 User 模型中
     created_entity_resources = relationship(
-        "EntityResource",
-        back_populates="creator",
-        cascade="all, delete-orphan"
+        "EntityResource", back_populates="creator", cascade="all, delete-orphan"
     )
-    
+
     created_tags = relationship(
-        "EntityTag",
-        back_populates="creator",
-        cascade="all, delete-orphan"
+        "EntityTag", back_populates="creator", cascade="all, delete-orphan"
     )
 
     def __repr__(self):
@@ -140,5 +136,7 @@ class User(Base):
             "created_at": self.created_at,
             "updated_by": self.updated_by,
             "updated_at": self.updated_at,
-            "identities": [position.name for position in self.identities],  # 提取身份名稱
+            "identities": [
+                position.name for position in self.identities
+            ],  # 提取身份名稱
         }

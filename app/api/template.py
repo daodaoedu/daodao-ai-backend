@@ -1,25 +1,26 @@
-from functools import wraps
-from fastapi import HTTPException
-from typing import Callable, Any, Coroutine, Dict
-from logger import AppLogger
-from api.schemas.api_response import (
-    APIResponse,
-    build_success_response,
-    build_error_response
-)
 import inspect
 import time
+from functools import wraps
+from typing import Any, Callable, Coroutine, Dict
 
-
+from api.schemas.api_response import (
+    APIResponse,
+    build_error_response,
+    build_success_response,
+)
+from fastapi import HTTPException
+from logger import AppLogger
 
 logger = AppLogger(__name__).get_logger()
 
+
 def api_response_decorator(func: Callable[..., Coroutine[Any, Any, Any]]):
     """統一 API 回傳格式的裝飾器"""
+
     @wraps(func)
     async def wrapper(*args, **kwargs) -> Dict:
         start_time = time.time()
-        
+
         try:
             # 判斷函數是否為 coroutine
             if inspect.iscoroutinefunction(func):
@@ -47,18 +48,15 @@ def api_response_decorator(func: Callable[..., Coroutine[Any, Any, Any]]):
             #         **result  # 直接展開原本 dict（例如 data、pagination、cache_hit）
             #     }
             #     return merged_data
-            
+
             # case 4: 其他型別（list, str, obj...）
-            return build_success_response(
-                data=result,
-                processing_time=processing_time
-            )
+            return build_success_response(data=result, processing_time=processing_time)
 
         except HTTPException as e:
             return build_error_response(
                 code="HTTP_ERROR",
                 message=e.detail,
-                details={"status_code": e.status_code}
+                details={"status_code": e.status_code},
             )
         except Exception as e:
             return build_error_response(

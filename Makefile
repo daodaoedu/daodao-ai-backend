@@ -34,13 +34,13 @@ help:
 	@grep -E '^[a-zA-Z0-9_-]+:.*?##' Makefile | \
 		awk -F ':.*?##' '{printf " - \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
-		
+
 up-dev: ## 啟動 Dev 環境
 	$(COMPOSE_DEV) --profile dev up -d
 
 down-dev: ## 停止並移除 Dev 容器與 Volume
 
-	$(COMPOSE_DEV) --profile dev down --volumes 
+	$(COMPOSE_DEV) --profile dev down --volumes
 
 
 up-prod: ## 啟動 Prod 環境
@@ -48,7 +48,7 @@ up-prod: ## 啟動 Prod 環境
 
 
 down-prod: ## 停止並移除 Prod 容器與 Volume
-	$(COMPOSE_PROD) --profile prod down --volumes 
+	$(COMPOSE_PROD) --profile prod down --volumes
 
 rebuild-dev: down-dev up-dev ## 重建 Dev 環境
 
@@ -101,7 +101,13 @@ quality_checks: format lint ## 一鍵品質檢查（format + lint）
 format: ## 格式化程式碼 (isort + black)
 	isort $(PY_DIRS)
 	black $(PY_DIRS)
-# 	python -m ruff check $(PY_DIRS) --fix
+	python -m ruff check $(PY_DIRS) --fix
+
+
+check: ## 檢查程式碼格式 (不修改)
+	isort $(PY_DIRS)
+	black --check $(PY_DIRS)
+	python -m ruff check $(PY_DIRS)
 
 
 lint: ## 靜態檢查 (pylint + bandit)
@@ -118,4 +124,3 @@ rank_feed: ## 執行 rank_feed 測試腳本
 
 verify: ## 驗證 JWT 腳本
 	$(COMPOSE_DEV) --profile dev exec backend-dev /bin/bash -c "PYTHONPATH=/app python api/verify_jwt.py"
-

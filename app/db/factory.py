@@ -12,7 +12,6 @@ def make_database() -> BaseDatabase:
     # Get settings from centralized config
     settings = get_settings()
 
- 
     database = PostgreSQLDatabase(config=settings.postgresql)
     database.startup()
     return database

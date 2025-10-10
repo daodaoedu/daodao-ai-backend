@@ -1,7 +1,8 @@
-from datetime import datetime
 import uuid
-from typing import Any, Optional, Dict, Union
-from api.schemas.pageInfo import CursorInfo, CursorPaginationInfo, ErrorInfo, APIResponse
+from datetime import datetime
+from typing import Any, Optional
+
+from api.schemas.pageInfo import APIResponse, CursorPaginationInfo, ErrorInfo
 
 
 def build_meta(extra: dict = None) -> dict:
@@ -19,7 +20,7 @@ def build_success_response(
     data: Any = None,
     pagination: Optional[CursorPaginationInfo] = None,
     cache_hit: bool = False,
-    processing_time: int = 0
+    processing_time: int = 0,
 ) -> dict:
     """成功回傳統一格式"""
     resp = APIResponse(
@@ -29,7 +30,7 @@ def build_success_response(
         pagination=pagination,
         cacheHit=cache_hit,
         processingTime=processing_time,
-        **build_meta()
+        **build_meta(),
     )
     return resp.dict()
 
@@ -37,7 +38,7 @@ def build_success_response(
 def build_error_response(
     code: str = "INTERNAL_ERROR",
     message: str = "Unexpected error",
-    details: Optional[dict] = None
+    details: Optional[dict] = None,
 ) -> dict:
     """錯誤回傳統一格式"""
     error = ErrorInfo(code=code, message=message, details=details)
@@ -48,6 +49,6 @@ def build_error_response(
         pagination=None,
         cacheHit=False,
         processingTime=0,
-        **build_meta()
+        **build_meta(),
     )
     return resp.dict()

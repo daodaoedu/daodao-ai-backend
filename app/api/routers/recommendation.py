@@ -1,12 +1,11 @@
-from api.schemas.recommendation import FeedItem, FeedResponse
-from api.schemas.api_response import APIResponse
-from core.limiter import limiter
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from logger import AppLogger
-from services.rank_feed import get_feed, get_posts
+from api.schemas.pageInfo import APIResponse, CursorPaginationInfo
+from api.schemas.recommendation import FeedItem
 from api.template import api_response_decorator
-from dependencies import UserDep , SessionDep
-from api.schemas.pageInfo import CursorPaginationInfo, APIResponse
+from core.limiter import limiter
+from dependencies import SessionDep, UserDep
+from fastapi import APIRouter, HTTPException, Query, Request
+from logger import AppLogger
+from services.rank_feed import get_feed
 
 logger = AppLogger(__name__).get_logger()
 
@@ -18,9 +17,9 @@ router = APIRouter(prefix="/v1/recommendation", tags=["recommendation"])
 @limiter.limit("5/minute")
 @api_response_decorator
 def recommendation_feed(
-    request: Request, 
-    current_user: UserDep, 
-    session : SessionDep, # ✅ FastAPI 會自動從 get_db_session() 拿 session
+    request: Request,
+    current_user: UserDep,
+    session: SessionDep,  # ✅ FastAPI 會自動從 get_db_session() 拿 session
     limit: int = Query(100, description="最多取得幾筆 feed"),
 ):
     """
@@ -38,22 +37,21 @@ def recommendation_feed(
 
     try:
         top_feed = get_feed(limit=limit)
-        
+
         # 只取 id 與 type
         filtered_feed = [FeedItem(id=item.id, type=item.type) for item in top_feed]
-    
+
         logger.info(f"recommendation_feed result: {len(filtered_feed)}")
-        
-        posts = get_posts(filtered_feed, session = session)
+
+        # posts = get_posts(filtered_feed, session=session)
 
     except Exception as e:
         logger.info(f"recommendation_feed error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
     pagination = CursorPaginationInfo(count=len(filtered_feed))
-    # return {"items": filtered_feed}
     return {
-            "data": filtered_feed,
-            "pagination": pagination,
-            "cache_hit": False,
-        }
+        "data": filtered_feed,
+        "pagination": pagination,
+        "cache_hit": False,
+    }

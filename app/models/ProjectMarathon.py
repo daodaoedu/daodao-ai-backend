@@ -36,9 +36,13 @@ class ProjectMarathon(Base):
         TIMESTAMP, default="now()", comment="專案報名此馬拉松的日期"
     )
     status = Column(
-        ENUM("Pending", "Approved", "Rejected"), nullable=False, comment="專案報名的審核狀態"
+        ENUM("Pending", "Approved", "Rejected"),
+        nullable=False,
+        comment="專案報名的審核狀態",
     )
 
     feedback = Column(Text, comment="評審意見或備註")
     created_at = Column(TIMESTAMP, default="now()", comment="建立時間")
-    updated_at = Column(TIMESTAMP, default="now()", onupdate="now()", comment="更新時間")
+    updated_at = Column(
+        TIMESTAMP, default="now()", onupdate="now()", comment="更新時間"
+    )

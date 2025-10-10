@@ -1,13 +1,9 @@
-import hashlib
-import json
 import logging
-from datetime import timedelta
-from typing import Optional
 import pickle
+from datetime import timedelta
 
 import redis
 from config import RedisSettings
-
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +15,7 @@ class CacheClient:
         self.client = redis_client
         self.settings = settings
         self.ttl = timedelta(hours=settings.ttl_hours)
-        
+
     def check_redis_health(self):
         try:
             self.client.ping()  # 嘗試 ping Redis
@@ -28,7 +24,6 @@ class CacheClient:
         except redis.RedisError:
             return False
 
-        
     @staticmethod
     def _get_r():
         r = redis.from_url(CacheClient.settings.url)
@@ -51,7 +46,6 @@ class CacheClient:
 
     @classmethod
     def delete(self, *names):
-
         r = self._get_r()
         r.delete(*names)
 
@@ -61,6 +55,3 @@ class CacheClient:
 
         r = self._get_r()
         r.expire(name, expire_in_seconds)
-
-
-        

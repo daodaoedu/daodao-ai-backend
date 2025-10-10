@@ -6,9 +6,9 @@ class ClickHouseClient:
     def __init__(self, settings: ClickHouseSettings):
         self.settings = settings
         self.client = Client(
-            host=self.settings.host, 
+            host=self.settings.host,
             port=settings.port,
             user=settings.user,
             password=settings.password,
-            database=settings.database
-            )
+            database=settings.database,
+        )

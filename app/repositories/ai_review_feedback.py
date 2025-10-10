@@ -1,1 +1,0 @@
-from modele import AIReviewFeedback

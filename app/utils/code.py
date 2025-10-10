@@ -33,7 +33,6 @@ country_mapping = {
     "奧蘭": "Aland Islands",
     "阿爾巴尼亞": "Albania",
     "阿爾及利亞": "Algeria",
-    "美屬薩摩亞": "American Samoa",
     "安道爾": "Andorra",
     "安哥拉": "Angola",
     "安圭拉": "Anguilla",
@@ -127,7 +126,6 @@ country_mapping = {
     "蓋亞那": "Guyana",
     "海地": "Haiti",
     "赫德島和麥克唐納群島": "Heard Island and McDonald Islands",
-    "梵蒂岡": "Vatican City",
     "宏都拉斯": "Honduras",
     "香港": "Hong Kong",
     "匈牙利": "Hungary",
@@ -143,7 +141,6 @@ country_mapping = {
     "牙買加": "Jamaica",
     "日本": "Japan",
     "澤西": "Jersey",
-    "約旦": "Jordan",
     "哈薩克": "Kazakhstan",
     "肯亞": "Kenya",
     "吉里巴斯": "Kiribati",
@@ -228,7 +225,6 @@ country_mapping = {
     "塞舌爾": "Seychelles",
     "獅子山": "Sierra Leone",
     "新加坡": "Singapore",
-    "聖馬力諾": "San Marino",
     "索馬利亞": "Somalia",
     "南非": "South Africa",
     "南喬治亞與南三明治群島": "South Georgia and the South Sandwich Islands",
@@ -272,7 +268,11 @@ country_mapping = {
     "辛巴威": "Zimbabwe",
 }
 
-partnerEducationStep_mapping = {"高中": "high", "不設限": "other", "大學以上": "university"}
+partnerEducationStep_mapping = {
+    "高中": "high",
+    "不設限": "other",
+    "大學以上": "university",
+}
 
 group_category_mapping = {
     "語言與文學": "language",

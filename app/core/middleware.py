@@ -23,7 +23,6 @@ def setup_middlewares(app: FastAPI):
         "http://localhost:5173",
         "http://frontend",  # 使用服務名稱作為來源
         "http://localhost:8002",
-        
     ]
     app.add_middleware(
         CORSMiddleware,
@@ -35,7 +34,8 @@ def setup_middlewares(app: FastAPI):
 
     # === TrustedHost ===
     app.add_middleware(
-        TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1"],
+        TrustedHostMiddleware,
+        allowed_hosts=["localhost", "127.0.0.1"],
     )
 
     # === Session ===

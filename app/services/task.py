@@ -10,7 +10,7 @@ def get_tasks_stats(db: Session, milestone_ids: list[int]):
     stats = (
         db.query(
             func.count(Task.id).label("total"),
-            func.sum(case((Task.is_completed == True, 1), else_=0)).label("completed"),
+            func.sum(case((Task.is_completed, 1), else_=0)).label("completed"),
         )
         .filter(Task.milestone_id.in_(milestone_ids))
         .first()

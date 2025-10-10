@@ -1,17 +1,18 @@
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Any, Dict, Tuple
+
 import httpx
 from config import LLMBackendConfig
 from logger import AppLogger
-
 from services.prompts.prompts import RAGPromptBuilder, ResponseParser
-
 
 logger = AppLogger(__name__).get_logger()
 
 
 class LLMClient:
     def __init__(self, settings: LLMBackendConfig, backend: str):
-        self.settings = settings.llm_backend[backend]  # e.g. settings.llm_backend["openai"]
+        self.settings = settings.llm_backend[
+            backend
+        ]  # e.g. settings.llm_backend["openai"]
         self.backend = backend
 
         self.timeout = httpx.Timeout(300)
@@ -19,7 +20,6 @@ class LLMClient:
         self.response_parser = ResponseParser()
 
     def _estimate_cost(self, prompt: str, output: str, usage: dict) -> float:
-        
         if self.backend == "gemini":
             tokens = self._estimate_tokens(prompt + output)
             return self._estimate_token_cost(tokens, 0.01)
@@ -86,7 +86,9 @@ class LLMClient:
                     return f"錯誤：{resp.text}", 0, {}, "openai"
                 data = resp.json()
                 output = (
-                    data.get("output", [{}])[0].get("content", [{}])[0].get("text", "未提供回應")
+                    data.get("output", [{}])[0]
+                    .get("content", [{}])[0]
+                    .get("text", "未提供回應")
                 )
                 usage = data.get("usage", {})
                 cost = self._estimate_cost(prompt, output, usage)
@@ -152,7 +154,11 @@ class LLMClient:
                 if resp.status_code != 200:
                     return f"錯誤：{resp.text}", 0, {}, "grok"
                 data = resp.json()
-                output = data.get("choices", [{}])[0].get("message", {}).get("content", "未提供回應")
+                output = (
+                    data.get("choices", [{}])[0]
+                    .get("message", {})
+                    .get("content", "未提供回應")
+                )
                 tokens = self._estimate_tokens(prompt + output)
                 cost = self._estimate_cost(prompt, output, {"estimated_tokens": tokens})
                 return output, cost, {"estimated_tokens": tokens}, "grok"

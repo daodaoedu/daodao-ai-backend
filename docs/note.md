@@ -23,8 +23,8 @@
   * 儲存資源或內容的向量化嵌入（embeddings），支援相似度搜尋（例如找相似資源、專案、找內容相關的教學文章）。
     * `resources.name` + `resources.description`
     * `review.mood_description` + `review.learning_feedback`
-    * `post.type` + `post.title` + 
-      * `outcome.content` 
+    * `post.type` + `post.title` +
+      * `outcome.content`
       * `review.mood_description` + `review.learning_feedback`
       *  `note.content`
   * 特別適合語義搜尋與內容推薦。
