@@ -33,6 +33,10 @@ from .UserJoinGroup import UserJoinGroup
 from .UserPosition import UserPosition
 from .UserProfile import UserProfile
 from .UserProject import UserProject
+from .Practice import Practice
+from .Idea import Idea
+from .EntityResource import EntityResource
+from .EntityTag import EntityTag
 
 # DATABASE_URL = os.getenv("DATABASE_URL")
 # if not DATABASE_URL:
@@ -76,6 +80,10 @@ __all__ = [
     "Post",
     "Outcome",
     "Category",
+    "Practice",
+    "Idea",
+    "EntityResource",
+    "EntityTag",
 ]
 
 

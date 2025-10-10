@@ -4,6 +4,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from sqlalchemy.orm import Session
 from db.interface_db import BaseDatabase
+from db.postgresql import PostgreSQLDatabase
 
 from config import Settings, get_settings
 from fastapi import Depends, Request, HTTPException, status
@@ -47,8 +48,15 @@ def get_database(request: Request) -> BaseDatabase:
     """Get database from the request state."""
     return request.app.state.database
 
+def get_database_postgres(request: Request) -> PostgreSQLDatabase:
+    """Get PostgreSQLDatabase from app state."""
+    db = request.app.state.database
+    if not isinstance(db, PostgreSQLDatabase):
+        raise RuntimeError("Database is not a PostgreSQLDatabase instance")
+    return db
 
-def get_db_session(database: Annotated[BaseDatabase, Depends(get_database)]) -> Generator[Session, None, None]:
+
+def get_db_session(database: Annotated[PostgreSQLDatabase, Depends(get_database)]) -> Generator[Session, None, None]:
     """Get database session dependency."""
     with database.get_session() as session:
         yield session
@@ -81,6 +89,6 @@ QdrantDep = Annotated[QdrantClient, Depends(get_qdrant_client)]
 CacheDep = Annotated[CacheClient, Depends(get_cache_client)]
 ClickHouseDep = Annotated[ClickHouseClient, Depends(get_clickhouse_client)]
 
-DatabaseDep = Annotated[BaseDatabase, Depends(get_database)]
+DatabaseDep = Annotated[BaseDatabase, Depends(get_database_postgres)]
 SessionDep = Annotated[Session, Depends(get_db_session)]
 UserDep = Annotated[str, Depends(get_current_user)]

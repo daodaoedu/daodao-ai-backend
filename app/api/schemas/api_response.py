@@ -8,7 +8,7 @@ def build_meta(extra: dict = None) -> dict:
     """統一處理 meta 欄位"""
     meta = {
         "timestamp": datetime.utcnow().isoformat() + "Z",
-        "requestId": f"req-{uuid.uuid4().hex[:8]}",
+        "requestId": f"req-{uuid.uuid4()}",
     }
     if extra:
         meta.update(extra)

@@ -76,6 +76,20 @@ class User(Base):
         "Comment", back_populates="user", cascade="all, delete-orphan"
     )
     posts = relationship("Post", back_populates="user", cascade="all, delete-orphan")
+    ideas = relationship("Idea", back_populates="user", cascade="all, delete")
+    practices = relationship("Practice", back_populates="user", cascade="all, delete")
+    # 在 User 模型中
+    created_entity_resources = relationship(
+        "EntityResource",
+        back_populates="creator",
+        cascade="all, delete-orphan"
+    )
+    
+    created_tags = relationship(
+        "EntityTag",
+        back_populates="creator",
+        cascade="all, delete-orphan"
+    )
 
     def __repr__(self):
         return f"<User(id={self.id}, external_id='{self.external_id}', nickname='{self.nickname}')>"
