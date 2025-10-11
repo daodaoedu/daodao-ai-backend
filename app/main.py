@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 
-from api.routers import feedback, ping, recommendation
+from api.routers import ping, recommendation
 from config import get_settings
 from core.middleware import setup_middlewares
 from db.factory import make_database
@@ -73,7 +73,7 @@ app = FastAPI(
 setup_middlewares(app)
 
 
-app.include_router(feedback.router, prefix="/api", tags=["feedback"])
+# app.include_router(feedback.router, prefix="/api", tags=["feedback"])
 # app.include_router(resource.router, prefix="/api", tags=["resource"])
 app.include_router(recommendation.router, prefix="/api", tags=["recommendation"])
 app.include_router(ping.router, prefix="/api", tags=["Health"])
