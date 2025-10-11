@@ -15,15 +15,17 @@ from sqlalchemy.orm import Session
 logger = AppLogger(__name__).get_logger()
 
 
-def get_feed(limit: int = 100, types: Optional[List[str]] = None) -> List[FeedInfo]:
+def get_feed(
+    after_id: int = 10, page_size: int = 20, types: Optional[List[str]] = None
+) -> List[FeedInfo]:
     """
-    從資料庫抓取 idea / practice / project feed，計算 score 並回傳前 limit 筆結果。
+    從資料庫抓取 idea / practice / project feed，計算 score，支援 cursor-based 分頁。
     """
+
+    logger.info(f"after_id: {after_id}, types: {types}, page_size: {page_size}")
 
     if types is None:
         types = ["idea", "practice", "project"]
-
-    logger.info(f"limit: {limit}, types: {types}")
 
     # db_config = db_config or {}
     conn = psycopg2.connect(get_settings().postgresql.database_url)
@@ -64,10 +66,19 @@ def get_feed(limit: int = 100, types: Optional[List[str]] = None) -> List[FeedIn
 
     # 將 fragment 用 UNION ALL 合併
     combined_sql = " UNION ALL ".join(sql_fragments)
-    final_sql = f"SELECT * FROM ({combined_sql}) combined"
 
-    cur.execute(final_sql)
+    if after_id is not None:
+        final_sql = f"SELECT * FROM ({combined_sql}) combined WHERE id > %s ORDER BY id ASC LIMIT %s"
+        cur.execute(final_sql, (after_id, page_size))
+    else:
+        final_sql = f"SELECT * FROM ({combined_sql}) combined ORDER BY id ASC LIMIT %s"
+        cur.execute(final_sql, (page_size,))
+
     rows = cur.fetchall()
+
+    cur.close()
+    conn.close()
+
     result = []
 
     for r in rows:
@@ -115,11 +126,7 @@ def get_feed(limit: int = 100, types: Optional[List[str]] = None) -> List[FeedIn
         key=lambda x: (x.score, x.freshness_score, x.activity_score), reverse=True
     )
 
-    top_result = result[:limit]
-
-    cur.close()
-    conn.close()
-    return top_result
+    return result
 
 
 def get_tags_from_post(post):
@@ -246,7 +253,7 @@ def get_posts(id_type_list: List[dict], session: Session) -> List[BasePost]:
 @click.command()
 @click.option("-t", "--to", "to", type=int, default=100, help="limit")
 def main(to):
-    top = get_feed(limit=to, types=["idea", "practice", "project"])
+    top = get_feed(page_size=to, types=["idea", "practice", "project"])
     for item in top:
         logger.info(item.json())  # Pydantic 提供 json() 方便輸出
     logger.info("-" * 80)

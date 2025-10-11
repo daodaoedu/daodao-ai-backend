@@ -1,3 +1,5 @@
+from typing import Optional
+
 from api.template import api_response_decorator
 from core.limiter import limiter
 from dependencies import SessionDep, UserDep
@@ -20,7 +22,11 @@ def recommendation_feed(
     request: Request,
     current_user: UserDep,
     session: SessionDep,  # ✅ FastAPI 會自動從 get_db_session() 拿 session
-    limit: int = Query(100, description="最多取得幾筆 feed"),
+    # limit: int = Query(100, description="最多取得幾筆 feed"),
+    after_id: Optional[int] = Query(
+        None, description="上一次最後一筆的 id，作為 cursor"
+    ),
+    page_size: int = Query(20, description="每頁抓幾筆"),
 ):
     """
     推薦 feed API
@@ -36,8 +42,7 @@ def recommendation_feed(
     logger.info(f"current_user:  {current_user}")
 
     try:
-        top_feed = get_feed(limit=limit)  # , types=["idea", "practice"]
-
+        top_feed = get_feed(after_id=after_id, page_size=page_size)
         # 只取 id 與 type
         filtered_feed = [FeedItem(id=item.id, type=item.type) for item in top_feed]
 
@@ -45,13 +50,28 @@ def recommendation_feed(
 
         posts = get_posts(filtered_feed, session=session)
 
+        # Cursor pagination info
+        paginated_posts = posts
+        next_cursor = paginated_posts[-1].id if paginated_posts else None
+        has_next = len(paginated_posts) == page_size
+        logger.info(f"recommendation_feed next_cursor: {next_cursor}")
+
     except Exception as e:
         logger.info(f"recommendation_feed error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-    pagination = CursorPaginationInfo(count=len(posts))
+    pagination = CursorPaginationInfo(
+        cursors={
+            "start": str(after_id) if after_id else None,
+            "end": str(next_cursor) if next_cursor else None,
+        },
+        hasPrev=after_id is not None,
+        hasNext=has_next,
+        count=len(paginated_posts),
+    )
+
     return {
-        "data": posts,
+        "data": paginated_posts,
         "pagination": pagination,
         "cache_hit": False,
     }
