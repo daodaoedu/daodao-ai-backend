@@ -4,15 +4,11 @@ from typing import List
 
 import click
 import psycopg2
-from api.schemas.entity_resource_response import (
-    BasePost,
-    InteractionStats,
-    UserBasicInfo,
-)
-from api.schemas.recommendation import FeedInfo
 from config import get_settings
 from logger import AppLogger
 from models import BasicInfo, EntityResource, Idea, Practice, Project, Resource, User
+from schemas.entity_resource_response import BasePost, InteractionStats, UserBasicInfo
+from schemas.recommendation import FeedInfo
 from sqlalchemy.orm import Session
 
 logger = AppLogger(__name__).get_logger()
@@ -236,7 +232,7 @@ def main(to):
     logger.info("-" * 80)
 
     # filtered_feed = [{"id": item.id, "type": item.type} for item in top]
-    from api.schemas.recommendation import FeedItem
+    from schemas.recommendation import FeedItem
 
     filtered_feed = [FeedItem(id=item.id, type=item.type) for item in top]
     logger.info(f"filtered_feed: {filtered_feed}")

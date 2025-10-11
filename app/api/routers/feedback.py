@@ -1,15 +1,15 @@
 import uuid
 
-from api.schemas.feedback import (
-    FeedbackDetailResponse,
-    GenerateFeedbackRequest,
-    GenerateFeedbackResponse,
-)
 from core.limiter import limiter  # 從獨立模組 import
 from dependencies import CacheDep, LLMDep, SessionDep, UserDep
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from logger import AppLogger
 from models import AIReviewFeedback, get_db
+from schemas.feedback import (
+    FeedbackDetailResponse,
+    GenerateFeedbackRequest,
+    GenerateFeedbackResponse,
+)
 from services.feedback import prepare_feedback_context
 from services.process_feedback import process_feedback
 from sqlalchemy import desc

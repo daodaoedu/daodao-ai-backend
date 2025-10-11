@@ -1,5 +1,5 @@
-from api.schemas.resource import TopCategoryOut, TopContributorOut, TopReviewOut
 from models import Category, Post, Resource, Review, User
+from schemas.resource import TopCategoryOut, TopContributorOut, TopReviewOut
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 

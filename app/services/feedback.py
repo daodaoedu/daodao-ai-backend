@@ -1,6 +1,6 @@
-from api.schemas.feedback import GenerateFeedbackRequest
 from fastapi import HTTPException
 from models import Outcome, Post, Review
+from schemas.feedback import GenerateFeedbackRequest
 from services.milestone import get_milestones_data
 from services.project import get_project_data
 from services.prompts.prompts import RAGPromptBuilder

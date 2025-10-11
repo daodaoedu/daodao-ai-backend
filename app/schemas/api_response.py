@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Optional
 
-from api.schemas.pageInfo import APIResponse, CursorPaginationInfo, ErrorInfo
+from schemas.pageInfo import APIResponse, CursorPaginationInfo, ErrorInfo
 
 
 def build_meta(extra: dict = None) -> dict:

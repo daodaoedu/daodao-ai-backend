@@ -1,8 +1,8 @@
 from api.auto_metrics import observe_api
-from api.schemas.health import HealthResponse, ServiceStatus
 from dependencies import ClickHouseDep, QdrantDep, SessionDep, SettingsDep
 from fastapi import APIRouter, Request
 from qdrant_client.http.exceptions import UnexpectedResponse
+from schemas.health import HealthResponse, ServiceStatus
 from sqlalchemy import text
 
 router = APIRouter(prefix="/v1")

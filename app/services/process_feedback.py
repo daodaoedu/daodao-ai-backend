@@ -1,8 +1,8 @@
 from datetime import datetime
 
-from api.schemas.feedback import GenerateFeedbackRequest
 from logger import AppLogger
 from models import AIReviewFeedback
+from schemas.feedback import GenerateFeedbackRequest
 from services.cache.client import CacheClient
 
 # from utils.llm_router import query_gemini
