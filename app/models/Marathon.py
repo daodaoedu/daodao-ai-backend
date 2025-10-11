@@ -36,7 +36,8 @@ class Marathon(Base):
     start_date = Column(Date, nullable=False, comment="馬拉松的報名開始日期")
     end_date = Column(Date, nullable=False, comment="活動結束日期")
     registration_status = Column(
-        ENUM("Open", "Closed", "Pending", "Full"), comment="活動的整體報名狀態"
+        ENUM("Open", "Closed", "Pending", "Full", name="marathon_registration_status"),
+        comment="活動的整體報名狀態",
     )
     people_number = Column(Integer, comment="報名人數上限")
     registration_start_date = Column(Date, comment="報名開放日期")

@@ -64,7 +64,11 @@ class Practice(Base):
 
     title = Column(String(100), nullable=False, comment="練習標題")
 
-    content_type = Column(Enum(PracticeContentType), nullable=False, comment="內容類型")
+    content_type = Column(
+        Enum(PracticeContentType, name="practice_content_type"),
+        nullable=False,
+        comment="內容類型",
+    )
     custom_content_type = Column(String(50), nullable=True, comment="自定義內容類型")
 
     total_amount = Column(Integer, nullable=False, comment="總目標數量")
@@ -73,7 +77,9 @@ class Practice(Base):
     start_date = Column(Date, nullable=True, comment="開始日期")
 
     daily_goal_type = Column(
-        Enum(DailyGoalType), nullable=False, comment="每日目標類型"
+        Enum(DailyGoalType, name="practice_daily_goal_type"),
+        nullable=False,
+        comment="每日目標類型",
     )
     daily_goal_time_minutes = Column(
         Integer, nullable=True, comment="每日目標時間（分鐘）"
@@ -86,7 +92,7 @@ class Practice(Base):
     practice_action = Column(Text, nullable=True, comment="練習行動描述")
 
     status = Column(
-        Enum(PracticeStatus),
+        Enum(PracticeStatus, name="practice_status"),
         default=PracticeStatus.ACTIVE,
         nullable=False,
         comment="狀態",

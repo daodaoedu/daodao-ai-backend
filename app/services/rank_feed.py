@@ -173,18 +173,20 @@ def get_posts(id_type_list: List[dict], session: Session) -> List[BasePost]:
 
     ret = []
     for item in id_type_list:
-        post_type = item["type"]
-        post_id = item["id"]
+        post_type = item.type
+        post_id = item.id
         model = type_map.get(post_type)
+        print(f"model {model}")
         if not model:
             continue
 
         post = session.get(model, post_id)
+
         if not post:
             continue
 
         user = session.get(User, post.user_id)
-        basic_info = session.query(BasicInfo).filter_by(user_id=post.user_id).first()
+        basic_info = session.query(BasicInfo).filter_by(id=user.basic_info_id).first()
         resources = (
             session.query(EntityResource, Resource)
             .join(Resource, Resource.id == EntityResource.resource_id)
@@ -201,6 +203,7 @@ def get_posts(id_type_list: List[dict], session: Session) -> List[BasePost]:
             BasePost(
                 id=post.id,
                 type=post_type,
+                title=post.title,
                 content=getattr(post, "content", getattr(post, "content_type", "")),
                 tags=get_tags_from_post(post),
                 user=UserBasicInfo(
@@ -232,14 +235,35 @@ def main(to):
         logger.info(item.json())  # Pydantic 提供 json() 方便輸出
     logger.info("-" * 80)
 
-    filtered_feed = [{"id": item.id, "type": item.type} for item in top]
+    # filtered_feed = [{"id": item.id, "type": item.type} for item in top]
+    from api.schemas.recommendation import FeedItem
+
+    filtered_feed = [FeedItem(id=item.id, type=item.type) for item in top]
     logger.info(f"filtered_feed: {filtered_feed}")
     logger.info("-" * 80)
 
-    from db.factory import make_database
-    from dependencies import get_db_session
+    from contextlib import contextmanager
 
-    posts = get_posts(filtered_feed, session=get_db_session(make_database()))
+    from db.factory import make_database
+
+    @contextmanager
+    def get_sync_session() -> Session:
+        """
+        提供 CLI / script 可用的同步 Session。
+        自動啟動與關閉資料庫連線。
+        """
+        db = make_database()
+        db.startup()
+        try:
+            with db.get_session() as session:
+                yield session
+        finally:
+            db.teardown()
+
+    with get_sync_session() as session:
+        posts = get_posts(filtered_feed, session=session)
+        print(posts)
+
     logger.info(f"posts: {posts}")
 
 

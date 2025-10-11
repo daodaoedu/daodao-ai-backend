@@ -1,4 +1,5 @@
 import uuid
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     ARRAY,
@@ -17,6 +18,9 @@ from sqlalchemy.orm import relationship
 from utils.code_enum import education_stage_t, gender_t
 
 from .base import Base  # 引用分離出的 Base
+
+if TYPE_CHECKING:
+    pass
 
 
 # User 表

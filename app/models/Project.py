@@ -46,7 +46,8 @@ class Project(Base):
     outcome_description = Column(Text)
     is_public = Column(Boolean, default=False)
     status = Column(
-        Enum("Ongoing", "Completed", "Not Started", "Canceled"), default="Not Started"
+        Enum("Ongoing", "Completed", "Not Started", "Canceled", name="project_status"),
+        default="Not Started",
     )
     start_date = Column(Date)
     end_date = Column(Date)

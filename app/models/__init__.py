@@ -27,6 +27,7 @@ from .ProjectMarathon import ProjectMarathon
 from .Resource import Resource
 from .Review import Review
 from .Store import Store
+from .Tag import Tag
 from .Task import Task
 from .User import User  # 將 Store 類別定義放在 User 類別之前
 from .UserJoinGroup import UserJoinGroup
@@ -71,6 +72,7 @@ __all__ = [
     "Idea",
     "EntityResource",
     "EntityTag",
+    "Tag",
 ]
 
 

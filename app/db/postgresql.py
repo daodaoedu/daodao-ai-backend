@@ -4,15 +4,12 @@ from typing import Generator, Optional
 
 from config import PostgreSQLSettings
 from db.interface_db import BaseDatabase
+from models.base import Base
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Engine
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session, sessionmaker
 
 logger = logging.getLogger(__name__)
-
-
-Base = declarative_base()
 
 
 class PostgreSQLDatabase(BaseDatabase):

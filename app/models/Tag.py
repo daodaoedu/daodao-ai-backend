@@ -26,7 +26,7 @@ class Tag(Base):
     )
 
     # 💡 關聯到 entity_tags（多對多多型關聯）
-    entities: Mapped[List[EntityTag]] = relationship(
+    entity_tags: Mapped[List[EntityTag]] = relationship(
         "EntityTag", back_populates="tag", cascade="all, delete-orphan"
     )
 

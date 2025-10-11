@@ -10,7 +10,7 @@ from pydantic import BaseModel
 class UserBasicInfo(BaseModel):
     id: int
     name: str
-    photo_url: Optional[str]
+    photo_url: Optional[str] = None
     tag_list: Optional[List[str]] = []
     share_list: Optional[List[str]] = []
 
@@ -29,7 +29,7 @@ class InteractionStats(BaseModel):
 # 🧱 基礎貼文結構
 # -------------------------------
 class BasePost(BaseModel):
-    id: str
+    id: int
     type: str  # idea / practice / project
     title: Optional[str]
     content: Optional[str]

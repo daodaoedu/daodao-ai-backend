@@ -1,4 +1,5 @@
 import enum
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -12,9 +13,13 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import declarative_base, relationship
+from sqlalchemy.orm import relationship
 
-Base = declarative_base()
+from .base import Base
+
+if TYPE_CHECKING:
+    pass
+
 
 # =========================================================
 # Enum 定義
@@ -53,7 +58,9 @@ class EntityResource(Base):
 
     # 多型關聯欄位
     entity_type = Column(
-        Enum(EntityType), nullable=False, comment="實體類型：practice、project、idea"
+        Enum(EntityType, name="entity_resource_type"),
+        nullable=False,
+        comment="實體類型：practice、project、idea",
     )
     entity_id = Column(Integer, nullable=False, comment="實體ID，支援UUID或數字ID格式")
 

@@ -36,7 +36,7 @@ class ProjectMarathon(Base):
         TIMESTAMP, default="now()", comment="專案報名此馬拉松的日期"
     )
     status = Column(
-        ENUM("Pending", "Approved", "Rejected"),
+        ENUM("Pending", "Approved", "Rejected", name="project_marathon_status"),
         nullable=False,
         comment="專案報名的審核狀態",
     )

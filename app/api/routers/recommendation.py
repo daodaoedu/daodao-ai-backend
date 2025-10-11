@@ -5,7 +5,7 @@ from core.limiter import limiter
 from dependencies import SessionDep, UserDep
 from fastapi import APIRouter, HTTPException, Query, Request
 from logger import AppLogger
-from services.rank_feed import get_feed
+from services.rank_feed import get_feed, get_posts
 
 logger = AppLogger(__name__).get_logger()
 
@@ -43,15 +43,15 @@ def recommendation_feed(
 
         logger.info(f"recommendation_feed result: {len(filtered_feed)}")
 
-        # posts = get_posts(filtered_feed, session=session)
+        posts = get_posts(filtered_feed, session=session)
 
     except Exception as e:
         logger.info(f"recommendation_feed error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-    pagination = CursorPaginationInfo(count=len(filtered_feed))
+    pagination = CursorPaginationInfo(count=len(posts))
     return {
-        "data": filtered_feed,
+        "data": posts,
         "pagination": pagination,
         "cache_hit": False,
     }

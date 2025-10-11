@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING
+
 from sqlalchemy import (
     TIMESTAMP,
     CheckConstraint,
@@ -11,6 +13,9 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from .base import Base
+
+if TYPE_CHECKING:
+    pass
 
 
 class Post(Base):
@@ -34,8 +39,8 @@ class Post(Base):
 
     # Relationships
     # 在 Post 模型中延遲導入
-    project = relationship("Project", back_populates="posts", lazy="joined")
-    user = relationship("User", back_populates="posts", lazy="joined")
+    project = relationship("Project", back_populates="posts")
+    user = relationship("User", back_populates="posts")
 
     __table_args__ = (
         CheckConstraint(
