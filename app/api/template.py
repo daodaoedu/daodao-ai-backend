@@ -28,7 +28,7 @@ def api_response_decorator(func: Callable[..., Coroutine[Any, Any, Any]]):
             else:
                 result = func(*args, **kwargs)
             # logger.info(f"{func.__name__} result: {result}")
-            processing_time = int((time.time() - start_time) * 1000)
+            processing_time = int((time.time() - start_time) * 1000)  # ms
 
             # case 1: 已經是 APIResponse
             if isinstance(result, APIResponse):

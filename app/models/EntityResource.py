@@ -1,13 +1,13 @@
-import enum
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from sqlalchemy import (
+    CheckConstraint,
     Column,
     DateTime,
-    Enum,
     ForeignKey,
     Integer,
+    String,
     Text,
     UniqueConstraint,
     func,
@@ -19,17 +19,6 @@ from .base import Base
 
 if TYPE_CHECKING:
     pass
-
-
-# =========================================================
-# Enum 定義
-# =========================================================
-
-
-class EntityType(str, enum.Enum):
-    PRACTICE = "practice"
-    PROJECT = "project"
-    IDEA = "idea"
 
 
 # =========================================================
@@ -58,10 +47,18 @@ class EntityResource(Base):
 
     # 多型關聯欄位
     entity_type = Column(
-        Enum(EntityType, name="entity_resource_type"),
+        String(20),
         nullable=False,
+        default="idea",
         comment="實體類型：practice、project、idea",
     )
+    __table_args__ = (
+        CheckConstraint(
+            "entity_type IN ('practice','idea','project')",
+            name="ck_entity_resource_type",
+        ),
+    )
+
     entity_id = Column(Integer, nullable=False, comment="實體ID，支援UUID或數字ID格式")
 
     # 關聯資訊

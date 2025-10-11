@@ -36,7 +36,7 @@ def recommendation_feed(
     logger.info(f"current_user:  {current_user}")
 
     try:
-        top_feed = get_feed(limit=limit)
+        top_feed = get_feed(limit=limit)  # , types=["idea", "practice"]
 
         # 只取 id 與 type
         filtered_feed = [FeedItem(id=item.id, type=item.type) for item in top_feed]

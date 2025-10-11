@@ -1,4 +1,3 @@
-import enum
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -8,7 +7,6 @@ from sqlalchemy import (
     Column,
     Date,
     DateTime,
-    Enum,
     ForeignKey,
     Integer,
     String,
@@ -19,28 +17,6 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from .base import Base
-
-
-class PracticeContentType(str, enum.Enum):
-    BOOK = "book"
-    VIDEO = "video"
-    ARTICLES = "articles"
-    PODCAST = "podcast"
-    COURSE = "course"
-    CUSTOM = "custom"
-
-
-class PracticeStatus(str, enum.Enum):
-    ACTIVE = "active"
-    PAUSED = "paused"
-    COMPLETED = "completed"
-    ARCHIVED = "archived"
-
-
-class DailyGoalType(str, enum.Enum):
-    TIME = "time"
-    COMPLETION = "completion"
-
 
 # =========================================================
 # Practices 模型
@@ -65,10 +41,12 @@ class Practice(Base):
     title = Column(String(100), nullable=False, comment="練習標題")
 
     content_type = Column(
-        Enum(PracticeContentType, name="practice_content_type"),
+        String(20),
         nullable=False,
+        default="book",
         comment="內容類型",
     )
+
     custom_content_type = Column(String(50), nullable=True, comment="自定義內容類型")
 
     total_amount = Column(Integer, nullable=False, comment="總目標數量")
@@ -77,10 +55,12 @@ class Practice(Base):
     start_date = Column(Date, nullable=True, comment="開始日期")
 
     daily_goal_type = Column(
-        Enum(DailyGoalType, name="practice_daily_goal_type"),
+        String(20),
         nullable=False,
+        default="time",
         comment="每日目標類型",
     )
+
     daily_goal_time_minutes = Column(
         Integer, nullable=True, comment="每日目標時間（分鐘）"
     )
@@ -91,12 +71,7 @@ class Practice(Base):
 
     practice_action = Column(Text, nullable=True, comment="練習行動描述")
 
-    status = Column(
-        Enum(PracticeStatus, name="practice_status"),
-        default=PracticeStatus.ACTIVE,
-        nullable=False,
-        comment="狀態",
-    )
+    status = Column(String(20), nullable=False, default="activate", comment="狀態")
 
     has_resources = Column(Boolean, default=False, comment="是否有關聯資源")
 
@@ -122,5 +97,17 @@ class Practice(Base):
         ),
         CheckConstraint(
             "daily_goal_amount BETWEEN 1 AND 100", name="check_goal_amount_range"
+        ),
+        CheckConstraint(
+            "status IN ('practice','idea','project')",
+            name="ck_status",
+        ),
+        CheckConstraint(
+            "content_type IN ('book','video','articles','podcast','course','custom')",
+            name="ck_content_type",
+        ),
+        CheckConstraint(
+            "daily_goal_type IN ('active','paused','completed', 'archived')",
+            name="ck_daily_goal_type",
         ),
     )

@@ -1,7 +1,16 @@
-import enum
 from uuid import uuid4
 
-from sqlalchemy import Boolean, Column, DateTime, Enum, ForeignKey, Integer, Text, func
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    func,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -12,10 +21,10 @@ from .base import Base
 # =========================================================
 
 
-class IdeaStatus(str, enum.Enum):
-    ACTIVE = "active"
-    DRAFT = "draft"
-    ARCHIVED = "archived"
+# class IdeaStatus(str, enum.Enum):
+#     ACTIVE = "active"
+#     DRAFT = "draft"
+#     ARCHIVED = "archived"
 
 
 # =========================================================
@@ -39,11 +48,19 @@ class Idea(Base):
     )
 
     content = Column(Text, nullable=False, comment="創意想法內容")
-    status = Column(
-        Enum(IdeaStatus, name="idea_status"),
-        default=IdeaStatus.ACTIVE,
-        nullable=False,
-        comment="狀態：active、draft、archived",
+    # status = Column(
+    #     Enum(IdeaStatus, name="idea_status"),
+    #     default=IdeaStatus.ACTIVE,
+    #     nullable=False,
+    #     comment="狀態：active、draft、archived",
+    # )
+    # 改成 String + CheckConstraint
+    status = Column(String(20), nullable=False, default="active")
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('active','draft','archived')", name="ck_idea_status"
+        ),
     )
 
     has_resources = Column(Boolean, default=False, comment="是否有關聯資源")

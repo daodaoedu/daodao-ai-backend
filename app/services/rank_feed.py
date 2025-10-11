@@ -1,6 +1,6 @@
 import math
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Optional
 
 import click
 import psycopg2
@@ -9,50 +9,64 @@ from logger import AppLogger
 from models import BasicInfo, EntityResource, Idea, Practice, Project, Resource, User
 from schemas.entity_resource_response import BasePost, InteractionStats, UserBasicInfo
 from schemas.recommendation import FeedInfo
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 logger = AppLogger(__name__).get_logger()
 
 
-def get_feed(limit=100) -> List[FeedInfo]:
+def get_feed(limit: int = 100, types: Optional[List[str]] = None) -> List[FeedInfo]:
     """
     從資料庫抓取 idea / practice / project feed，計算 score 並回傳前 limit 筆結果。
     """
-    print(f"limit: {limit}")
+
+    if types is None:
+        types = ["idea", "practice", "project"]
+
+    logger.info(f"limit: {limit}, types: {types}")
+
     # db_config = db_config or {}
     conn = psycopg2.connect(get_settings().postgresql.database_url)
     cur = conn.cursor()
 
-    # 拉所有資料
-    cur.execute(
-        """
-    SELECT id, type, title, created_at, updated_at,
-           COALESCE(resource_count,0) as resource_count,
-           COALESCE(streak,0) as streak,
-           COALESCE(progress_ratio,0) as progress_ratio,
-           base_score
-    FROM (
-        SELECT i.id, 'idea' as type, i.content as title, i.created_at, i.updated_at,
-               COUNT(er.entity_id) as resource_count, 0 as streak, 0 as progress_ratio, 1 as base_score
-        FROM ideas i
-        LEFT JOIN entity_resources er ON er.entity_id=i.id AND er.entity_type='idea'
-        GROUP BY i.id
-        UNION ALL
-        SELECT p.id, 'practice', p.title, p.created_at, p.updated_at,
-               COUNT(er.entity_id), COALESCE(p.streak,0), COALESCE(p.current_progress/NULLIF(p.total_amount,0),0), 2
-        FROM practices p
-        LEFT JOIN entity_resources er ON er.entity_id=p.id AND er.entity_type='practice'
-        GROUP BY p.id
-        UNION ALL
-        SELECT pr.id, 'project', pr.title, pr.created_at, pr.updated_at,
-               COUNT(er.entity_id), 0, 0, 3
-        FROM project pr
-        LEFT JOIN entity_resources er ON er.entity_id=pr.id AND er.entity_type='project'
-        GROUP BY pr.id
-    ) combined
-    """
-    )
+    # SQL 片段動態生成
+    sql_fragments = []
+    if "idea" in types:
+        sql_fragments.append(
+            """
+            SELECT i.id, 'idea' as type, i.content as title, i.created_at, i.updated_at,
+                   COUNT(er.entity_id) as resource_count, 0 as streak, 0 as progress_ratio, 1 as base_score
+            FROM ideas i
+            LEFT JOIN entity_resources er ON er.entity_id=i.id AND er.entity_type='idea'
+            GROUP BY i.id
+            """
+        )
+    if "practice" in types:
+        sql_fragments.append(
+            """
+            SELECT p.id, 'practice', p.title, p.created_at, p.updated_at,
+                   COUNT(er.entity_id), COALESCE(p.streak,0), COALESCE(p.current_progress/NULLIF(p.total_amount,0),0), 2
+            FROM practices p
+            LEFT JOIN entity_resources er ON er.entity_id=p.id AND er.entity_type='practice'
+            GROUP BY p.id
+            """
+        )
+    if "project" in types:
+        sql_fragments.append(
+            """
+            SELECT pr.id, 'project', pr.title, pr.created_at, pr.updated_at,
+                   COUNT(er.entity_id), 0, 0, 3
+            FROM project pr
+            LEFT JOIN entity_resources er ON er.entity_id=pr.id AND er.entity_type='project'
+            GROUP BY pr.id
+            """
+        )
 
+    # 將 fragment 用 UNION ALL 合併
+    combined_sql = " UNION ALL ".join(sql_fragments)
+    final_sql = f"SELECT * FROM ({combined_sql}) combined"
+
+    cur.execute(final_sql)
     rows = cur.fetchall()
     result = []
 
@@ -181,17 +195,21 @@ def get_posts(id_type_list: List[dict], session: Session) -> List[BasePost]:
         if not post:
             continue
 
+        logger.info(f"post {post}, { post.id} post_type = {post_type}")
+
         user = session.get(User, post.user_id)
         basic_info = session.query(BasicInfo).filter_by(id=user.basic_info_id).first()
         resources = (
             session.query(EntityResource, Resource)
             .join(Resource, Resource.id == EntityResource.resource_id)
             .filter(
-                EntityResource.entity_id == post.id,
-                EntityResource.entity_type == post_type,
+                EntityResource.entity_id == post_id,
+                func.lower(EntityResource.entity_type) == post_type.lower(),
             )
+            .distinct()
             .all()
         )
+        logger.info(f"resources {resources}")
         resource_pairs = {r.Resource.name: r.Resource.url for r in resources}
         share_list = basic_info.share_list.split(",") if basic_info.share_list else []
 
@@ -199,7 +217,9 @@ def get_posts(id_type_list: List[dict], session: Session) -> List[BasePost]:
             BasePost(
                 id=post.id,
                 type=post_type,
-                title=post.title,
+                title=(
+                    (post.content[:120] + "...") if post_type == "idea" else post.title
+                ),
                 content=getattr(post, "content", getattr(post, "content_type", "")),
                 tags=get_tags_from_post(post),
                 user=UserBasicInfo(
@@ -226,7 +246,7 @@ def get_posts(id_type_list: List[dict], session: Session) -> List[BasePost]:
 @click.command()
 @click.option("-t", "--to", "to", type=int, default=100, help="limit")
 def main(to):
-    top = get_feed(limit=to)
+    top = get_feed(limit=to, types=["idea", "practice", "project"])
     for item in top:
         logger.info(item.json())  # Pydantic 提供 json() 方便輸出
     logger.info("-" * 80)
@@ -258,9 +278,9 @@ def main(to):
 
     with get_sync_session() as session:
         posts = get_posts(filtered_feed, session=session)
-        print(posts)
-
-    logger.info(f"posts: {posts}")
+        # logger.info(f"posts: {posts}")
+        for post in posts:
+            logger.info(f"BasePost :{post.json()}")
 
 
 # 範例使用
