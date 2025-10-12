@@ -25,69 +25,7 @@ services:
       - .env.dev
     volumes:
       - ./app:/app
-  # --- API Services ---
-  # recommendation-api:
-  #   build: ./services/recommendation
-  #   container_name: recommendation-api
-  #   depends_on:
-  #     - pg-dev
-  #     - redis-dev
-  #     - kafka-dev
-  #   networks:
-  #     - dev-daodao-network
-  #   ports:
-  #     - "8001:8000"
 
-  # vector-search-api:
-  #   build: ./services/vector_search
-  #   container_name: vector-search-api
-  #   depends_on:
-  #     - qdrant-dev
-  #     - redis-dev
-  #     - pg-dev
-  #   networks:
-  #     - dev-daodao-network
-  #   ports:
-  #     - "8002:8000"
-
-  # analytics-api:
-  #   build: ./services/analytics
-  #   container_name: analytics-api
-  #   depends_on:
-  #     - clickhouse-dev
-  #     - pg-dev
-  #   networks:
-  #     - dev-daodao-network
-  #   ports:
-  #     - "8003:8000"
-
-  # chatbot-service:
-  #   build: ./services/chatbot
-  #   container_name: chatbot-service
-  #   depends_on:
-  #     - pg-dev
-  #     - redis-dev
-  #   networks:
-  #     - dev-daodao-network
-  #   ports:
-  #     - "8004:8000"
-
-  # # Celery Worker
-  # worker-dev:
-  #   build: ./app
-  #   container_name: daodao-ai-worker-dev
-  #   environment:
-  #     DATABASE_URL: ${DATABASE_URL}
-  #     REDIS_URL: ${REDIS_URL}
-  #     KAFKA_BROKER: ${KAFKA_BROKER}
-  #   depends_on:
-  #     - redis-dev
-  #     - kafka-dev
-  #   networks:
-  #     - dev-daodao-network
-  #   command: celery -A app.worker worker --loglevel=info
-
-  # # Redis for cache & Celery broker
   redis-dev:
     image: redis:alpine
     container_name: daodao-ai-redis-dev
@@ -101,23 +39,6 @@ services:
     profiles:
       - dev
 
-  # # Kafka (KRaft mode, 不需要 Zookeeper)
-  # kafka-dev:
-  #   image: bitnami/kafka:latest
-  #   container_name: daodao-ai-kafka-dev
-  #   environment:
-  #     KAFKA_CFG_PROCESS_ROLES: broker,controller
-  #     KAFKA_CFG_NODE_ID: 1
-  #     KAFKA_CFG_LISTENERS: PLAINTEXT://:9092
-  #     KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://${KAFKA_BROKER_DEV}:9092
-  #     KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: 1@kafka-dev:9093
-  #     KAFKA_CFG_NUM_PARTITIONS: 3
-  #     ALLOW_PLAINTEXT_LISTENER: "yes"
-  #   ports:
-  #     - "9092:9092"
-  #     - "9093:9093" # controller port
-  #   networks:
-  #     - dev-daodao-network
   # ollama-dev:
   #   image: ollama/ollama
   #   container_name: daodao-ai-backend-ollama

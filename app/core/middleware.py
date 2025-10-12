@@ -1,5 +1,6 @@
 import time
 
+from config import get_settings
 from core.limiter import limiter
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,20 +11,18 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 
 def setup_middlewares(app: FastAPI):
+    settings = get_settings()
     # === Rate Limiter ===
 
     app.state.limiter = limiter
     app.add_exception_handler(429, _rate_limit_exceeded_handler)
 
     # === CORS ===
-    origins = [
-        "http://localhost.tiangolo.com",
-        "https://localhost.tiangolo.com",
-        "http://localhost",
-        "http://localhost:5173",
-        "http://frontend",  # 使用服務名稱作為來源
-        "http://localhost:8002",
-    ]
+    if settings.environment == "development":
+        origins = ["https://server.daoedu.tw", "http://localhost:8002"]
+    else:
+        origins = ["https://dao-server.daoedu.tw"]
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins,  # 先允許所有, 可改為指定 domain
@@ -35,7 +34,12 @@ def setup_middlewares(app: FastAPI):
     # === TrustedHost ===
     app.add_middleware(
         TrustedHostMiddleware,
-        allowed_hosts=["localhost", "127.0.0.1"],
+        allowed_hosts=[
+            "localhost",
+            "127.0.0.1",
+            "dao-server.daoedu.tw",
+            "server.daoedu.tw",
+        ],
     )
 
     # === Session ===
@@ -53,6 +57,45 @@ def setup_middlewares(app: FastAPI):
             return response
 
     app.add_middleware(LoggingMiddleware)
+
+    from fastapi import HTTPException
+
+    class ApiKeyMiddleware(BaseHTTPMiddleware):
+        def __init__(self, app, api_key: str, environment: str):
+            super().__init__(app)
+            self.api_key = api_key
+            self.environment = environment
+            self.exempt_paths = (
+                "/api/v1/ping",
+                "/api/v1/health",
+                "/metrics",
+                "/docs",
+                "/redoc",
+                "/openapi.json",
+            )
+
+        async def dispatch(self, request: Request, call_next):
+            if self.environment == "development":
+                return await call_next(request)
+
+            # 不驗證的路徑
+            for path in self.exempt_paths:
+                if request.url.path.startswith(path):
+                    return await call_next(request)
+
+            api_key = request.headers.get("x-api-key")
+            expected_key = settings.api_secret_key
+            if not api_key or api_key != expected_key:
+                raise HTTPException(
+                    status_code=403, detail="Forbidden: Invalid API Key"
+                )
+            return await call_next(request)
+
+    app.add_middleware(
+        ApiKeyMiddleware,
+        api_key=settings.api_secret_key,
+        environment=settings.environment,
+    )
 
     # === Prometheus Instrumentator ===
     _ = (

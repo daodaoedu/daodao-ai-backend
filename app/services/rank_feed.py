@@ -129,6 +129,19 @@ def get_feed(
     return result
 
 
+def get_start_end_date_from_post(post):
+
+    if hasattr(post, "start_date"):
+        start_date = post.start_date
+    else:
+        start_date = post.created_at
+    if hasattr(post, "end_date"):
+        end_date = post.end_date
+    else:
+        end_date = post.updated_at
+    return start_date, end_date
+
+
 def get_tags_from_post(post):
     """
     根據貼文類型（Idea / Practice / Project）取得標籤列表。
@@ -220,6 +233,8 @@ def get_posts(id_type_list: List[dict], session: Session) -> List[BasePost]:
         resource_pairs = {r.Resource.name: r.Resource.url for r in resources}
         share_list = basic_info.share_list.split(",") if basic_info.share_list else []
 
+        start_date, end_date = get_start_end_date_from_post(post)
+
         ret.append(
             BasePost(
                 id=post.id,
@@ -242,8 +257,8 @@ def get_posts(id_type_list: List[dict], session: Session) -> List[BasePost]:
                     share_count=0,
                     view_count=0,
                 ),
-                created_at=post.created_at,
-                updated_at=post.updated_at,
+                created_at=start_date,
+                updated_at=end_date,
                 resources=resource_pairs,
             )
         )

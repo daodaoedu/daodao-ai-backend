@@ -114,6 +114,9 @@ class Settings(BaseConfigSettings):
     qdrant_url: str = "http://qdrant-dev:6333"
     collection_name: str = "daodao_collection"
 
+    #
+    api_secret_key: str = "xxxxxxxxxxxxxxxx"
+
 
 def get_settings() -> Settings:
     return Settings()
