@@ -35,8 +35,8 @@ def api_response_decorator(func: Callable[..., Coroutine[Any, Any, Any]]):
                 return result.dict()
 
             # case 2: 已經是完整的 response 格式
-            if isinstance(result, dict) and "success" in result:
-                return result
+            # if isinstance(result, dict) and "success" in result:
+            #     return result
 
             # # case 3: 一般 dict（自動 merge 成完整結構）
             # if isinstance(result, dict):
@@ -50,7 +50,12 @@ def api_response_decorator(func: Callable[..., Coroutine[Any, Any, Any]]):
             #     return merged_data
 
             # case 4: 其他型別（list, str, obj...）
-            return build_success_response(data=result, processing_time=processing_time)
+            return build_success_response(
+                data=result["data"],
+                pagination=result["pagination"],
+                cache_hit=result["cache_hit"],
+                processing_time=processing_time,
+            )
 
         except HTTPException as e:
             return build_error_response(

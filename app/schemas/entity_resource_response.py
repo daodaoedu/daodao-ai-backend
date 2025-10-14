@@ -29,7 +29,7 @@ class InteractionStats(BaseModel):
 # 🧱 基礎貼文結構
 # -------------------------------
 class BasePost(BaseModel):
-    id: int
+    id: str
     type: str  # idea / practice / project
     title: Optional[str]
     content: Optional[str]

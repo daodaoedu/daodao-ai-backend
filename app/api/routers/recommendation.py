@@ -2,7 +2,7 @@ from typing import Optional
 
 from api.template import api_response_decorator
 from core.limiter import limiter
-from dependencies import SessionDep, UserDep
+from dependencies import SessionDep
 from fastapi import APIRouter, HTTPException, Query, Request
 from logger import AppLogger
 from schemas.pageInfo import APIResponse, CursorPaginationInfo
@@ -15,31 +15,30 @@ logger = AppLogger(__name__).get_logger()
 router = APIRouter(prefix="/v1/recommendation", tags=["recommendation"])
 
 
-@router.post("/rank_feed", response_model=APIResponse)
+@router.get("/rank_feed", response_model=APIResponse)
 @limiter.limit("5/minute")
 @api_response_decorator
 def recommendation_feed(
     request: Request,
-    current_user: UserDep,
     session: SessionDep,  # ✅ FastAPI 會自動從 get_db_session() 拿 session
     # limit: int = Query(100, description="最多取得幾筆 feed"),
     after_id: Optional[int] = Query(
         None, description="上一次最後一筆的 id，作為 cursor"
     ),
     page_size: int = Query(20, description="每頁抓幾筆"),
+    # types: Optional[str] = Query(
+    #     None, description="要抓哪些類型的 feed"
+    # )
 ):
     """
     推薦 feed API
     - JWT 驗證透過 get_current_user 自動處理
-    - current_user 內含 token payload
     example:
     curl -X POST "http://localhost:8002/api/recommendation/rank_feed?limit=10" \
     -H "accept: application/json" \
     -H "Authorization: Bearer <YOUR_TOKEN_ID>"
 
     """
-
-    logger.info(f"current_user:  {current_user}")
 
     try:
         top_feed = get_feed(after_id=after_id, page_size=page_size)
