@@ -130,15 +130,20 @@ def get_feed(
 
 
 def get_start_end_date_from_post(post):
+    # start_date 優先 start_date -> created_at -> now
+    start_date = (
+        getattr(post, "start_date", None)
+        or getattr(post, "created_at", None)
+        or datetime.utcnow()
+    )
 
-    if hasattr(post, "start_date"):
-        start_date = post.start_date
-    else:
-        start_date = post.created_at
-    if hasattr(post, "end_date"):
-        end_date = post.end_date
-    else:
-        end_date = post.updated_at
+    # end_date 優先 end_date -> updated_at -> start_date
+    end_date = (
+        getattr(post, "end_date", None)
+        or getattr(post, "updated_at", None)
+        or start_date
+    )
+
     return start_date, end_date
 
 
@@ -215,7 +220,7 @@ def get_posts(id_type_list: List[dict], session: Session) -> List[BasePost]:
         if not post:
             continue
 
-        logger.info(f"post {post}, { post.id} post_type = {post_type}")
+        logger.info(f"post {post}, { post.external_id} post_type = {post_type}")
 
         user = session.get(User, post.user_id)
         basic_info = session.query(BasicInfo).filter_by(id=user.basic_info_id).first()
@@ -237,7 +242,7 @@ def get_posts(id_type_list: List[dict], session: Session) -> List[BasePost]:
 
         ret.append(
             BasePost(
-                id=post.id,
+                id=str(post.external_id),
                 type=post_type,
                 title=(
                     (post.content[:120] + "...") if post_type == "idea" else post.title
