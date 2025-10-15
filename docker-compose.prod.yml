@@ -7,8 +7,8 @@ services:
     build: ./app
     container_name: daodao-ai-backend-prod
     image: daodao-ai-backend:latest
-    ports:
-      - "8001:8000"
+    # ports:
+    #   - "8001:8000"
     networks:
       - prod-daodao-network
     profiles:
@@ -32,8 +32,8 @@ services:
     image: redis:alpine
     container_name: daodao-ai-redis-prod
     restart: unless-stopped
-    ports:
-      - "6380:6379"
+    # ports:
+    #   - "6380:6379"
     volumes:
       - ./cache_data/prod_data:/data
     networks:
