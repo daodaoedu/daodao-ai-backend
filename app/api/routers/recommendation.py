@@ -16,7 +16,7 @@ router = APIRouter(prefix="/v1/recommendation", tags=["recommendation"])
 
 
 @router.get("/rank_feed", response_model=APIResponse)
-@limiter.limit("5/minute")
+@limiter.limit("60/minute")
 @api_response_decorator
 def recommendation_feed(
     request: Request,
@@ -26,9 +26,7 @@ def recommendation_feed(
         None, description="上一次最後一筆的 id，作為 cursor"
     ),
     page_size: int = Query(20, description="每頁抓幾筆"),
-    # types: Optional[str] = Query(
-    #     None, description="要抓哪些類型的 feed"
-    # )
+    type: Optional[str] = Query(None, description="要抓哪些類型的 feed"),
 ):
     """
     推薦 feed API
@@ -41,7 +39,15 @@ def recommendation_feed(
     """
 
     try:
-        top_feed = get_feed(after_id=after_id, page_size=page_size)
+        if type:
+            if type not in ["idea", "practice", "project"]:
+                raise HTTPException(
+                    status_code=400,
+                    detail="type must be one of ['idea', 'practice', 'project']",
+                )
+            top_feed = get_feed(after_id=after_id, page_size=page_size, types=[type])
+        else:
+            top_feed = get_feed(after_id=after_id, page_size=page_size)
         # 只取 id 與 type
         filtered_feed = [FeedItem(id=item.id, type=item.type) for item in top_feed]
 

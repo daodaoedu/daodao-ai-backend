@@ -96,6 +96,8 @@ def get_feed(
 
         # 使用 UTC aware datetime
         now = datetime.now(timezone.utc)
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=timezone.utc)
         days = (now - created_at).days
 
         # 計算新鮮度分數
