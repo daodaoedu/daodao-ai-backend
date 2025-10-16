@@ -37,8 +37,8 @@ def setup_middlewares(app: FastAPI):
         allowed_hosts=[
             "localhost",
             "127.0.0.1",
-            "server.ai.daoedu.tw",
-            "dao-server.ai.daoedu.tw",
+            "server-ai.daoedu.tw",
+            "dao-server-ai.daoedu.tw",
         ],
     )
 
