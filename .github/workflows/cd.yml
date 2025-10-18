@@ -31,7 +31,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - run: echo "Hello World"
+      - run: echo "Hello World!!"
 
   # ===== 持續整合 (CI) 階段 =====
   # 目的：在部署前執行程式碼品質檢查
