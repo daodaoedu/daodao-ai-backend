@@ -3,7 +3,7 @@ from qdrant_client.http.exceptions import UnexpectedResponse
 from sqlalchemy import text
 
 from src.auto_metrics import observe_api
-from src.dependencies import ClickHouseDep, QdrantDep, SessionDep, SettingsDep
+from src.dependencies import QdrantDep, SessionDep, SettingsDep
 from src.schemas.health import HealthResponse, ServiceStatus
 
 router = APIRouter(prefix="/v1")
@@ -23,7 +23,7 @@ async def health_check(
     db: SessionDep,
     settings: SettingsDep,
     qdrant_client: QdrantDep,
-    clickhouse_client: ClickHouseDep,
+    # clickhouse_client: ClickHouseDep,
 ) -> HealthResponse:
     """Comprehensive health check endpoint for monitoring and load balancer probes.
 
@@ -68,22 +68,22 @@ async def health_check(
         except UnexpectedResponse as e:
             return ServiceStatus(status="unhealthy", message=str(e))
 
-    def _check_clickhouse():
-        try:
-            result = clickhouse_client.client.execute("SELECT 1")
-            if result and result[0][0] == 1:
-                return ServiceStatus(status="healthy", message="ClickHouse reachable")
-            else:
-                return ServiceStatus(
-                    status="unhealthy", message="Unexpected response from ClickHouse"
-                )
-        except Exception as e:
-            return ServiceStatus(status="unhealthy", message=str(e))
+    # def _check_clickhouse():
+    #     try:
+    #         result = clickhouse_client.client.execute("SELECT 1")
+    #         if result and result[0][0] == 1:
+    #             return ServiceStatus(status="healthy", message="ClickHouse reachable")
+    #         else:
+    #             return ServiceStatus(
+    #                 status="unhealthy", message="Unexpected response from ClickHouse"
+    #             )
+    #     except Exception as e:
+    #         return ServiceStatus(status="unhealthy", message=str(e))
 
     # Run synchronous checks
     _check_service("database", _check_database)
     _check_service("qdrant", _check_qdrant)
-    _check_service("clickhouse", _check_clickhouse)
+    # _check_service("clickhouse", _check_clickhouse)
 
     return HealthResponse(
         status=overall_status,
