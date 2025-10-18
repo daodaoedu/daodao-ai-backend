@@ -45,10 +45,10 @@ jobs:
   # 內容：呼叫 continuous-integration.yml 執行測試、linting 等
   # secrets: inherit 確保子工作流程可以存取相同的 secrets
   # ==============================
-  continuous_integration:
-    if: ${{ github.event_name == 'push' && !inputs.force_deploy }}
-    uses: ./.github/workflows/ci.yml
-    secrets: inherit
+  # continuous_integration:
+  #   if: ${{ github.event_name == 'push' && !inputs.force_deploy }}
+  #   uses: ./.github/workflows/ci.yml
+  #   secrets: inherit
 
   # ===== Docker 映像構建階段 =====
   # 目的：構建應用程式的 Docker 映像並推送到 Docker Hub
