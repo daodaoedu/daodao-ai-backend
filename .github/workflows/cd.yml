@@ -25,7 +25,7 @@ on:
   # test
   pull_request:
     branches:
-      - main
+      - dev
   # 手動觸發部署
   workflow_dispatch:
 
