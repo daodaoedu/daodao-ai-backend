@@ -55,158 +55,158 @@ jobs:
   #   - image-tag：環境標籤（prod/dev）供後續步驟使用
   #   - image-digest：映像摘要用於驗證
   # ===============================
-  build:
-    runs-on: ubuntu-latest
-    needs: [continuous_integration]
-    # 當 CI 成功、手動強制部署、或沒有執行 CI 時執行
-    if: ${{ always() && (needs.continuous_integration.result == 'success' || inputs.force_deploy || needs.continuous_integration.result == 'skipped') }}
-    outputs:
-      image-tag: ${{ steps.meta.outputs.image-tag }}
-      image-digest: ${{ steps.build.outputs.digest }}
-    steps:
-      - name: Checkout code (shallow)
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
+  # build:
+  #   runs-on: ubuntu-latest
+  #   needs: [continuous_integration]
+  #   # 當 CI 成功、手動強制部署、或沒有執行 CI 時執行
+  #   if: ${{ always() && (needs.continuous_integration.result == 'success' || inputs.force_deploy || needs.continuous_integration.result == 'skipped') }}
+  #   outputs:
+  #     image-tag: ${{ steps.meta.outputs.image-tag }}
+  #     image-digest: ${{ steps.build.outputs.digest }}
+  #   steps:
+  #     - name: Checkout code (shallow)
+  #       uses: actions/checkout@v4
+  #       with:
+  #         fetch-depth: 1
 
-      - name: Set Environment Variables
-        id: meta
-        run: |
-          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            echo "IMAGE_TAG=prod" >> $GITHUB_ENV
-            echo "APP_ENV=prod" >> $GITHUB_ENV
-            echo "CACHE_TAG=prod" >> $GITHUB_ENV
-            echo "image-tag=prod" >> $GITHUB_OUTPUT
-          else
-            echo "IMAGE_TAG=dev" >> $GITHUB_ENV
-            echo "APP_ENV=dev" >> $GITHUB_ENV
-            echo "CACHE_TAG=dev" >> $GITHUB_ENV
-            echo "image-tag=dev" >> $GITHUB_OUTPUT
-          fi
+  #     - name: Set Environment Variables
+  #       id: meta
+  #       run: |
+  #         if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+  #           echo "IMAGE_TAG=prod" >> $GITHUB_ENV
+  #           echo "APP_ENV=prod" >> $GITHUB_ENV
+  #           echo "CACHE_TAG=prod" >> $GITHUB_ENV
+  #           echo "image-tag=prod" >> $GITHUB_OUTPUT
+  #         else
+  #           echo "IMAGE_TAG=dev" >> $GITHUB_ENV
+  #           echo "APP_ENV=dev" >> $GITHUB_ENV
+  #           echo "CACHE_TAG=dev" >> $GITHUB_ENV
+  #           echo "image-tag=dev" >> $GITHUB_OUTPUT
+  #         fi
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+  #     - name: Set up Docker Buildx
+  #       uses: docker/setup-buildx-action@v3
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+  #     - name: Login to Docker Hub
+  #       uses: docker/login-action@v3
+  #       with:
+  #         username: ${{ secrets.DOCKERHUB_USERNAME }}
+  #         password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # ===== 檢測類型變更 =====
-      # 檢查本次 commit 是否涉及類型文件變更
-      # 如果有類型變更，禁用快取確保正確重建
-      # ==============================
-      - name: Check Python code changes
-        id: python_changes
-        run: |
-          if git diff --name-only ${{ github.event.before }}..${{ github.sha }} | grep -E "pyproject\.toml|uv\.lock|src/"; then
-            echo "python_changed=true" >> $GITHUB_OUTPUT
-            echo "🔄 Python files changed, will build without cache"
-          else
-            echo "python_changed=false" >> $GITHUB_OUTPUT
-            echo "✅ No Python code changes, can use cache"
-          fi
+  #     # ===== 檢測類型變更 =====
+  #     # 檢查本次 commit 是否涉及類型文件變更
+  #     # 如果有類型變更，禁用快取確保正確重建
+  #     # ==============================
+  #     - name: Check Python code changes
+  #       id: python_changes
+  #       run: |
+  #         if git diff --name-only ${{ github.event.before }}..${{ github.sha }} | grep -E "pyproject\.toml|uv\.lock|src/"; then
+  #           echo "python_changed=true" >> $GITHUB_OUTPUT
+  #           echo "🔄 Python files changed, will build without cache"
+  #         else
+  #           echo "python_changed=false" >> $GITHUB_OUTPUT
+  #           echo "✅ No Python code changes, can use cache"
+  #         fi
 
-      # - name: Free disk space
-      #   run: |
-      #     echo "Before cleanup:"
-      #     df -h
-      #     sudo rm -rf /usr/share/dotnet
-      #     sudo rm -rf /opt/ghc
-      #     sudo rm -rf "/usr/local/share/boost"
-      #     sudo rm -rf "$AGENT_TOOLSDIRECTORY"
-      #     docker system prune -af || true
-      #     echo "After cleanup:"
-      #     df -h
+  #     # - name: Free disk space
+  #     #   run: |
+  #     #     echo "Before cleanup:"
+  #     #     df -h
+  #     #     sudo rm -rf /usr/share/dotnet
+  #     #     sudo rm -rf /opt/ghc
+  #     #     sudo rm -rf "/usr/local/share/boost"
+  #     #     sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+  #     #     docker system prune -af || true
+  #     #     echo "After cleanup:"
+  #     #     df -h
 
-      # 快取輸出策略：
-      # 1. 專用快取映像：跨 runner 共享，持久化
-      # 2. GitHub Actions 快取：同一 runner 快速存取
-      # 3. 內聯快取：由 BUILDKIT_INLINE_CACHE=1 自動處理
-      # ================================
-      # - name: Build and push Docker image
-      #   id: build
-      #   uses: docker/build-push-action@v5
-      #   with:
-      #     context: .
-      #     file: ./Dockerfile
-      #     push: true
-      #     # 智慧快取控制：只有類型變更時才禁用快取
-      #     no-cache: ${{ steps.python_changes.outputs.python_changed == 'true' }}
-      #     # 建立兩個標籤：環境標籤和特定 commit 標籤
-      #     tags: |
-      #       ${{ secrets.DOCKERHUB_USERNAME }}/src:${{ env.IMAGE_TAG }}
-      #       ${{ secrets.DOCKERHUB_USERNAME }}/src:${{ env.IMAGE_TAG }}-${{ github.sha }}
+  #     # 快取輸出策略：
+  #     # 1. 專用快取映像：跨 runner 共享，持久化
+  #     # 2. GitHub Actions 快取：同一 runner 快速存取
+  #     # 3. 內聯快取：由 BUILDKIT_INLINE_CACHE=1 自動處理
+  #     # ================================
+  #     # - name: Build and push Docker image
+  #     #   id: build
+  #     #   uses: docker/build-push-action@v5
+  #     #   with:
+  #     #     context: .
+  #     #     file: ./Dockerfile
+  #     #     push: true
+  #     #     # 智慧快取控制：只有類型變更時才禁用快取
+  #     #     no-cache: ${{ steps.python_changes.outputs.python_changed == 'true' }}
+  #     #     # 建立兩個標籤：環境標籤和特定 commit 標籤
+  #     #     tags: |
+  #     #       ${{ secrets.DOCKERHUB_USERNAME }}/src:${{ env.IMAGE_TAG }}
+  #     #       ${{ secrets.DOCKERHUB_USERNAME }}/src:${{ env.IMAGE_TAG }}-${{ github.sha }}
 
-      #     build-args: |
-      #       APP_ENV=${{ env.APP_ENV }}
-      #       BUILDKIT_INLINE_CACHE=1
-      #     platforms: linux/amd64
+  #     #     build-args: |
+  #     #       APP_ENV=${{ env.APP_ENV }}
+  #     #       BUILDKIT_INLINE_CACHE=1
+  #     #     platforms: linux/amd64
 
-      # ===== 構建驗證 =====
-      # 驗證構建的 Docker 映像是否正常運行
-      # 包含基本的健康檢查和功能驗證
-      # =====================
-      - name: Verify Docker image
-        run: |
-          echo "🧪 Verifying Docker image..."
+  #     # ===== 構建驗證 =====
+  #     # 驗證構建的 Docker 映像是否正常運行
+  #     # 包含基本的健康檢查和功能驗證
+  #     # =====================
+  #     # - name: Verify Docker image
+  #     #   run: |
+  #     #     echo "🧪 Verifying Docker image..."
 
-          # 測試映像是否可以啟動
-          docker run --rm -d --platform linux/amd64 --name test-container \
-            -p 8001:8000 \
-            -e APP_ENV=${{ env.APP_ENV }} \
-            ${{ secrets.DOCKERHUB_USERNAME }}/daodao-ai-backend:latest
+  #     #     # 測試映像是否可以啟動
+  #     #     docker run --rm -d  --name test-container \
+  #     #       -p 8001:8000 \
+  #     #       -e APP_ENV=${{ env.APP_ENV }} \
+  #     #       ${{ secrets.DOCKERHUB_USERNAME }}/daodao-ai-backend:latest
 
-          # 等待容器啟動
-          sleep 10
+  #     #     # 等待容器啟動
+  #     #     sleep 10
 
-          # 檢查容器是否在運行
-          if docker ps | grep test-container; then
-            echo "✅ Container started successfully"
-          else
-            echo "❌ Container failed to start"
-            docker logs test-container
-            exit 1
-          fi
+  #     #     # 檢查容器是否在運行
+  #     #     if docker ps | grep test-container; then
+  #     #       echo "✅ Container started successfully"
+  #     #     else
+  #     #       echo "❌ Container failed to start"
+  #     #       docker logs test-container
+  #     #       exit 1
+  #     #     fi
 
-          # 基本健康檢查 (如果應用有健康檢查端點)
-          if curl -f http://localhost:8001/api/v1/health > /dev/null 2>&1; then
-            echo "✅ Health check passed"
-          else
-            echo "⚠️  Health check failed or endpoint not available"
-          fi
+  #     #     # 基本健康檢查 (如果應用有健康檢查端點)
+  #     #     if curl -f http://localhost:8001/api/v1/health > /dev/null 2>&1; then
+  #     #       echo "✅ Health check passed"
+  #     #     else
+  #     #       echo "⚠️  Health check failed or endpoint not available"
+  #     #     fi
 
-          # 清理測試容器
-          docker stop test-container || true
+  #     #     # 清理測試容器
+  #         # docker stop test-container || true
 
-      # ===== 構建監控 =====
-      # 記錄構建時間和快取效率
-      # 用於性能監控和優化
-      # ====================
-      - name: Build monitoring
-        if: always()
-        run: |
-          echo "📊 Build monitoring..."
+  #     # ===== 構建監控 =====
+  #     # 記錄構建時間和快取效率
+  #     # 用於性能監控和優化
+  #     # ====================
+  #     # - name: Build monitoring
+  #     #   if: always()
+  #     #   run: |
+  #     #     echo "📊 Build monitoring..."
 
-          # 檢查映像大小
-          IMAGE_SIZE=$(docker images ${{ secrets.DOCKERHUB_USERNAME }}/daodao-ai-backend:latest --format "table {{.Size}}" | tail -n1)
-          echo "- Image Size: $IMAGE_SIZE"
+  #     #     # 檢查映像大小
+  #     #     IMAGE_SIZE=$(docker images ${{ secrets.DOCKERHUB_USERNAME }}/daodao-ai-backend:latest --format "table {{.Size}}" | tail -n1)
+  #     #     echo "- Image Size: $IMAGE_SIZE"
 
-          # 如果映像過大，發出警告
-          if [[ "$IMAGE_SIZE" == *"GB"* ]]; then
-            echo "::warning::Docker image size is larger than 1GB ($IMAGE_SIZE), consider optimizing"
-          fi
+  #     #     # 如果映像過大，發出警告
+  #     #     if [[ "$IMAGE_SIZE" == *"GB"* ]]; then
+  #     #       echo "::warning::Docker image size is larger than 1GB ($IMAGE_SIZE), consider optimizing"
+  #     #     fi
 
-  # ===== 部署階段 =====
-  # 目的：將構建好的 Docker 映像部署到 Linode 伺服器
-  # 執行條件：只在 build job 成功後執行
-  # environment：根據映像標籤選擇對應的 GitHub 環境
-  #   - production：需要審核和特定權限
-  #   - development：較寬鬆的部署權限
-  # timeout：15 分鐘超時限制，防止部署卡住
-  # 部署策略：藍綠部署（Blue-Green Deployment）
-  # ====================
+  # # ===== 部署階段 =====
+  # # 目的：將構建好的 Docker 映像部署到 Linode 伺服器
+  # # 執行條件：只在 build job 成功後執行
+  # # environment：根據映像標籤選擇對應的 GitHub 環境
+  # #   - production：需要審核和特定權限
+  # #   - development：較寬鬆的部署權限
+  # # timeout：15 分鐘超時限制，防止部署卡住
+  # # 部署策略：藍綠部署（Blue-Green Deployment）
+  # # ====================
   deploy:
     runs-on: ubuntu-latest
     needs: [build]
