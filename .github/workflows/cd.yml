@@ -22,6 +22,10 @@ on:
   #   branches:
   #     - main
   #     - dev
+  # test
+  pull_request:
+    branches:
+      - main
   # 手動觸發部署
   workflow_dispatch:
 
