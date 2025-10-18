@@ -12,50 +12,36 @@ on:
   workflow_dispatch:
 
 jobs:
-  setup-env:
+  ci:
     runs-on: ubuntu-latest
-    outputs:
-      python-path: ${{ steps.python-setup.outputs.python-path }}
     steps:
+      # 1️⃣ 取得原始碼
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # 2️⃣ 設定 Python 3.12
       - name: Set up Python 3.12
-        id: python-setup
         uses: actions/setup-python@v4
         with:
           python-version: 3.12
 
-      - name: Install dev dependencies
+      # 3️⃣ 建立虛擬環境並安裝依賴
+      - name: Setup virtualenv
         run: |
           python -m venv .venv
+          # 確保 activate 可用
           . .venv/bin/activate
           pip install --upgrade pip
           pip install black==25.9 ruff==0.14.1 pylint==4.0.1 bandit==1.8.6
-          pip install -r requirements.txt || true
 
-  format-check:
-    needs: setup-env
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      # 4️⃣ 格式化檢查
+      - name: Run format check
+        run: |
+          . .venv/bin/activate
+          make check
 
-      - name: Activate virtualenv
-        run: . .venv/bin/activate
-
-      - name: Run code format check
-        run: make check
-
-  static-analysis:
-    needs: setup-env
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Activate virtualenv
-        run: . .venv/bin/activate
-
+      # 5️⃣ 靜態分析
       - name: Run static analysis
-        run: make lint
+        run: |
+          . .venv/bin/activate
+          make lint
