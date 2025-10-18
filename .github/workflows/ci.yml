@@ -1,0 +1,54 @@
+name: Continuous Integration
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+    branches:
+      - main
+      - dev
+  # 被其他 workflow 調用時執行
+  workflow_call:
+    outputs:
+      generated-files-artifact:
+        description: "Name of the generated files artifact"
+        value: ${{ jobs.test.outputs.artifact-name }}
+  workflow_dispatch:
+
+jobs:
+  ci:
+    name: Continuous Integration
+    runs-on: ubuntu-latest
+    steps:
+      # 1️⃣ 取得原始碼
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2️⃣ 設定 Python 3.12
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.12
+
+      # 3️⃣ 建立虛擬環境並安裝依賴
+      - name: Setup virtualenv
+        run: |
+          python -m venv .venv
+          # 確保 activate 可用
+          . .venv/bin/activate
+          pip install --upgrade pip
+          pip install black==25.9 ruff==0.14.1 pylint==4.0.1 bandit==1.8.6
+
+      # 4️⃣ 格式化檢查
+      - name: Run format check
+        run: |
+          . .venv/bin/activate
+          make check
+
+      # 5️⃣ 靜態分析
+      - name: Run static analysis
+        run: |
+          . .venv/bin/activate
+          make lint

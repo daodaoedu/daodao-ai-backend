@@ -1,16 +1,14 @@
 ```.
-├── app/                          # 主應用程式根目錄
-│   ├── api/                      # FastAPI 的路由與 API 邏輯層
-│   │   ├── auto_metrics.py       # 自動蒐集/上報 API metrics（例如 latency、request count）
-│   │   ├── routers/              # API 路由群組（模組化 endpoints）
-│   │   │   ├── __init__.py
-│   │   │   ├── feedback.py       # 處理使用者意見或 AI 評論回饋
-│   │   │   ├── ping.py           # 健康檢查與服務連線測試端點
-│   │   │   ├── recommendation.py # 推薦系統 API（可能呼叫 LLM 或向量查詢）
-│   │   │   └── resource.py       # 提供資源清單、標籤、分類等 API
-│   │   ├── template.py           # 統一 API 回傳格式裝飾器或樣板
-│   │   └── verify_jwt.py         # JWT 驗證與授權邏輯
-│   │
+├── src/                          # 主應用程式根目錄
+│   ├── routers/              # API 路由群組（模組化 endpoints）
+│   │   ├── __init__.py
+│   │   ├── feedback.py       # 處理使用者意見或 AI 評論回饋
+│   │   ├── ping.py           # 健康檢查與服務連線測試端點
+│   │   ├── recommendation.py # 推薦系統 API（可能呼叫 LLM 或向量查詢）
+│   │   └── resource.py       # 提供資源清單、標籤、分類等 API
+│   ├── auto_metrics.py       # 自動蒐集/上報 API metrics（例如 latency、request count）
+│   ├── template.py           # 統一 API 回傳格式裝飾器或樣板
+│   └── verify_jwt.py         # JWT 驗證與授權邏輯
 │   ├── config.py                 # 全域設定（環境變數、資料庫 URI、快取設定）
 │   ├── limiter.py                # API 限流控制（Rate Limiter）
 │   ├── middleware.py             # 全域中介層（Logging、CORS、Tracing）
@@ -25,7 +23,7 @@
 │   ├── expections.py             # 統一例外與錯誤處理
 │   ├── logger.py                 # 日誌系統（Loguru 或 Python logging）
 │   ├── logs/                     # 實際日誌輸出目錄
-│   ├── main.py                   # FastAPI 啟動主程式（app instance、路由註冊）
+│   ├── main.py                   # FastAPI 啟動主程式（src instance、路由註冊）
 │   │
 │   ├── models/                   # SQLAlchemy ORM 模型定義（資料表對應）
 │   │   ├── base.py               # BaseModel (Declarative Base)
@@ -42,7 +40,7 @@
 │   │   ├── user.py               # 使用者 CRUD
 │   │   └── ...                   # 其他資料操作模組
 │   │
-│   ├── requirements.txt          # Python 依賴清單
+│   ├── pyproject.toml          # Python 依賴清單
 │   │
 │   ├── schemas/                  # Pydantic Schema（資料驗證與回傳格式）
 │   │   ├── api_response.py       # 統一 API 回傳結構（success, data, message）

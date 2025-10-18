@@ -31,9 +31,9 @@
   #       args: ["--profile", "black"]
   - repo: local
     hooks:
-      - id: format-with-make
+      - id: check-with-make
         name: Format with Makefile
-        entry: make format
+        entry: make check
         language: system
         types: [python]
 
