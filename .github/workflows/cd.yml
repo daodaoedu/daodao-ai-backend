@@ -84,10 +84,13 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     needs: [build]
-    if: needs.build.result == 'success'
+    # if: needs.build.result == 'success'
     environment: ${{ needs.build.outputs.image-tag == 'prod' && 'production' || 'development' }}
     timeout-minutes: 15
     steps:
+      - name: Show build result
+        run: |
+          echo "Build job result: ${{ needs.build.result }}"
       - name: Set up SSH
         run: |
           mkdir -p ~/.ssh
