@@ -19,6 +19,7 @@ on:
 
 jobs:
   ci:
+    name: Continuous Integration
     runs-on: ubuntu-latest
     steps:
       # 1️⃣ 取得原始碼
