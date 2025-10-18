@@ -62,26 +62,26 @@ jobs:
     if: ${{ always() && (needs.continuous_integration.result == 'success' || inputs.force_deploy || needs.continuous_integration.result == 'skipped') }}
     outputs:
       image-tag: ${{ steps.meta.outputs.image-tag }}
-  #   steps:
+    steps:
   #     - name: Checkout code (shallow)
   #       uses: actions/checkout@v4
   #       with:
   #         fetch-depth: 1
 
-  #     - name: Set Environment Variables
-  #       id: meta
-  #       run: |
-  #         if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-  #           echo "IMAGE_TAG=prod" >> $GITHUB_ENV
-  #           echo "APP_ENV=prod" >> $GITHUB_ENV
-  #           echo "CACHE_TAG=prod" >> $GITHUB_ENV
-  #           echo "image-tag=prod" >> $GITHUB_OUTPUT
-  #         else
-  #           echo "IMAGE_TAG=dev" >> $GITHUB_ENV
-  #           echo "APP_ENV=dev" >> $GITHUB_ENV
-  #           echo "CACHE_TAG=dev" >> $GITHUB_ENV
-  #           echo "image-tag=dev" >> $GITHUB_OUTPUT
-  #         fi
+      - name: Set Environment Variables
+        id: meta
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "IMAGE_TAG=prod" >> $GITHUB_ENV
+            echo "APP_ENV=prod" >> $GITHUB_ENV
+            echo "CACHE_TAG=prod" >> $GITHUB_ENV
+            echo "image-tag=prod" >> $GITHUB_OUTPUT
+          else
+            echo "IMAGE_TAG=dev" >> $GITHUB_ENV
+            echo "APP_ENV=dev" >> $GITHUB_ENV
+            echo "CACHE_TAG=dev" >> $GITHUB_ENV
+            echo "image-tag=dev" >> $GITHUB_OUTPUT
+          fi
 
   #     - name: Set up Docker Buildx
   #       uses: docker/setup-buildx-action@v3
