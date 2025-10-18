@@ -125,84 +125,78 @@ jobs:
       # 2. GitHub Actions 快取：同一 runner 快速存取
       # 3. 內聯快取：由 BUILDKIT_INLINE_CACHE=1 自動處理
       # ================================
-      - name: Build and push Docker image
-        id: build
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          # 智慧快取控制：只有類型變更時才禁用快取
-          no-cache: ${{ steps.python_changes.outputs.python_changed == 'true' }}
-          # 建立兩個標籤：環境標籤和特定 commit 標籤
-          tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/src:${{ env.IMAGE_TAG }}
-            ${{ secrets.DOCKERHUB_USERNAME }}/src:${{ env.IMAGE_TAG }}-${{ github.sha }}
+      # - name: Build and push Docker image
+      #   id: build
+      #   uses: docker/build-push-action@v5
+      #   with:
+      #     context: .
+      #     file: ./Dockerfile
+      #     push: true
+      #     # 智慧快取控制：只有類型變更時才禁用快取
+      #     no-cache: ${{ steps.python_changes.outputs.python_changed == 'true' }}
+      #     # 建立兩個標籤：環境標籤和特定 commit 標籤
+      #     tags: |
+      #       ${{ secrets.DOCKERHUB_USERNAME }}/src:${{ env.IMAGE_TAG }}
+      #       ${{ secrets.DOCKERHUB_USERNAME }}/src:${{ env.IMAGE_TAG }}-${{ github.sha }}
 
-          build-args: |
-            APP_ENV=${{ env.APP_ENV }}
-            BUILDKIT_INLINE_CACHE=1
-          platforms: linux/amd64
+      #     build-args: |
+      #       APP_ENV=${{ env.APP_ENV }}
+      #       BUILDKIT_INLINE_CACHE=1
+      #     platforms: linux/amd64
 
       # ===== 構建驗證 =====
       # 驗證構建的 Docker 映像是否正常運行
       # 包含基本的健康檢查和功能驗證
       # =====================
-      # - name: Verify Docker image
-      #   run: |
-      #     echo "🧪 Verifying Docker image..."
+      - name: Verify Docker image
+        run: |
+          echo "🧪 Verifying Docker image..."
 
-      #     # 測試映像是否可以啟動
-      #     docker run --rm -d --name test-container \
-      #       -p 3001:3000 \
-      #       -e APP_ENV=${{ env.APP_ENV }} \
-      #       ${{ secrets.DOCKERHUB_USERNAME }}/src:${{ env.IMAGE_TAG }}-${{ github.sha }}
+          # 測試映像是否可以啟動
+          docker run --rm -d --name test-container \
+            -p 8001:8000 \
+            -e APP_ENV=${{ env.APP_ENV }} \
+            ${{ secrets.DOCKERHUB_USERNAME }}/daodao-ai-backend:latest
 
-      #     # 等待容器啟動
-      #     sleep 10
+          # 等待容器啟動
+          sleep 10
 
-      #     # 檢查容器是否在運行
-      #     if docker ps | grep test-container; then
-      #       echo "✅ Container started successfully"
-      #     else
-      #       echo "❌ Container failed to start"
-      #       docker logs test-container
-      #       exit 1
-      #     fi
+          # 檢查容器是否在運行
+          if docker ps | grep test-container; then
+            echo "✅ Container started successfully"
+          else
+            echo "❌ Container failed to start"
+            docker logs test-container
+            exit 1
+          fi
 
-      #     # 基本健康檢查 (如果應用有健康檢查端點)
-      #     if curl -f http://localhost:3001/api/v1/health > /dev/null 2>&1; then
-      #       echo "✅ Health check passed"
-      #     else
-      #       echo "⚠️  Health check failed or endpoint not available"
-      #     fi
+          # 基本健康檢查 (如果應用有健康檢查端點)
+          if curl -f http://localhost:8001/api/v1/health > /dev/null 2>&1; then
+            echo "✅ Health check passed"
+          else
+            echo "⚠️  Health check failed or endpoint not available"
+          fi
 
-      #     # 清理測試容器
-      #     docker stop test-container || true
+          # 清理測試容器
+          docker stop test-container || true
 
-      # # ===== 構建監控 =====
-      # # 記錄構建時間和快取效率
-      # # 用於性能監控和優化
-      # # ====================
-      # - name: Build monitoring
-      #   if: always()
-      #   run: |
-      #     # 記錄構建資訊
-      #     echo "📊 Build Information:"
-      #     echo "- Image Tag: ${{ env.IMAGE_TAG }}-${{ github.sha }}"
-      #     echo "- Type Changes: ${{ steps.python_changes.outputs.python_changed }}"
-      #     echo "- Cache Used: ${{ steps.python_changes.outputs.python_changed != 'true' }}"
-      #     echo "- Branch: ${{ github.ref_name }}"
-      #     echo "- Commit: ${{ github.sha }}"
+      # ===== 構建監控 =====
+      # 記錄構建時間和快取效率
+      # 用於性能監控和優化
+      # ====================
+      - name: Build monitoring
+        if: always()
+        run: |
+          echo "📊 Build monitoring..."
 
-      #     # 檢查映像大小
-      #     IMAGE_SIZE=$(docker images ${{ secrets.DOCKERHUB_USERNAME }}/src:${{ env.IMAGE_TAG }}-${{ github.sha }} --format "table {{.Size}}" | tail -n1)
-      #     echo "- Image Size: $IMAGE_SIZE"
+          # 檢查映像大小
+          IMAGE_SIZE=$(docker images ${{ secrets.DOCKERHUB_USERNAME }}/daodao-ai-backend:latest --format "table {{.Size}}" | tail -n1)
+          echo "- Image Size: $IMAGE_SIZE"
 
-      #     # 如果映像過大，發出警告
-      #     if [[ "$IMAGE_SIZE" == *"GB"* ]]; then
-      #       echo "::warning::Docker image size is larger than 1GB ($IMAGE_SIZE), consider optimizing"
-      #     fi
+          # 如果映像過大，發出警告
+          if [[ "$IMAGE_SIZE" == *"GB"* ]]; then
+            echo "::warning::Docker image size is larger than 1GB ($IMAGE_SIZE), consider optimizing"
+          fi
 
   # ===== 部署階段 =====
   # 目的：將構建好的 Docker 映像部署到 Linode 伺服器
@@ -213,19 +207,19 @@ jobs:
   # timeout：15 分鐘超時限制，防止部署卡住
   # 部署策略：藍綠部署（Blue-Green Deployment）
   # ====================
-  # deploy:
-  #   runs-on: ubuntu-latest
-  #   needs: [build]
-  #   if: needs.build.result == 'success'
-  #   environment: ${{ needs.build.outputs.image-tag == 'prod' && 'production' || 'development' }}
-  #   timeout-minutes: 15
-  #   steps:
-  #     - name: Set up SSH
-  #       run: |
-  #         mkdir -p ~/.ssh
-  #         echo "${{ secrets.LINODE_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-  #         chmod 600 ~/.ssh/id_rsa
-  #         ssh-keyscan -H ${{ secrets.LINODE_INSTANCE_IP }} >> ~/.ssh/known_hosts
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: needs.build.result == 'success'
+    environment: ${{ needs.build.outputs.image-tag == 'prod' && 'production' || 'development' }}
+    timeout-minutes: 15
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.LINODE_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.LINODE_INSTANCE_IP }} >> ~/.ssh/known_hosts
 
       # - name: Deploy to Linode
       #   env:

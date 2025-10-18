@@ -8,6 +8,10 @@ RUFF    := $(PYTHON) -m ruff
 PYLINT  := $(PYTHON) -m pylint
 BANDIT  := $(PYTHON) -m bandit
 
+IMAGE_NAME=daodao-ai-backend
+# TAG=$(shell date +%Y%m%d)
+TAG=latest
+
 
 -include .env
 
@@ -142,3 +146,10 @@ rank_feed: ## 執行 rank_feed 測試腳本
 
 verify: ## 驗證 JWT 腳本
 	$(COMPOSE_DEV) --profile dev exec backend-dev /bin/bash -c "python src/verify_jwt.py"
+
+
+deploy:
+	@echo "🚀 Deploying $(IMAGE_NAME):$(TAG)..."
+	@echo "🔐 Logging in to Docker Hub as $(DOCKERHUB_USERNAME)"
+	@echo "$(DOCKERHUB_TOKEN)" | docker login -u "$(DOCKERHUB_USERNAME)" --password-stdin
+	docker push $(DOCKERHUB_USERNAME)/$(IMAGE_NAME):$(TAG)
