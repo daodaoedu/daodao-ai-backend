@@ -124,7 +124,7 @@ jobs:
             export DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}
             export IMAGE_TAG=${{ env.IMAGE_TAG }}
             export COMMIT_SHA=${{ env.COMMIT_SHA }}
-            export BRANCH_NAME:${{ env.BRANCH_NAME }}
+            export BRANCH_NAME=${{ env.BRANCH_NAME }}
 
             echo "=== Starting deployment for $src_ENV environment ==="
 
