@@ -108,13 +108,18 @@ jobs:
             echo "✅ No Python code changes, can use cache"
           fi
 
-      # ===== Docker 映像構建與推送 =====
-      # 智慧快取策略說明：
-      # 1. Registry 快取：從當前環境的最新映像讀取（最可能命中相同依賴層）
-      # 2. BuildCache：從專用快取映像讀取（保存完整構建快取）
-      # 3. GitHub Actions：從本地快取讀取（速度最快）
-      # 4. 類型檢測：類型文件變更時禁用快取
-      #
+      - name: Free disk space
+        run: |
+          echo "Before cleanup:"
+          df -h
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          docker system prune -af || true
+          echo "After cleanup:"
+          df -h
+
       # 快取輸出策略：
       # 1. 專用快取映像：跨 runner 共享，持久化
       # 2. GitHub Actions 快取：同一 runner 快速存取
@@ -133,14 +138,7 @@ jobs:
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/src:${{ env.IMAGE_TAG }}
             ${{ secrets.DOCKERHUB_USERNAME }}/src:${{ env.IMAGE_TAG }}-${{ github.sha }}
-          # 多層快取策略（只有在使用快取時生效）
-          cache-from: |
-            type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/src:${{ env.CACHE_TAG }}
-            type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/src:buildcache-${{ env.CACHE_TAG }}
-            type=gha
-          cache-to: |
-            type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/src:buildcache-${{ env.CACHE_TAG }},mode=max
-            type=gha,mode=max
+
           build-args: |
             APP_ENV=${{ env.APP_ENV }}
             BUILDKIT_INLINE_CACHE=1
