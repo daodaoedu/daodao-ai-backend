@@ -84,8 +84,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     needs: [build]
-    # if: needs.build.result == 'success'
-    if: ${{ always() }}
+    if: needs.build.result == 'success'
     environment: ${{ needs.build.outputs.image-tag == 'prod' && 'production' || 'development' }}
     timeout-minutes: 15
     steps:
@@ -104,6 +103,7 @@ jobs:
             echo "COMPOSE_FILE=docker-compose.prod.yaml" >> $GITHUB_ENV
           else
             echo "COMPOSE_FILE=docker-compose.dev.yaml" >> $GITHUB_ENV
+          fi
 
       - name: Deploy to Linode
         env:
