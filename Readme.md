@@ -1,18 +1,17 @@
 # DaoDao AI Backend
 
-DaoDao AI Backend 是道道教育平台的後端服務，提供 AI 增強的教育服務功能。
+DaoDao AI Backend 是島島教育平台的後端服務，提供 AI 增強的教育服務功能。
 
 ## 專案結構
 
 ```
-app/
-├── api/ # FastAPI 路由層 (routers)
-├── core/ # 基礎設置：config, logger, limiter, dependencies
+src/
+├── routers/ # FastAPI 路由層 (routers)
+├── middleware/ # 中介層 (JWT 驗證、速率限制等)
 ├── models/ # ORM 模型 (對應 daodao-storage)
-├── repositories/ # 資料庫操作層 (PostgreSQL / Qdrant)
-├── schemas/ # Pydantic 資料結構定義
+├── db/    # 資料庫相關程式
+├── schemas/ # Pydantic 資料結構定義 (request / response schema)
 ├── services/ # 業務邏輯與外部整合 (LLM, Redis, ClickHouse)
-├── middlewares/ # 中介層 (JWT 驗證、速率限制等)
 └── utils/ # 共用工具函數
 ```
 
@@ -50,28 +49,20 @@ cd daodao-ai-backend
 
 2. 配置環境變數
 ```bash
-cp .env.example .env
+cp .env.prod.sample .env.prod
 # 編輯 .env 檔案，設定資料庫、API key 等參數
 ```
 
 3. 使用 Docker 啟動服務
 ```bash
-docker-compose up -d
+make up-prod
 ```
 
 ## 開發指南
 
-### 本地開發
-```bash
-# 安裝相依套件
-pip install -r app/requirements.txt
-
-# 啟動開發伺服器
-uvicorn app.main:app --reload
-```
 
 ### 資料模型說明
-- `app/models` 目錄下的資料模型需要與 [daodao-storage](https://github.com/daodaoedu/daodao-storage) 倉庫的 schema 保持一致
+- `src/models` 目錄下的資料模型需要與 [daodao-storage](https://github.com/daodaoedu/daodao-storage) 倉庫的 schema 保持一致
 - 在新增或修改模型時，請確保同步更新兩個倉庫
 
 ## 文件
@@ -79,6 +70,8 @@ uvicorn app.main:app --reload
 API 文件訪問地址：
 - Swagger UI: http://localhost:8000/docs
 - ReDoc: http://localhost:8000/redoc
+> 記得修改docker compose 開 port
+
 
 ## 授權條款
 

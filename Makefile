@@ -8,7 +8,7 @@ PLATFORM ?= linux/amd64
 COMPOSE_DEV  = docker compose -f docker-compose.dev.yml
 COMPOSE_PROD = docker compose -f docker-compose.prod.yml
 
-PY_DIRS = app
+PY_DIRS = src
 
 # =========================================
 # 🧭 指令總覽 (make help 會自動擷取)
@@ -50,11 +50,22 @@ up-prod: ## 啟動 Prod 環境
 down-prod: ## 停止並移除 Prod 容器與 Volume
 	$(COMPOSE_PROD) --profile prod down --volumes
 
-rebuild-dev: down-dev up-dev ## 重建 Dev 環境
+rebuild-dev: ## 重建 Dev 環境
+	$(COMPOSE_DEV) --profile dev down --volumes
+	@echo "🔄 Rebuilding Dev environment..."
+	# 自動拉取官方 image
+	@docker image inspect redis:alpine > /dev/null 2>&1 || docker pull redis:alpine
 
 
+	$(COMPOSE_DEV) --profile dev up -d --build
 
-rebuild-prod: down-prod up-prod ## 重建 Prod 環境
+
+rebuild-prod:  ## 重建 Prod 環境
+	$(COMPOSE_PROD) --profile prod down --volumes
+	@echo "🔄 Rebuilding Prod environment..."
+	@docker image inspect redis:alpine > /dev/null 2>&1 || docker pull redis:alpine
+
+	$(COMPOSE_PROD) --profile prod up -d --build
 
 
 up: up-dev up-prod ## 同時啟動 Dev 與 Prod 環境
@@ -66,7 +77,10 @@ down: down-dev down-prod ## 同時停止 Dev 與 Prod 環境
 restart: down up ## 重啟所有環境
 
 
-rebuild: rebuild-dev rebuild-prod ## 同時重建 Dev / Prod 環境
+rebuild: ## 同時重建 Dev / Prod 環境
+	$(MAKE) rebuild-dev
+	$(MAKE) rebuild-prod
+
 
 # =========================================
 # 🧹 清理資料
@@ -99,28 +113,26 @@ quality_checks: format lint ## 一鍵品質檢查（format + lint）
 
 
 format: ## 格式化程式碼 (isort + black)
-	isort $(PY_DIRS)
+	ruff format $(PY_DIRS) || true
 	black $(PY_DIRS)
-	python -m ruff check $(PY_DIRS) --fix
 
 
 check: ## 檢查程式碼格式 (不修改)
-	isort $(PY_DIRS)
 	black --check $(PY_DIRS)
-	python -m ruff check $(PY_DIRS)
+	ruff check $(PY_DIRS)
 
 
 lint: ## 靜態檢查 (pylint + bandit)
 	pylint --rcfile=.pylintrc $(PY_DIRS) || true
-	python -m bandit -r $(PY_DIRS) || true
+	bandit -r $(PY_DIRS) || true
 
 # =========================================
 # 🧪 測試與工具
 # =========================================
 
 rank_feed: ## 執行 rank_feed 測試腳本
-	$(COMPOSE_PROD) --profile prod exec backend-dev /bin/bash -c "PYTHONPATH=/app python services/rank_feed.py  --to 50"
+	$(COMPOSE_PROD) --profile prod exec backend-dev /bin/bash -c "python src/services/rank_feed.py  --to 50"
 
 
 verify: ## 驗證 JWT 腳本
-	$(COMPOSE_DEV) --profile dev exec backend-dev /bin/bash -c "PYTHONPATH=/app python api/verify_jwt.py"
+	$(COMPOSE_DEV) --profile dev exec backend-dev /bin/bash -c "python src/verify_jwt.py"

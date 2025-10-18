@@ -3,5 +3,6 @@
 .env.dev
 .env.prod
 cache_data
-obs_data
 ollama_models
+.venv
+*.egg-info/

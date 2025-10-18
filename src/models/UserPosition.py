@@ -1,0 +1,19 @@
+# 用戶身份聯接表
+from sqlalchemy import Column, ForeignKey, Integer
+from sqlalchemy.orm import relationship
+
+from src.models.base import Base  # 引用分離出的 Base
+
+
+class UserPosition(Base):
+    __tablename__ = "user_positions"
+
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    position_id = Column(
+        Integer, ForeignKey("position.id", ondelete="CASCADE"), primary_key=True
+    )
+
+    user = relationship("User", back_populates="user_positions")
+    position = relationship("Position", back_populates="user_positions")
