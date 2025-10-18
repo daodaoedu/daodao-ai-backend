@@ -43,16 +43,27 @@ class RedisSettings(BaseConfigSettings):
 class PostgreSQLSettings(BaseSettings):
     """PostgreSQL configuration settings."""
 
-    database_url: str = Field(
-        default="postgresql+psycopg2://username:passweord@localhost:5432/db",
-        description="PostgreSQL database URL",
+    model_config = SettingsConfigDict(
+        env_file=[".env", str(ENV_FILE_PATH)],
+        env_prefix="POSTGRES_",
+        extra="ignore",
+        frozen=True,
+        case_sensitive=False,
     )
+
+    # database_url: str = Field(
+    #     default="postgresql+psycopg2://username:passweord@localhost:5432/db",
+    #     description="PostgreSQL database URL",
+    # )
+    db_user: str = Field(default="postgres", description="PostgreSQL username")
+    db_password: str = Field(default="", description="PostgreSQL password")
+    db_host: str = Field(default="localhost", description="PostgreSQL host")
+    db_port: int = Field(default=5432, description="PostgreSQL port")
+    db_name: str = Field(default="postgres", description="PostgreSQL database name")
+
     echo_sql: bool = Field(default=False, description="Enable SQL query logging")
     pool_size: int = Field(default=20, description="Database connection pool size")
     max_overflow: int = Field(default=0, description="Maximum pool overflow")
-
-    class Config:
-        env_prefix = "POSTGRES_"
 
 
 class ClickHouseSettings(BaseSettings):
