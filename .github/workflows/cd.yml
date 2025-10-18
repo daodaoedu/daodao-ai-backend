@@ -18,16 +18,21 @@ concurrency:
 #    - force_deploy：允許跳過 CI 檢查直接部署（緊急修復時使用）
 # =======================
 on:
-  push:
-    branches:
-      - main
-      - dev
+  # push:
+  #   branches:
+  #     - main
+  #     - dev
   # 手動觸發部署
   workflow_dispatch:
 
 
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Hello World"
+
   # ===== 持續整合 (CI) 階段 =====
   # 目的：在部署前執行程式碼品質檢查
   # 執行條件：
