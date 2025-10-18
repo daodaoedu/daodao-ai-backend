@@ -84,6 +84,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     needs: [build]
+    if: always()
     environment: ${{ needs.build.outputs.image-tag == 'prod' && 'production' || 'development' }}
     timeout-minutes: 15
     steps:
