@@ -115,6 +115,42 @@ all: ## 停止、清理並重啟所有環境
 	$(MAKE) clean
 	$(MAKE) up
 
+
+# ===== 健康檢查目標 =====
+check-health-dev:
+	@echo "Checking backend-dev health via API..."
+	@container_id=$$($(COMPOSE_DEV) ps -q backend-dev); \
+	if [ -z "$$container_id" ]; then \
+		echo "❌ backend-dev container not running"; \
+		exit 1; \
+	fi; \
+	status=$$(docker exec $$container_id python3 -c "import urllib.request,json; resp=json.load(urllib.request.urlopen('http://localhost:8000/api/v1/health')); print(resp.get('status',''))"); \
+	if [ "$$status" = "ok" ]; then \
+		echo "✅ backend-dev status OK"; \
+	else \
+		echo "❌ backend-dev status NOT OK (status: $$status)"; \
+		exit 1; \
+	fi
+
+check-health-prod:
+	@echo "Checking backend-dev health via API..."
+	@container_id=$$($(COMPOSE_PROD) ps -q backend-prod); \
+	if [ -z "$$container_id" ]; then \
+		echo "❌ backend-prod container not running"; \
+		exit 1; \
+	fi; \
+	status=$$(docker exec $$container_id python3 -c "import urllib.request,json; resp=json.load(urllib.request.urlopen('http://localhost:8000/api/v1/health')); print(resp.get('status',''))"); \
+	if [ "$$status" = "ok" ]; then \
+		echo "✅ backend-prod status OK"; \
+	else \
+		echo "❌ backend-prod status NOT OK (status: $$status)"; \
+		exit 1; \
+	fi
+
+
+check-health: check-health-dev check-health-prod
+
+
 # =========================================
 # 🧠 程式碼品質檢查
 # =========================================

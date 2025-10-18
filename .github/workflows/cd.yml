@@ -174,120 +174,75 @@ jobs:
 
 
 
-            # # ===== 藍綠部署策略實施 =====
-            # # 策略說明：
-            # # 1. 保留舊容器運行，確保服務不中斷
-            # # 2. 啟動新容器並進行健康檢查
-            # # 3. 確認新容器正常後，才停止舊容器
-            # # 4. 如果新容器啟動失敗，自動回滾
-            # # 優點：零停機時間、快速回滾、安全可靠
-            # # ============================
-            # echo "=== Blue-Green Deployment Strategy ==="
-            # OLD_CONTAINER=$(docker ps -q -f name=${src_SERVICE} | head -1)
+            # ===== 藍綠部署策略實施 =====
+            # 策略說明：
+            # 1. 保留舊容器運行，確保服務不中斷
+            # 2. 啟動新容器並進行健康檢查
+            # 3. 確認新容器正常後，才停止舊容器
+            # 4. 如果新容器啟動失敗，自動回滾
+            # 優點：零停機時間、快速回滾、安全可靠
+            # ============================
+            echo "=== Blue-Green Deployment Strategy ==="
+            OLD_CONTAINER=$(docker ps -q -f name=${src_SERVICE} | head -1)
 
-            # if [ -n "$OLD_CONTAINER" ]; then
-            #   echo "Found existing container: $OLD_CONTAINER"
-            # else
-            #   echo "No existing container found, performing initial deployment"
-            # fi
+            if [ -n "$OLD_CONTAINER" ]; then
+              echo "Found existing container: $OLD_CONTAINER"
+            else
+              echo "No existing container found, performing initial deployment"
+            fi
 
-            # # ===== 拉取新映像 =====
-            # # 使用 docker compose pull 而非 docker pull
-            # # 優點：
-            # # - 自動顯示下載進度
-            # # - 支援多個服務同時拉取
-            # # - 遵循 compose 文件中的映像設定
-            # # =======================
-            # echo "=== Pulling new image with progress display ==="
-            # echo "Image to pull: ${DOCKERHUB_USERNAME}/src:${IMAGE_TAG}-${COMMIT_SHA}"
-            # echo "Using IMAGE_TAG=${IMAGE_TAG}, COMMIT_SHA=${COMMIT_SHA}"
 
-            # # 直接執行 pull，讓它有足夠時間完成下載
-            # if DOCKERHUB_USERNAME=${DOCKERHUB_USERNAME} IMAGE_TAG=${IMAGE_TAG} COMMIT_SHA=${COMMIT_SHA} \
-            #    docker compose --env-file .env.${src_ENV} -f $COMPOSE_FILE pull ${src_SERVICE}; then
-            #   echo "✅ Successfully pulled image"
-            # else
-            #   echo "❌ Failed to pull image"
-            #   echo "This might be due to network issues or the image doesn't exist"
-            #   exit 1
-            # fi
+            # ===== 清理舊容器 =====
+            echo "=== Cleaning up old containers for $src_ENV ==="
+            # 停止並移除所有相關舊容器
+            if make down-${src_ENV}; then
+                echo "✅ Old containers cleaned up"
+            else
+                echo "⚠️ No old containers found or cleanup failed, continuing..."
+            fi
 
-            # # ===== 清理舊容器 =====
-            # # 先停止所有相關的舊容器（可能有 scale 留下的多餘容器）
-            # # ========================
-            # echo "=== Cleaning up old containers ==="
-            # # 停止所有包含服務名的容器（不論是否有編號後綴）
-            # docker ps -a --filter "name=${src_SERVICE}" --format "{{.ID}}" | xargs -r docker stop || true
-            # docker ps -a --filter "name=${src_SERVICE}" --format "{{.ID}}" | xargs -r docker rm || true
-            # echo "✅ Old containers cleaned up"
+            # ===== 滾動更新部署 =====
+            echo "=== Rolling Update Deployment ==="
+            # 啟動新容器
+            if make up-${src_ENV}; then
+                echo "✅ New container started, verifying health..."
+            else
+                echo "❌ Failed to start new container"
+                echo "=== Checking container logs ==="
+                docker compose --env-file .env.${src_ENV} -f $COMPOSE_FILE logs --tail=100 ${src_SERVICE} || true
+                echo "Container status:"
+                docker ps -a --filter "name=${src_SERVICE}" || true
+                exit 1
+            fi
 
-            # # ===== 滾動更新部署 =====
-            # # 使用 Docker Compose 的重新創建策略
-            # # 1. 啟動新容器
-            # # 2. 等待新容器健康檢查通過 (最多 90 秒)
-            # # 3. 自動完成部署
-            # # ===========================
-            # echo "=== Rolling Update Deployment ==="
 
-            # # 使用 --wait 等待健康檢查通過
-            # # --wait-timeout 90: 健康檢查最多等待 90 秒
-            # #   - start_period: 30s (容器啟動緩衝期)
-            # #   - interval: 10s (檢查間隔)
-            # #   - retries: 3 (重試次數)
-            # #   - 總計: 30 + (10 * 3) = 60 秒 + 緩衝 = 90 秒
-            # echo "Starting new container with health check (timeout: 90s)..."
-            # if DOCKERHUB_USERNAME=${DOCKERHUB_USERNAME} IMAGE_TAG=${IMAGE_TAG} COMMIT_SHA=${COMMIT_SHA} \
-            #    docker compose --env-file .env.${src_ENV} -f $COMPOSE_FILE up -d --wait --wait-timeout 90 ${src_SERVICE}; then
-            #   echo "✅ New container started and passed health check"
-            # else
-            #   echo "❌ Failed to start new container or health check failed"
-            #   echo "Checking container logs..."
-            #   docker compose --env-file .env.${src_ENV} -f $COMPOSE_FILE logs --tail=100 ${src_SERVICE} || true
+            # ===== 健康檢查 =====
+            # 使用 curl 呼叫 health API
+            # ===== 健康檢查 =====
+            container_name="daodao-ai-backend-${src_ENV}"
+            MAX_ATTEMPTS=10
+            SLEEP_SECONDS=5
 
-            #   # 檢查容器狀態
-            #   echo "Container status:"
-            #   docker ps -a --filter "name=${src_SERVICE}" || true
-            #   exit 1
-            # fi
+            for i in $(seq 1 $MAX_ATTEMPTS); do
+                status=$(docker exec $container_name sh -c "curl -s http://localhost:8000/api/v1/health | jq -r '.status'")
 
-            # # 額外驗證：確認容器真的在運行並且健康
-            # echo "=== Additional Health Verification ==="
-            # NEW_CONTAINER=$(docker ps -q -f name=${src_SERVICE} | head -1)
-            # if [ -z "$NEW_CONTAINER" ]; then
-            #   echo "❌ No running container found for ${src_SERVICE}"
-            #   exit 1
-            # fi
+                if [ "$status" = "ok" ]; then
+                    echo "✅ $container_name status OK"
+                    break
+                else
+                    echo "⚠ Attempt $i/$MAX_ATTEMPTS: $container_name status NOT OK (status: $status)"
+                    if [ $i -eq $MAX_ATTEMPTS ]; then
+                        echo "❌ $container_name failed health check after $MAX_ATTEMPTS attempts"
+                        echo "=== Container Logs ==="
+                        docker compose --env-file .env.${src_ENV} -f $COMPOSE_FILE logs --tail=100 $container_name || true
+                        exit 1
+                    fi
+                    sleep $SLEEP_SECONDS
+                fi
+            done
 
-            # # 直接測試健康檢查端點
-            # MAX_ATTEMPTS=10
-            # for i in {1..$MAX_ATTEMPTS}; do
 
-            #   RESPONSE=$(curl -s "http://127.0.0.1:$NEW_CONTAINER_PORT/api/v1/health")
-            #   HTTP_CODE=$(echo "$RESPONSE" | jq -r '.status? // empty')
 
-            #   if [ "$HTTP_CODE" = "ok" ]; then
-            #       echo "✅ Health check passed (attempt $i)"
-            #       echo "Response:"
-            #       echo "$RESPONSE"
-            #       break
-            #   fi
-
-            #   if [ $i -eq $MAX_ATTEMPTS ]; then
-            #       echo "❌ Health check failed after $MAX_ATTEMPTS attempts"
-
-            #       echo "Last response:"
-            #       echo "$RESPONSE"
-            #       exit 1
-            #   fi
-            #   echo "Health check attempt $i/10, waiting..."
-            #   sleep 3
-            # done
-
-            # # 清理舊映像
-            # echo "Cleaning up old images..."
-            # docker image prune -f --filter "until=24h"
-
-            # echo "=== Deployment completed successfully ==="
           ENDSSH
 
   # ===== 部署後驗證階段 =====
