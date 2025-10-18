@@ -142,9 +142,11 @@ jobs:
             fi
 
             # 檢查環境文件
+            ENV_FILE=".env.${src_ENV}"
+
             if [ ! -f .env.${src_ENV} ] && [ -f .env.${src_ENV}.sample ]; then
-              cp .env.${src_ENV}.sample .env.${src_ENV}
-              echo "Created .env.${src_ENV} from .sample"
+              cp ".env.${src_ENV}.sample" "ENV_FILE"
+              echo "Created $ENV_FILE from .sample"
             fi
 
             # 載入環境變數，替換敏感環境變數 (來自 GitHub Secrets)
