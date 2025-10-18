@@ -32,11 +32,6 @@ on:
 
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "Hello World!!"
-
   # ===== 持續整合 (CI) 階段 =====
   # 目的：在部署前執行程式碼品質檢查
   # 執行條件：
@@ -133,7 +128,7 @@ jobs:
           file: ./Dockerfile
           push: true
           # 智慧快取控制：只有類型變更時才禁用快取
-          no-cache: ${{ steps.type_changes.outputs.python_changed == 'true' }}
+          no-cache: ${{ steps.python_changes.outputs.python_changed == 'true' }}
           # 建立兩個標籤：環境標籤和特定 commit 標籤
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/src:${{ env.IMAGE_TAG }}
@@ -197,8 +192,8 @@ jobs:
       #     # 記錄構建資訊
       #     echo "📊 Build Information:"
       #     echo "- Image Tag: ${{ env.IMAGE_TAG }}-${{ github.sha }}"
-      #     echo "- Type Changes: ${{ steps.type_changes.outputs.python_changed }}"
-      #     echo "- Cache Used: ${{ steps.type_changes.outputs.python_changed != 'true' }}"
+      #     echo "- Type Changes: ${{ steps.python_changes.outputs.python_changed }}"
+      #     echo "- Cache Used: ${{ steps.python_changes.outputs.python_changed != 'true' }}"
       #     echo "- Branch: ${{ github.ref_name }}"
       #     echo "- Commit: ${{ github.sha }}"
 
