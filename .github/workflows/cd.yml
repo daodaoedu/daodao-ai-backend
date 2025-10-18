@@ -77,6 +77,10 @@ jobs:
             echo "CACHE_TAG=dev" >> $GITHUB_ENV
             echo "image-tag=dev" >> $GITHUB_OUTPUT
           fi
+      - name: Dummy Build Step
+        run: |
+          echo "執行 build 任務"
+          echo "Build completed successfully"
   deploy:
     runs-on: ubuntu-latest
     needs: [build]
