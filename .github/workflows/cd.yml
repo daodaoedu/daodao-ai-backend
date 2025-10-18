@@ -240,9 +240,6 @@ jobs:
                     sleep $SLEEP_SECONDS
                 fi
             done
-
-
-
           ENDSSH
 
   # ===== 部署後驗證階段 =====
