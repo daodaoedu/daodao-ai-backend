@@ -9,7 +9,8 @@ from src.logger import AppLogger
 from src.middleware.middleware import setup_middlewares
 from src.routers import ping, recommendation
 from src.services.cache.factory import make_cache_client
-from src.services.clickhouse.factory import make_clickhouse_client
+
+# from src.services.clickhouse.factory import make_clickhouse_client
 from src.services.llm.factory import make_llm_client
 from src.services.qdrant.factory import make_qdrant_client
 
@@ -36,8 +37,8 @@ async def lifespan(app: FastAPI):
     qdrant_client = make_qdrant_client()
     app.state.qdrant_client = qdrant_client
 
-    clickhouse_client = make_clickhouse_client()
-    app.state.clickhouse_client = clickhouse_client
+    # clickhouse_client = make_clickhouse_client()
+    # app.state.clickhouse_client = clickhouse_client
 
     llm_client = make_llm_client()
     app.state.llm_client = llm_client

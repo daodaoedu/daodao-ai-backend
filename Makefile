@@ -33,7 +33,8 @@ PY_DIRS = src
 # =========================================
 .PHONY: up-dev down-dev up-prod down-prod rebuild-dev rebuild-prod \
         up down restart rebuild clean clean-dev clean-prod all \
-        format lint quality_checks rank_feed verify help
+        format lint quality_checks rank_feed verify help \
+		health health-dev health-prod
 
 
 # =========================================
@@ -117,7 +118,7 @@ all: ## 停止、清理並重啟所有環境
 
 
 # ===== 健康檢查目標 =====
-check-health-dev:
+health-dev:
 	@echo "Checking backend-dev health via API..."
 	@container_id=$$($(COMPOSE_DEV) ps -q backend-dev); \
 	if [ -z "$$container_id" ]; then \
@@ -132,7 +133,7 @@ check-health-dev:
 		exit 1; \
 	fi
 
-check-health-prod:
+health-prod:
 	@echo "Checking backend-dev health via API..."
 	@container_id=$$($(COMPOSE_PROD) ps -q backend-prod); \
 	if [ -z "$$container_id" ]; then \
@@ -148,7 +149,7 @@ check-health-prod:
 	fi
 
 
-check-health: check-health-dev check-health-prod
+health: health-dev health-prod
 
 
 # =========================================
