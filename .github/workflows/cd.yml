@@ -133,13 +133,13 @@ jobs:
               cd $src_DIR
               echo "Updating existing repository..."
               # 只獲取最新的變更
-              git fetch --depth 1 origin $BRANCH_NAME
+              git fetch --depth 1 origin ${{ env.BRANCH_NAME }}
               git reset --hard FETCH_HEAD
               git clean -fd
             else
               echo "Cloning repository..."
               # 淺層克隆
-              git clone --depth 1 --branch $BRANCH_NAME \
+              git clone --depth 1 --branch ${{ env.BRANCH_NAME }} \
                 https://${{ secrets.GIT_HUB_USERNAME }}:${{ secrets.GIT_HUB_ACCESS_TOKEN }}@github.com/${{ github.repository }}.git \
                 $src_DIR
               cd $src_DIR
