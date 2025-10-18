@@ -1,6 +1,8 @@
 import logging
 from contextlib import contextmanager
 from typing import Generator, Optional
+from urllib.parse import quote_plus
+
 
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Engine
@@ -25,12 +27,19 @@ class PostgreSQLDatabase(BaseDatabase):
         """Initialize the database connection."""
         try:
             # Log connection attempt
+            db_password = quote_plus(self.config.db_password)
+
+            db_url = (
+                f"postgresql+psycopg2://{self.config.db_user}:{db_password}"
+                f"@{self.config.db_host}:{self.config.db_port}/{self.config.db_name}"
+            )
+
             logger.info(
-                f"Attempting to connect to PostgreSQL at: {self.config.database_url.split('@')[1] if '@' in self.config.database_url else 'localhost'}"
+                f"Attempting to connect to PostgreSQL at: {db_url.split('@')[1] if '@' in db_url else 'localhost'}"
             )
 
             self.engine = create_engine(
-                self.config.database_url,
+                db_url,
                 echo=self.config.echo_sql,
                 pool_size=self.config.pool_size,
                 max_overflow=self.config.max_overflow,

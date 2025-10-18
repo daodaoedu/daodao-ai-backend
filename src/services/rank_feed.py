@@ -41,7 +41,14 @@ def get_feed(
         types = ["idea", "practice", "project"]
 
     # db_config = db_config or {}
-    conn = psycopg2.connect(get_settings().postgresql.database_url)
+    db_config = get_settings().postgresql
+    conn = psycopg2.connect(
+        user=db_config.db_user,
+        password=db_config.db_password,
+        host=db_config.db_host,
+        port=db_config.db_port,
+        dbname=db_config.db_name,
+    )
     cur = conn.cursor()
 
     # SQL 片段動態生成
