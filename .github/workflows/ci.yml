@@ -1,66 +1,61 @@
 name: Continuous Integration
 
-# ===== 並發控制設定 =====
-# 目的：防止同一分支的多個 CI 檢查同時執行，避免資源浪費
-# group: 針對 PR 使用 head_ref，其他情況使用 ref
-# cancel-in-progress: 當新的 CI 檢查觸發時，自動取消舊的檢查
-# 優點：節省 CI 資源、加快回饋速度、避免過時的檢查結果
-# =======================
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
-# ===== 觸發條件設定 =====
-# 1. pull_request：當向 main 或 dev 分支提交 PR 時觸發
-#    - 確保代碼合併前通過品質檢查
-#    - 支援 main 和 dev 分支的不同環境需求
-# 2. workflow_call：被其他 workflow（如 CD）調用時執行
-#    - 提供 generated-files-artifact 輸出供 CD 使用
-#    - 實現 CI/CD 流程的模組化設計
-# 3. workflow_dispatch：手動觸發選項
-#    - 調試用途或特殊情況下的獨立 CI 檢查
-# =======================
 on:
-  # 只在 PR 時執行獨立的 CI 檢查
   pull_request:
     branches:
       - main
       - dev
-  # 手動觸發 CI 檢查
   workflow_dispatch:
 
-
 jobs:
-  format-check:
+  setup-env:
     runs-on: ubuntu-latest
+    outputs:
+      python-path: ${{ steps.python-setup.outputs.python-path }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Set up Python 3.12
+        id: python-setup
         uses: actions/setup-python@v4
         with:
           python-version: 3.12
 
-      - name: Install format tools
-        run: pip install "ruff==0.14.1" "black==25.9"
+      - name: Install dev dependencies
+        run: |
+          python -m venv .venv
+          . .venv/bin/activate
+          pip install --upgrade pip
+          pip install black==25.9 ruff==0.14.1 pylint==4.0.1 bandit==1.8.6
+          pip install -r requirements.txt || true
+
+  format-check:
+    needs: setup-env
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Activate virtualenv
+        run: . .venv/bin/activate
 
       - name: Run code format check
         run: make check
 
   static-analysis:
+    needs: setup-env
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.12
-
-      - name: Install lint tools
-        run: pip install "pylint==4.0.1" "bandit==1.8.6"
+      - name: Activate virtualenv
+        run: . .venv/bin/activate
 
       - name: Run static analysis
         run: make lint
