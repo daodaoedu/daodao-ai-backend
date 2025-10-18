@@ -84,7 +84,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     needs: [build]
-    if: always()
+    if: ${{ always() && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
     environment: ${{ needs.build.outputs.image-tag == 'prod' && 'production' || 'development' }}
     timeout-minutes: 15
     steps:
@@ -124,6 +124,7 @@ jobs:
             export DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}
             export IMAGE_TAG=${{ env.IMAGE_TAG }}
             export COMMIT_SHA=${{ env.COMMIT_SHA }}
+            export BRANCH_NAME: ${{ env.BRANCH_NAME }}
 
             echo "=== Starting deployment for $src_ENV environment ==="
 
@@ -132,13 +133,13 @@ jobs:
               cd $src_DIR
               echo "Updating existing repository..."
               # 只獲取最新的變更
-              git fetch --depth 1 origin ${{ env.BRANCH_NAME }}
+              git fetch --depth 1 origin $BRANCH_NAME
               git reset --hard FETCH_HEAD
               git clean -fd
             else
               echo "Cloning repository..."
               # 淺層克隆
-              git clone --depth 1 --branch ${{ env.BRANCH_NAME }} \
+              git clone --depth 1 --branch $BRANCH_NAME \
                 https://${{ secrets.GIT_HUB_USERNAME }}:${{ secrets.GIT_HUB_ACCESS_TOKEN }}@github.com/${{ github.repository }}.git \
                 $src_DIR
               cd $src_DIR
