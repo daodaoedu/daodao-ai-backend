@@ -23,7 +23,9 @@ def recommendation_feed(
     request: Request,
     session: SessionDep,  # ✅ FastAPI 會自動從 get_db_session() 拿 session
     # limit: int = Query(100, description="最多取得幾筆 feed"),
-    after_id: Optional[int] = Query(None, description="上一次最後一筆的 id，作為 cursor"),
+    after_id: Optional[int] = Query(
+        None, description="上一次最後一筆的 id，作為 cursor"
+    ),
     page_size: int = Query(20, description="每頁抓幾筆"),
     type: Optional[str] = Query(None, description="要抓哪些類型的 feed"),
 ):

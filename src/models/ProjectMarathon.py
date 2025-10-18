@@ -43,4 +43,6 @@ class ProjectMarathon(Base):
 
     feedback = Column(Text, comment="評審意見或備註")
     created_at = Column(TIMESTAMP, default="now()", comment="建立時間")
-    updated_at = Column(TIMESTAMP, default="now()", onupdate="now()", comment="更新時間")
+    updated_at = Column(
+        TIMESTAMP, default="now()", onupdate="now()", comment="更新時間"
+    )

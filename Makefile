@@ -2,6 +2,12 @@
 # 🧱 基本設定
 # =========================================
 PLATFORM ?= linux/amd64
+PYTHON  := .venv/bin/python
+BLACK   := $(PYTHON) -m black
+RUFF    := $(PYTHON) -m ruff
+PYLINT  := $(PYTHON) -m pylint
+BANDIT  := $(PYTHON) -m bandit
+
 
 -include .env
 
@@ -113,18 +119,18 @@ quality_checks: format lint ## 一鍵品質檢查（format + lint）
 
 
 format: ## 格式化程式碼 (isort + black)
-	ruff format $(PY_DIRS) || true
-	black $(PY_DIRS)
+	$(RUFF) format $(PY_DIRS) || true
+	$(BLACK) $(PY_DIRS)
 
 
 check: ## 檢查程式碼格式 (不修改)
-	black --check $(PY_DIRS)
-	ruff check $(PY_DIRS)
+	$(BLACK) --check $(PY_DIRS)
+	$(RUFF) check $(PY_DIRS)
 
 
 lint: ## 靜態檢查 (pylint + bandit)
-	pylint --rcfile=.pylintrc $(PY_DIRS) || true
-	bandit -r $(PY_DIRS) || true
+	$(PYLINT) --rcfile=.pylintrc $(PY_DIRS) || true
+	$(BANDIT) -r $(PY_DIRS) || true
 
 # =========================================
 # 🧪 測試與工具

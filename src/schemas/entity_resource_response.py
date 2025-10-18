@@ -33,9 +33,7 @@ class BasePost(BaseModel):
     type: str  # idea / practice / project
     title: Optional[str]
     content: Optional[str]
-    tags: List[
-        str
-    ] = (
+    tags: List[str] = (
         []
     )  # ideas not tags so far, practices leverage custom_content_type, project leverage strategy, motivation, outcome
     user: UserBasicInfo

@@ -140,5 +140,7 @@ class User(Base):
             "created_at": self.created_at,
             "updated_by": self.updated_by,
             "updated_at": self.updated_at,
-            "identities": [position.name for position in self.identities],  # 提取身份名稱
+            "identities": [
+                position.name for position in self.identities
+            ],  # 提取身份名稱
         }

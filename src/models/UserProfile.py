@@ -26,7 +26,9 @@ class UserProfile(Base):
     bio = Column(Text)
     skills = Column(ARRAY(Text))  # 用 TEXT[] 陣列類型，根據 PostgreSQL 需要進行處理
     interests = Column(ARRAY(Text))  # 用 TEXT[] 陣列類型，根據 PostgreSQL 需要進行處理
-    learning_needs = Column(ARRAY(Text))  # 用 TEXT[] 陣列類型，根據 PostgreSQL 需要進行處理
+    learning_needs = Column(
+        ARRAY(Text)
+    )  # 用 TEXT[] 陣列類型，根據 PostgreSQL 需要進行處理
     contact_info = Column(JSONB)
     is_public = Column(Boolean, default=True)
     created_at = Column(TIMESTAMP, server_default=func.now())

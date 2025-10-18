@@ -61,9 +61,13 @@ class Practice(Base):
         comment="每日目標類型",
     )
 
-    daily_goal_time_minutes = Column(Integer, nullable=True, comment="每日目標時間（分鐘）")
+    daily_goal_time_minutes = Column(
+        Integer, nullable=True, comment="每日目標時間（分鐘）"
+    )
     daily_goal_amount = Column(Integer, nullable=True, comment="每日目標數量")
-    daily_goal_unit = Column(String(10), nullable=True, comment="每日目標單位（頁、章節等）")
+    daily_goal_unit = Column(
+        String(10), nullable=True, comment="每日目標單位（頁、章節等）"
+    )
 
     practice_action = Column(Text, nullable=True, comment="練習行動描述")
 

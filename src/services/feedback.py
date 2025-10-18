@@ -61,16 +61,16 @@ def prepare_feedback_context(db: Session, req: GenerateFeedbackRequest) -> str:
                 outcome_section += f"  圖片：{', '.join(o.image_urls)}\n"
             if o.video_urls:
                 outcome_section += f"  影片：{', '.join(o.video_urls)}\n"
-            outcome_section += (
-                f"  可見性：{o.visibility}  建立：{o.created_at}  更新：{o.updated_at}\n"
-            )
+            outcome_section += f"  可見性：{o.visibility}  建立：{o.created_at}  更新：{o.updated_at}\n"
     else:
         outcome_section = "\n\n📒 學習成果紀錄：無\n"
 
     # 教練風格與思考方法說明
     style_str = req.style or "未指定"
     thinking_method_str = req.thinking_method or "未指定"
-    style_section = f"\n【指定教練風格】：{style_str}\n【指定思考方法】：{thinking_method_str}\n"
+    style_section = (
+        f"\n【指定教練風格】：{style_str}\n【指定思考方法】：{thinking_method_str}\n"
+    )
 
     if outcomes:
         outcome_section = "\n\n📒 學習成果紀錄：\n"
@@ -80,16 +80,16 @@ def prepare_feedback_context(db: Session, req: GenerateFeedbackRequest) -> str:
                 outcome_section += f"  圖片：{', '.join(o.image_urls)}\n"
             if o.video_urls:
                 outcome_section += f"  影片：{', '.join(o.video_urls)}\n"
-            outcome_section += (
-                f"  可見性：{o.visibility}  建立：{o.created_at}  更新：{o.updated_at}\n"
-            )
+            outcome_section += f"  可見性：{o.visibility}  建立：{o.created_at}  更新：{o.updated_at}\n"
     else:
         outcome_section = "\n\n📒 學習成果紀錄：無\n"
 
     # 教練風格與思考方法說明
     style_str = req.style or "未指定"
     thinking_method_str = req.thinking_method or "未指定"
-    style_section = f"\n【指定教練風格】：{style_str}\n【指定思考方法】：{thinking_method_str}\n"
+    style_section = (
+        f"\n【指定教練風格】：{style_str}\n【指定思考方法】：{thinking_method_str}\n"
+    )
 
     builder = RAGPromptBuilder()
     prompt = builder.create_rag_prompt(

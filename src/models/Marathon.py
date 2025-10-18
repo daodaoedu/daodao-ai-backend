@@ -45,4 +45,6 @@ class Marathon(Base):
     is_public = Column(Boolean, default=False, comment="是否公開")
     created_by = Column(Integer, ForeignKey("users.id"), comment="主辦者 (可選)")
     created_at = Column(TIMESTAMP, default="now()", comment="建立時間")
-    updated_at = Column(TIMESTAMP, default="now()", onupdate="now()", comment="更新時間")
+    updated_at = Column(
+        TIMESTAMP, default="now()", onupdate="now()", comment="更新時間"
+    )
