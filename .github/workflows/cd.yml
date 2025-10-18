@@ -141,15 +141,36 @@ jobs:
               cd $src_DIR
             fi
 
-            # # 檢查環境文件
-            # if [ ! -f .env.${src_ENV} ] && [ -f .env.${src_ENV}_temp ]; then
-            #   cp .env.${src_ENV}_temp .env.${src_ENV}
-            #   echo "Created .env.${src_ENV} from template"
-            # fi
+            # 檢查環境文件
+            if [ ! -f .env.${src_ENV} ] && [ -f .env.${src_ENV}.sample ]; then
+              cp .env.${src_ENV}.sample .env.${src_ENV}
+              echo "Created .env.${src_ENV} from .sample"
+            fi
 
-            # # 載入環境變數
-            # set -o allexport && source .env.${src_ENV} && set +o allexport
-            # echo "Environment variables loaded for $src_ENV"
+            # 載入環境變數，替換敏感環境變數 (來自 GitHub Secrets)
+            # 替換敏感環境變數 (來自 GitHub Secrets)
+            declare -A SECRETS_MAP=(
+              ["JWT_SECURITY"]="${{ secrets.JWT_SECURITY }}"
+              ["COLLECTION_NAME"]="${{ secrets.COLLECTION_NAME }}"
+              ["POSTGRES_DB_USER"]="${{ secrets.POSTGRES_DB_USER }}"
+              ["POSTGRES_DB_PASSWORD"]="${{ secrets.POSTGRES_DB_PASSWORD }}"
+              ["POSTGRES_DB_NAME"]="${{ secrets.POSTGRES_DB_NAME }}"
+              ["CLICKHOUSE_USER"]="${{ secrets.CLICKHOUSE_USER }}"
+              ["CLICKHOUSE_DATABASE"]="${{ secrets.CLICKHOUSE_DATABASE }}"
+              ["API_SECRET_KEY"]="${{ secrets.API_SECRET_KEY }}"
+            )
+
+            for key in "${!SECRETS_MAP[@]}"; do
+              value="${SECRETS_MAP[$key]}"
+              if [ -n "$value" ]; then
+                # 用 sed 安全替換，處理特殊字元
+                sed -i "s|^$key=.*|$key=$value|" "$ENV_FILE"
+              fi
+            done
+
+            echo "Generated .env.${src_ENV} with updated values"
+
+
 
             # # ===== 藍綠部署策略實施 =====
             # # 策略說明：
