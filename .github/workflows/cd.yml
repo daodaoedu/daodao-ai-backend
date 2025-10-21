@@ -207,7 +207,9 @@ jobs:
             SLEEP_SECONDS=5
 
             for i in $(seq 1 $MAX_ATTEMPTS); do
-                status=$(docker exec $container_name sh -c "curl -s http://localhost:8000/api/v1/health | jq -r '.status'")
+                # status=$(docker exec $container_name sh -c "curl -s http://localhost:8000/api/v1/health | jq -r '.status'")
+                status=$(docker exec $container_name python3 -c "import sys, json, urllib.request as u; print(json.load(u.urlopen('http://localhost:8000/api/v1/health'))['status'])")
+
 
                 if [ "$status" = "ok" ]; then
                     echo "✅ $container_name status OK"
@@ -223,6 +225,18 @@ jobs:
                     sleep $SLEEP_SECONDS
                 fi
             done
+
+            echo "=== Checking Docker Containers ==="
+            docker ps -a --format "table {{.ID}}\t{{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"
+
+            echo "=== Checking Docker Images ==="
+            docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.Size}}\t{{.CreatedAt}}"
+
+            echo "=== Checking System Resources ==="
+            echo "CPU Load:" && uptime
+            echo "Memory Usage:" && free -h
+            echo "Disk Usage:" && df -h /
+            
           ENDSSH
       - name: Verify Deployment
         env:
