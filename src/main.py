@@ -66,8 +66,10 @@ app = FastAPI(
     title="DAODAO AI backend API",
     version="1.0.0",
     servers=[
-        {"url": "http://127.0.0.1:8002", "description": "dev"},
-        {"url": "http://127.0.0.1:8001", "description": "Production"},
+        {"url": "http://127.0.0.1:8002", "description": "local dev"},
+        {"url": "http://127.0.0.1:8001", "description": "local Production"},
+        {"url": "server-ai.daoedu.tw", "description": "dev"},
+        {"url": "dao-server-ai.daoedu.tw", "description": "Production"},
     ],
     lifespan=lifespan,
 )
@@ -83,4 +85,4 @@ app.include_router(ping.router, prefix="/api", tags=["Health"])
 
 @app.get("/")
 async def root():
-    return {"message": "Welcome to my FastAPI project!"}
+    return {"message": "Welcome to daodao AI backend API application!"}
