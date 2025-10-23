@@ -184,10 +184,14 @@ jobs:
                 echo "⚠️ No old containers found or cleanup failed, continuing..."
             fi
 
-            # ===== 滾動更新部署 =====
-            echo "=== Rolling Update Deployment ==="
-            docker rmi daodao-ai-backend:latest
-            echo "remove old daodao ai backend image"
+            # 檢查 image 是否存在再刪除
+            if docker image inspect daodao-ai-backend:latest > /dev/null 2>&1; then
+                docker rmi daodao-ai-backend:latest
+                echo "✅ Removed old daodao-ai-backend:latest image"
+            else
+                echo "⚠️ No existing daodao-ai-backend:latest image found, skipping removal"
+            fi
+
             sleep 3
 
             # 啟動新容器
