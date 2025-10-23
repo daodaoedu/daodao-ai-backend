@@ -187,8 +187,8 @@ jobs:
             # ===== 滾動更新部署 =====
             echo "=== Rolling Update Deployment ==="
             # 啟動新容器
-            if make up-${src_ENV}; then
-                echo "✅ New container started, verifying health..."
+            if make rebuild-${src_ENV}; then
+                echo "✅ New image build and container started, verifying health..."
             else
                 echo "❌ Failed to start new container"
                 echo "=== Checking container logs ==="
