@@ -186,9 +186,13 @@ jobs:
 
             # ===== 滾動更新部署 =====
             echo "=== Rolling Update Deployment ==="
+            docker rmi daodao-ai-backend:latest
+            echo "remove old daodao ai backend image"
+            sleep 3
+
             # 啟動新容器
             if make up-${src_ENV}; then
-                echo "✅ New container started, verifying health..."
+                echo "✅ New image build and container started, verifying health..."
             else
                 echo "❌ Failed to start new container"
                 echo "=== Checking container logs ==="
