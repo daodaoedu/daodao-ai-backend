@@ -50,11 +50,6 @@ dependencies = [
     "sentence-transformers==5.1.0",
     "clickhouse-connect",
     "clickhouse_driver",
-    "ruff>=0.14.1",
-    "isort>=7.0.0",
-    "black>=25.9.0",
-    "pylint>=4.0.1",
-    "bandit>=1.8.6",
 ]
 
 # === 測試依賴 ===
@@ -62,7 +57,13 @@ dependencies = [
 dev-dependencies = [
     "pytest",
     "pytest-asyncio",
-    "httpx"
+    "httpx",
+    # 程式碼品質工具（從 dependencies 移過來）
+    "ruff>=0.14.1",
+    "isort>=7.0.0",
+    "black>=25.9.0",
+    "pylint>=4.0.1",
+    "bandit>=1.8.6",
 ]
 
 

@@ -1,12 +1,45 @@
+# Python 快取
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-*.log
-*.sqlite3
-.env
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# 虛擬環境
+.venv/
+venv/
+env/
+
+# IDE 設定
 .vscode/
+.idea/
+*.swp
+*.swo
+
+# 測試與文件
 tests/
 docs/
-.venv/
-.idea/
+*.md
+!README.md
+
+# 日誌與資料
+*.log
+*.sqlite3
+*.db
+
+# 環境設定
+.env
+.env.*
+!.env.*.sample
+
+# Git
+.git/
+.github/
+.gitignore
+
+# 暫存檔案
+*.tmp
+.DS_Store
+*.backup
