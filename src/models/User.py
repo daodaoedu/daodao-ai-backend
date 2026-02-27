@@ -115,5 +115,15 @@ class User(Base):
 
     practices = relationship("Practice", back_populates="user", cascade="all, delete")
 
+    comments = relationship("Comment", back_populates="user")
+    created_entity_resources = relationship("EntityResource", back_populates="creator")
+    created_tags = relationship("EntityTag", back_populates="creator")
+    groups_created = relationship("Group", back_populates="creator")
+
+    user_join_group = relationship("UserJoinGroup", back_populates="user")
+    profile = relationship(
+        "UserProfile", back_populates="user", cascade="all, delete-orphan"
+    )
+
     def __repr__(self):
         return f"<User id={self.id} nickname={self.nickname}>"

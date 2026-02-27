@@ -35,6 +35,7 @@ from .UserJoinGroup import UserJoinGroup
 from .UserPosition import UserPosition
 from .UserProfile import UserProfile
 from .UserProject import UserProject
+from .Category import Category
 
 #
 

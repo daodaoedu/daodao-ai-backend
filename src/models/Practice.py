@@ -12,6 +12,7 @@ from sqlalchemy import (
     CheckConstraint,
     func,
 )
+from sqlalchemy.orm import relationship
 
 
 from src.models.base import Base
@@ -83,6 +84,8 @@ class Practice(Base):
     updated_at = Column(TIMESTAMP(timezone=True), onupdate=func.now())
 
     deleted_at = Column(TIMESTAMP(timezone=True))
+
+    user = relationship("User", back_populates="practices")
 
     # ===== Constraints =====
     __table_args__ = (

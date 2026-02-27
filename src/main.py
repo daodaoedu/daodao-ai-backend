@@ -11,6 +11,11 @@ from src.middleware.middleware import setup_middlewares
 from src.routers import ping, recommendation, user
 from src.services.cache.factory import make_cache_client
 
+from sqlalchemy.orm import configure_mappers
+
+configure_mappers()
+
+
 # from src.services.clickhouse.factory import make_clickhouse_client
 # from src.services.llm.factory import make_llm_client
 # from src.services.qdrant.factory import make_qdrant_client

@@ -38,6 +38,7 @@ def get_my_practices(
         "newest", description="newest | oldest | most_liked | recommended"
     ),
 ):
+    logger.info(f"get_my_practices: {current_user}")
     # 會有filter, search, sort等功能
 
     # filter: 依照分類、標籤、狀態等條件篩選實踐貼文
@@ -70,6 +71,7 @@ def get_my_practices(
 
             query = query.filter(or_(*conditions))
 
+    logger.info(f"After search, query: {str(query)}")
     # ===== Filter =====
     if tags:
         for tag in tags:
@@ -83,6 +85,8 @@ def get_my_practices(
 
     if status:
         query = query.filter(Practice.status == status)
+
+    logger.info(f"After filter, query: {str(query)}")
     # ===== Sort =====
     if sort_by == "newest_update":
         query = query.order_by(
@@ -97,3 +101,4 @@ def get_my_practices(
 
     elif sort_by == "recommended":
         query = query.order_by(Practice.score.desc())
+    logger.info(f"After sort, query: {str(query)}")
