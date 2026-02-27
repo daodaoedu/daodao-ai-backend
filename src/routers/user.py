@@ -44,23 +44,39 @@ def get_my_practices(
     ),
 ):
     if current_user:
-        ret = db.query(User).filter(User.external_id == current_user).first()
-        logger.info(
-            f"get_my_practices by user: {ret.nickname} {ret.id} ({current_user})"
-        )
+        user = db.query(User).filter(User.external_id == current_user).first()
 
-        practice_subq = (
-            db.query(Practice.id).filter(Practice.user_id == ret.id).subquery()
-        )
+        if not user:
+            return []
 
-        tag_ids = (
-            db.query(EntityTag.tag_id).filter(
-                EntityTag.entity_type == "practice",
-                EntityTag.entity_id.in_(practice_subq),
+        # ⭐ 一次查 Practice + EntityTag
+        rows = (
+            db.query(Practice, EntityTag.tag_id)
+            .outerjoin(
+                EntityTag,
+                (EntityTag.entity_id == Practice.id)
+                & (EntityTag.entity_type == "practice"),
             )
-        ).all()
-        logger.info(f"get_my_practices tag_ids: {tag_ids}")
+            .filter(Practice.user_id == user.id)
+            .all()
+        )
 
+        # ⭐ 組裝結果
+        practice_map = {}
+
+        for practice, tag_id in rows:
+            if practice.id not in practice_map:
+                practice_map[practice.id] = {**orm_to_dict(practice), "tags": set()}
+
+            if tag_id:
+                practice_map[practice.id]["tags"].add(tag_id)
+
+        results = list(practice_map.values())
+
+        # set → list
+        for r in results:
+            r["tags"] = list(r["tags"])
+            logger.info(f"practice tags: {r['tags']}")
     # 會有filter, search, sort等功能
 
     # filter: 依照分類、標籤、狀態等條件篩選實踐貼文
