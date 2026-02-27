@@ -25,6 +25,14 @@ services:
       - .env.dev
     volumes:
       - ./src:/app/src
+    command: >
+      uvicorn src.main:app
+      --host 0.0.0.0
+      --port 8000
+      --reload
+      --reload-dir src
+      --reload-include "*.py"
+      --workers 1
 
   redis-dev:
     image: redis:alpine

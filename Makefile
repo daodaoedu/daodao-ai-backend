@@ -62,21 +62,29 @@ down-prod: ## 停止並移除 Prod 容器與 Volume
 	$(COMPOSE_PROD) --profile prod down
 
 rebuild-dev: ## 重建 Dev 環境
-	$(COMPOSE_DEV) --profile dev down --volumes
+	$(COMPOSE_DEV) --profile dev down --volumes --remove-orphans
 	@echo "🔄 Rebuilding Dev environment..."
 	# 自動拉取官方 image
 	@docker image inspect redis:alpine > /dev/null 2>&1 || docker pull redis:alpine
 
 
-	$(COMPOSE_DEV) --profile dev up -d --build
+	# 強制不使用 cache rebuild
+	$(COMPOSE_DEV) --profile dev build --no-cache
+
+	# 啟動 dev container
+	$(COMPOSE_DEV) --profile dev up -d
 
 
 rebuild-prod:  ## 重建 Prod 環境
-	$(COMPOSE_PROD) --profile prod down --volumes
+	$(COMPOSE_PROD) --profile prod down --volumes --remove-orphans
 	@echo "🔄 Rebuilding Prod environment..."
 	@docker image inspect redis:alpine > /dev/null 2>&1 || docker pull redis:alpine
 
-	$(COMPOSE_PROD) --profile prod up -d --build
+	# 強制不使用 cache rebuild
+	$(COMPOSE_DEV) --profile prod build --no-cache
+
+	# 啟動 dev container
+	$(COMPOSE_DEV) --profile prod up -d
 
 
 up: up-dev up-prod ## 同時啟動 Dev 與 Prod 環境

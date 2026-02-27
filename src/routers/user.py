@@ -109,7 +109,7 @@ def get_my_practices(
     results = [orm_to_dict(p) for p in paginated_posts]
 
     for r in results:
-        logger.info(f"get_my_practices result item: {r.get('title')}", end="\n\n")
+        logger.info(f"get_my_practices result item: {r.get('title')}\n")
     next_cursor = results[-1].get("id") if results else None
     has_next = len(results) == limit
     logger.info(f"recommendation_feed next_cursor: {next_cursor}")
