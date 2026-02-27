@@ -1,3 +1,5 @@
+from sqlalchemy import or_
+
 from fastapi import APIRouter, Query
 from typing import Optional, List
 
@@ -5,9 +7,9 @@ from typing import Optional, List
 from src.logger import AppLogger
 from src.models.Practice import Practice
 from src.response_template import api_response_decorator
-from src.schemas.pageInfo import APIResponse
+from src.schemas.pageInfo import APIResponse, CursorPaginationInfo
 from src.dependencies import SessionDep, UserDep
-
+from src.utils.orm_to_dict import orm_to_dict
 
 logger = AppLogger(__name__).get_logger()
 
@@ -24,6 +26,9 @@ def get_my_practices(
     current_user: UserDep,
     # pagination
     limit: int = Query(20, ge=1, le=100),
+    after_id: Optional[int] = Query(
+        None, description="上一次最後一筆的 id，作為 cursor"
+    ),
     offset: int = Query(0, ge=0),
     # search
     keyword: Optional[str] = Query(None, description="搜尋標題或內容"),
@@ -63,19 +68,15 @@ def get_my_practices(
         if "resource" in search_fields:
             conditions.append(Practice.resources.cast(str).ilike(f"%{keyword}%"))
 
-        # 🔴 隱私保護：排除延遲分享心得
-        query = query.filter(not Practice.is_delayed_share)
-
         if conditions:
-            from sqlalchemy import or_
-
             query = query.filter(or_(*conditions))
 
     logger.info(f"After search, query: {str(query)}")
     # ===== Filter =====
     if tags:
         for tag in tags:
-            query = query.filter(Practice.tags.cast(str).ilike(f"%{tag}%"))
+            #     query = query.filter(Practice.tags.cast(str).ilike(f"%{tag}%"))
+            logger.info(f"Filtering by tag: {tag}")
 
     if duration_min is not None:
         query = query.filter(Practice.duration_days >= duration_min)
@@ -101,4 +102,31 @@ def get_my_practices(
 
     elif sort_by == "recommended":
         query = query.order_by(Practice.score.desc())
-    logger.info(f"After sort, query: {str(query)}")
+    logger.info("After sort")
+
+    # Cursor pagination info
+    paginated_posts = query.all()
+    results = [orm_to_dict(p) for p in paginated_posts]
+
+    for r in results:
+        logger.info(f"get_my_practices result item: {r.get('title')}", end="\n\n")
+    next_cursor = results[-1].get("id") if results else None
+    has_next = len(results) == limit
+    logger.info(f"recommendation_feed next_cursor: {next_cursor}")
+    logger.info(f"get_my_practices result count: {len(results)}")
+
+    pagination = CursorPaginationInfo(
+        cursors={
+            "start": str(after_id) if after_id else None,
+            "end": str(next_cursor) if next_cursor else None,
+        },
+        hasPrev=after_id is not None,
+        hasNext=has_next,
+        count=len(results),
+    )
+
+    return {
+        "data": results,
+        "pagination": pagination,
+        "cache_hit": False,
+    }
