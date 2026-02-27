@@ -1,113 +1,96 @@
-from uuid import uuid4
-
 from sqlalchemy import (
-    DECIMAL,
-    Boolean,
-    CheckConstraint,
     Column,
-    Date,
-    DateTime,
-    ForeignKey,
     Integer,
     String,
     Text,
+    Boolean,
+    Date,
+    DECIMAL,
+    TIMESTAMP,
+    ForeignKey,
+    ARRAY,
+    CheckConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
+
 
 from src.models.base import Base
 
 # =========================================================
 # Practices 模型
 # =========================================================
+from enum import Enum
+
+
+class PracticeStatus(str, Enum):
+    DRAFT = "draft"
+    NOT_STARTED = "not_started"
+    ACTIVE = "active"
+    COMPLETED = "completed"
+    ARCHIVED = "archived"
 
 
 class Practice(Base):
     __tablename__ = "practices"
 
-    id = Column(Integer, primary_key=True, index=True, comment="練習記錄ID")
-    external_id = Column(
-        UUID(as_uuid=True), unique=True, default=uuid4, comment="外部唯一識別碼"
-    )
+    id = Column(Integer, primary_key=True)
+
+    external_id = Column(String, unique=True, server_default=func.gen_random_uuid())
 
     user_id = Column(
-        Integer,
-        ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False,
-        comment="練習者ID",
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
 
-    title = Column(String(100), nullable=False, comment="練習標題")
-
-    content_type = Column(
-        String(20),
-        nullable=False,
-        default="book",
-        comment="內容類型",
+    template_id = Column(
+        Integer, ForeignKey("practice_templates.id", ondelete="SET NULL"), nullable=True
     )
 
-    custom_content_type = Column(String(50), nullable=True, comment="自定義內容類型")
+    title = Column(String(100), nullable=False)
 
-    total_amount = Column(Integer, nullable=False, comment="總目標數量")
-    current_progress = Column(DECIMAL(10, 2), default=0, comment="目前進度")
+    practice_action = Column(Text)
 
-    start_date = Column(Date, nullable=True, comment="開始日期")
+    # ===== 時間 =====
+    start_date = Column(Date)
+    duration_days = Column(Integer)
 
-    daily_goal_type = Column(
-        String(20),
-        nullable=False,
-        default="time",
-        comment="每日目標類型",
-    )
+    end_date = Column(Date)
 
-    daily_goal_time_minutes = Column(
-        Integer, nullable=True, comment="每日目標時間（分鐘）"
-    )
-    daily_goal_amount = Column(Integer, nullable=True, comment="每日目標數量")
-    daily_goal_unit = Column(
-        String(10), nullable=True, comment="每日目標單位（頁、章節等）"
-    )
+    # ===== session =====
+    session_duration_minutes = Column(Integer)
 
-    practice_action = Column(Text, nullable=True, comment="練習行動描述")
+    frequency_min_days = Column(Integer)
+    frequency_max_days = Column(Integer)
 
-    status = Column(String(20), nullable=False, default="activate", comment="狀態")
+    practice_time_periods = Column(ARRAY(String))
 
-    has_resources = Column(Boolean, default=False, comment="是否有關聯資源")
+    other_context = Column(Text)
 
-    streak = Column(Integer, default=0, comment="目前連續紀錄")
-    max_streak = Column(Integer, default=0, comment="最高連續紀錄")
+    # ===== 狀態 =====
+    status = Column(String(20), default=PracticeStatus.DRAFT.value)
 
-    last_checkin_date = Column(Date, nullable=True, comment="最後一次打卡日期")
+    has_resources = Column(Boolean, default=False)
 
-    created_at = Column(
-        DateTime(timezone=True), server_default=func.now(), comment="建立時間"
-    )
-    updated_at = Column(DateTime(timezone=True), nullable=True, comment="更新時間")
-    deleted_at = Column(DateTime(timezone=True), nullable=True, comment="軟刪除時間")
+    theme_color = Column(String(20))
 
-    # Relationship
-    user = relationship("User", back_populates="practices")
+    # ===== progress =====
+    progress_percentage = Column(DECIMAL(5, 2), default=0)
 
-    # Constraints
+    first_checkin_at = Column(TIMESTAMP(timezone=True))
+
+    # ===== timestamps =====
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+    updated_at = Column(TIMESTAMP(timezone=True), onupdate=func.now())
+
+    deleted_at = Column(TIMESTAMP(timezone=True))
+
+    # ===== Constraints =====
     __table_args__ = (
-        CheckConstraint("total_amount > 0", name="check_total_amount_positive"),
+        CheckConstraint("duration_days IN (7,14,21,30)", name="chk_duration_days"),
         CheckConstraint(
-            "daily_goal_time_minutes BETWEEN 5 AND 240", name="check_goal_time_range"
+            "session_duration_minutes IN (15,30,45,60)", name="chk_session_duration"
         ),
         CheckConstraint(
-            "daily_goal_amount BETWEEN 1 AND 100", name="check_goal_amount_range"
-        ),
-        CheckConstraint(
-            "status IN ('practice','idea','project')",
-            name="ck_status",
-        ),
-        CheckConstraint(
-            "content_type IN ('book','video','articles','podcast','course','custom')",
-            name="ck_content_type",
-        ),
-        CheckConstraint(
-            "daily_goal_type IN ('active','paused','completed', 'archived')",
-            name="ck_daily_goal_type",
+            "frequency_max_days >= frequency_min_days", name="chk_frequency_days"
         ),
     )

@@ -18,6 +18,11 @@ class Contact(Base):
     discord = Column(String(255), nullable=True)
     line = Column(String(255), nullable=True)
     fb = Column(String(255), nullable=True)
+    threads = Column(String(255), nullable=True)
+    linkedin = Column(String(255), nullable=True)
+    github = Column(String(255), nullable=True)
+    website = Column(String(2048), nullable=True)
+    apple_id = Column(String(255), nullable=True)
 
     # 與 user 關聯
     user = relationship("User", back_populates="contact")

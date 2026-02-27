@@ -87,11 +87,11 @@ def get_clickhouse_client(request: Request) -> ClickHouseClient:
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 
-LLMDep = Annotated[LLMClient, Depends(get_llm_client)]
+# LLMDep = Annotated[LLMClient, Depends(get_llm_client)]
 
-QdrantDep = Annotated[QdrantClient, Depends(get_qdrant_client)]
+# QdrantDep = Annotated[QdrantClient, Depends(get_qdrant_client)]
 CacheDep = Annotated[CacheClient, Depends(get_cache_client)]
-ClickHouseDep = Annotated[ClickHouseClient, Depends(get_clickhouse_client)]
+# ClickHouseDep = Annotated[ClickHouseClient, Depends(get_clickhouse_client)]
 
 DatabaseDep = Annotated[BaseDatabase, Depends(get_database_postgres)]
 SessionDep = Annotated[Session, Depends(get_db_session)]
