@@ -13,7 +13,7 @@ from src.services.llm.client import LLMClient
 from src.services.qdrant.client import QdrantClient
 from src.verify_jwt import verify
 
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
 
 def get_current_user(

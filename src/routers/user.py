@@ -1,10 +1,11 @@
 from sqlalchemy import or_
 
-from fastapi import APIRouter, Query, Depends
+from fastapi import APIRouter, Query
 from typing import Optional, List
-from src.dependencies import SessionDep, get_current_user
+from src.dependencies import SessionDep, UserDep
 from src.logger import AppLogger
 from src.models.User import User
+from src.models.EntityTag import EntityTag
 from src.models.Practice import Practice
 from src.response_template import api_response_decorator
 from src.schemas.pageInfo import APIResponse, CursorPaginationInfo
@@ -22,7 +23,7 @@ router = APIRouter(prefix="/v1/user", tags=["user"])
 @api_response_decorator
 def get_my_practices(
     db: SessionDep,
-    current_user: Optional[str] = Depends(get_current_user),
+    current_user: UserDep,
     # pagination
     limit: int = Query(20, ge=1, le=100),
     after_id: Optional[int] = Query(
@@ -44,7 +45,21 @@ def get_my_practices(
 ):
     if current_user:
         ret = db.query(User).filter(User.external_id == current_user).first()
-        logger.info(f"get_my_practices by user: {ret.nickname} ({current_user})")
+        logger.info(
+            f"get_my_practices by user: {ret.nickname} {ret.id} ({current_user})"
+        )
+
+        practice_subq = (
+            db.query(Practice.id).filter(Practice.user_id == ret.id).subquery()
+        )
+
+        tag_ids = (
+            db.query(EntityTag.tag_id).filter(
+                EntityTag.entity_type == "practice",
+                EntityTag.entity_id.in_(practice_subq),
+            )
+        ).all()
+        logger.info(f"get_my_practices tag_ids: {tag_ids}")
 
     # 會有filter, search, sort等功能
 
