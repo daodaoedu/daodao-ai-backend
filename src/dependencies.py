@@ -1,6 +1,6 @@
-from typing import Annotated, Generator
+from typing import Annotated, Generator, Optional
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
@@ -18,28 +18,29 @@ security = HTTPBearer()
 
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
-) -> str:
+) -> Optional[str]:
     # def get_current_user(authorization: Optional[str] = Header(None)):
 
     """
     FastAPI Dependency: 驗證 JWT 並回傳 payload
     """
-    token = credentials.credentials  # 自動取 token，不用 Bearer 前綴
-    try:
-        decoded = verify(token)  # 這裡可能丟錯誤
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,  # token 無效/過期。
-            detail="Invalid or expired token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    if not decoded:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,  # 有 token，但驗證不通過（可能缺權限）。
-            detail="Could not validate credentials",
-        )
 
-    return decoded.get("_id", "unknown")
+    # ⭐ 無 token → 無痕模式
+    if credentials is None:
+        return None
+
+    token = credentials.credentials
+
+    try:
+        decoded = verify(token)
+
+        if not decoded:
+            return None
+
+        return decoded.get("_id")
+
+    except Exception:
+        return None
 
 
 def get_database(request: Request) -> BaseDatabase:
@@ -95,4 +96,4 @@ CacheDep = Annotated[CacheClient, Depends(get_cache_client)]
 
 DatabaseDep = Annotated[BaseDatabase, Depends(get_database_postgres)]
 SessionDep = Annotated[Session, Depends(get_db_session)]
-UserDep = Annotated[str, Depends(get_current_user)]
+UserDep = Annotated[Optional[str], Depends(get_current_user)]

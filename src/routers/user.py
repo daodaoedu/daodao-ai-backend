@@ -1,14 +1,13 @@
 from sqlalchemy import or_
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Depends
 from typing import Optional, List
-
-
+from src.dependencies import SessionDep, get_current_user
 from src.logger import AppLogger
+from src.models.User import User
 from src.models.Practice import Practice
 from src.response_template import api_response_decorator
 from src.schemas.pageInfo import APIResponse, CursorPaginationInfo
-from src.dependencies import SessionDep, UserDep
 from src.utils.orm_to_dict import orm_to_dict
 
 logger = AppLogger(__name__).get_logger()
@@ -23,7 +22,7 @@ router = APIRouter(prefix="/v1/user", tags=["user"])
 @api_response_decorator
 def get_my_practices(
     db: SessionDep,
-    current_user: UserDep,
+    current_user: Optional[str] = Depends(get_current_user),
     # pagination
     limit: int = Query(20, ge=1, le=100),
     after_id: Optional[int] = Query(
@@ -43,7 +42,10 @@ def get_my_practices(
         "newest", description="newest | oldest | most_liked | recommended"
     ),
 ):
-    logger.info(f"get_my_practices: {current_user}")
+    if current_user:
+        ret = db.query(User).filter(User.external_id == current_user).first()
+        logger.info(f"get_my_practices by user: {ret.nickname} ({current_user})")
+
     # 會有filter, search, sort等功能
 
     # filter: 依照分類、標籤、狀態等條件篩選實踐貼文
@@ -59,19 +61,28 @@ def get_my_practices(
         if "title" in search_fields:
             conditions.append(Practice.title.ilike(f"%{keyword}%"))
 
-        if "action" in search_fields:
-            conditions.append(Practice.actions.cast(str).ilike(f"%{keyword}%"))
+        # if "action" in search_fields:
+        #     conditions.append(Practice.actions.cast(str).ilike(f"%{keyword}%"))
 
         if "tag" in search_fields:
-            conditions.append(Practice.tags.cast(str).ilike(f"%{keyword}%"))
+            # conditions.append(Practice.tags.cast(str).ilike(f"%{keyword}%"))
+            pass  # tags 搜尋尚未實作
 
         if "resource" in search_fields:
-            conditions.append(Practice.resources.cast(str).ilike(f"%{keyword}%"))
+            # conditions.append(Practice.resources.cast(str).ilike(f"%{keyword}%"))
+            pass  # resources 搜尋尚未實作
 
         if conditions:
             query = query.filter(or_(*conditions))
 
-    logger.info(f"After search, query: {str(query)}")
+        logger.info(
+            str(
+                query.filter(or_(*conditions)).statement.compile(
+                    compile_kwargs={"literal_binds": True}
+                )
+            )
+        )
+
     # ===== Filter =====
     if tags:
         for tag in tags:
@@ -98,10 +109,12 @@ def get_my_practices(
         query = query.order_by(Practice.created_at.asc())
 
     elif sort_by == "most_liked":
-        query = query.order_by(Practice.like_count.desc())
+        # query = query.order_by(Practice.like_count.desc())
+        pass  # like_count 尚未實作
 
     elif sort_by == "recommended":
-        query = query.order_by(Practice.score.desc())
+        # query = query.order_by(Practice.score.desc())
+        pass  # recommendation score 尚未實作
     logger.info("After sort")
 
     # Cursor pagination info
