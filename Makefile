@@ -2,7 +2,7 @@
 # 🧱 基本設定
 # =========================================
 PLATFORM ?= linux/amd64
-PYTHON  := .venv/bin/python
+PYTHON  := .venv/bin/python3.12
 BLACK   := $(PYTHON) -m black
 RUFF    := $(PYTHON) -m ruff
 PYLINT  := $(PYTHON) -m pylint

@@ -1,15 +1,11 @@
-from sqlalchemy import or_
-
 from fastapi import APIRouter, Query
 from typing import Optional, List
 from src.dependencies import SessionDep, UserDep
 from src.logger import AppLogger
-from src.models.User import User
-from src.models.EntityTag import EntityTag
-from src.models.Practice import Practice
 from src.response_template import api_response_decorator
 from src.schemas.pageInfo import APIResponse, CursorPaginationInfo
 from src.utils.orm_to_dict import orm_to_dict
+from src.services.practice.practice import PracticeService
 
 logger = AppLogger(__name__).get_logger()
 
@@ -32,7 +28,7 @@ def get_my_practices(
     offset: int = Query(0, ge=0),
     # search
     keyword: Optional[str] = Query(None, description="搜尋標題或內容"),
-    search_fields: List[str] = Query(default=["title", "practice_action"]),
+    search_fields: List[str] = Query(default=["title"]),
     # filter
     tags: Optional[List[str]] = Query(None),
     duration_min: Optional[int] = None,
@@ -40,117 +36,32 @@ def get_my_practices(
     status: Optional[str] = None,
     # sort
     sort_by: str = Query(
-        "newest", description="newest | oldest | most_liked | recommended"
+        "newest_updated",
+        description="newest_updated | oldest_updated | newest_created | oldest_created| recommended",
     ),
 ):
-    if current_user:
-        user = db.query(User).filter(User.external_id == current_user).first()
-
-        if not user:
-            return []
-
-        # ⭐ 一次查 Practice + EntityTag
-        rows = (
-            db.query(Practice, EntityTag.tag_id)
-            .outerjoin(
-                EntityTag,
-                (EntityTag.entity_id == Practice.id)
-                & (EntityTag.entity_type == "practice"),
-            )
-            .filter(Practice.user_id == user.id)
-            .all()
-        )
-
-        # ⭐ 組裝結果
-        practice_map = {}
-
-        for practice, tag_id in rows:
-            if practice.id not in practice_map:
-                practice_map[practice.id] = {**orm_to_dict(practice), "tags": set()}
-
-            if tag_id:
-                practice_map[practice.id]["tags"].add(tag_id)
-
-        results = list(practice_map.values())
-
-        # set → list
-        for r in results:
-            r["tags"] = list(r["tags"])
-            logger.info(f"practice tags: {r['tags']}")
     # 會有filter, search, sort等功能
 
     # filter: 依照分類、標籤、狀態等條件篩選實踐貼文
     # search: 依照關鍵字搜尋實踐貼文的標題或
     # sort: 依據推薦演算法排序，或是使用者選擇的排序方式（例如：最新、最舊、最多讚等）
     # 如果是無痕頁面，會有預設的規則排序。按「最後一次打卡 (Check-in) 時間」或「實踐建立時間」降序排列。
-    query = db.query(Practice)
 
-    # ===== Search =====
-    if keyword:
-        conditions = []
+    practices = PracticeService.get_practices(
+        db=db,
+        user_external_id=current_user,
+        keyword=keyword,
+        search_fields=search_fields,
+        tags=tags,
+        duration_min=duration_min,
+        duration_max=duration_max,
+        status=status,
+        sort_by=sort_by,
+        limit=limit,
+        offset=offset,
+    )
 
-        if "title" in search_fields:
-            conditions.append(Practice.title.ilike(f"%{keyword}%"))
-
-        # if "action" in search_fields:
-        #     conditions.append(Practice.actions.cast(str).ilike(f"%{keyword}%"))
-
-        if "tag" in search_fields:
-            # conditions.append(Practice.tags.cast(str).ilike(f"%{keyword}%"))
-            pass  # tags 搜尋尚未實作
-
-        if "resource" in search_fields:
-            # conditions.append(Practice.resources.cast(str).ilike(f"%{keyword}%"))
-            pass  # resources 搜尋尚未實作
-
-        if conditions:
-            query = query.filter(or_(*conditions))
-
-        logger.info(
-            str(
-                query.filter(or_(*conditions)).statement.compile(
-                    compile_kwargs={"literal_binds": True}
-                )
-            )
-        )
-
-    # ===== Filter =====
-    if tags:
-        for tag in tags:
-            #     query = query.filter(Practice.tags.cast(str).ilike(f"%{tag}%"))
-            logger.info(f"Filtering by tag: {tag}")
-
-    if duration_min is not None:
-        query = query.filter(Practice.duration_days >= duration_min)
-
-    if duration_max is not None:
-        query = query.filter(Practice.duration_days <= duration_max)
-
-    if status:
-        query = query.filter(Practice.status == status)
-
-    logger.info(f"After filter, query: {str(query)}")
-    # ===== Sort =====
-    if sort_by == "newest_update":
-        query = query.order_by(
-            Practice.last_checkin_at.desc().nullslast(), Practice.created_at.desc()
-        )
-
-    elif sort_by == "oldest":
-        query = query.order_by(Practice.created_at.asc())
-
-    elif sort_by == "most_liked":
-        # query = query.order_by(Practice.like_count.desc())
-        pass  # like_count 尚未實作
-
-    elif sort_by == "recommended":
-        # query = query.order_by(Practice.score.desc())
-        pass  # recommendation score 尚未實作
-    logger.info("After sort")
-
-    # Cursor pagination info
-    paginated_posts = query.all()
-    results = [orm_to_dict(p) for p in paginated_posts]
+    results = [orm_to_dict(p) for p in practices]
 
     for r in results:
         logger.info(f"get_my_practices result item: {r.get('title')}\n")
