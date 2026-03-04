@@ -24,7 +24,7 @@ class CheckinMood(str, Enum):
     HAPPY = "happy"
 
 
-class PracticeCheckin(Base):
+class PracticeCheckIn(Base):
     __tablename__ = "practice_checkins"
 
     id = Column(Integer, primary_key=True)

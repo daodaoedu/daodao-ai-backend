@@ -1,8 +1,7 @@
 import math
 from sqlalchemy import func
 from datetime import datetime, timezone
-from src.models.Practice import Practice
-from src.models.PracticeCheckin import PracticeCheckin
+from src.models import Practice, PracticeCheckIn
 from src.dependencies import SessionDep
 from src.logger import AppLogger
 
@@ -58,12 +57,12 @@ def recommand_practices(db: SessionDep, user, query) -> list[Practice]:
 
     checkin_subq = (
         db.query(
-            PracticeCheckin.practice_id.label("practice_id"),
-            func.count(PracticeCheckin.id).label("checkin_count"),
-            func.min(PracticeCheckin.created_at).label("first_checkin"),
+            PracticeCheckIn.practice_id.label("practice_id"),
+            func.count(PracticeCheckIn.id).label("checkin_count"),
+            func.min(PracticeCheckIn.created_at).label("first_checkin"),
         )
-        .filter(PracticeCheckin.user_id == user.id)
-        .group_by(PracticeCheckin.practice_id)
+        .filter(PracticeCheckIn.user_id == user.id)
+        .group_by(PracticeCheckIn.practice_id)
         .subquery()
     )
 

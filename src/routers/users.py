@@ -10,7 +10,7 @@ from src.services.practice.practice import PracticeService
 logger = AppLogger(__name__).get_logger()
 
 
-router = APIRouter(prefix="/v1/user", tags=["user"])
+router = APIRouter(prefix="/v1/users", tags=["users"])
 
 
 @router.get(

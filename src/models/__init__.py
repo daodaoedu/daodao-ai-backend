@@ -23,7 +23,7 @@ from .Outcome import Outcome
 from .Position import Position
 from .Post import Post
 from .Practice import Practice
-from .PracticeCheckin import PracticeCheckin
+from .PracticeCheckIn import PracticeCheckIn
 from .Project import Project
 from .ProjectMarathon import ProjectMarathon
 from .Resource import Resource
@@ -52,7 +52,7 @@ __all__ = [
     "Store",
     "Resource",
     "Position",
-    "PracticeCheckin",
+    "PracticeCheckIn",
     "UserPosition",
     "Group",
     "UserJoinGroup",
