@@ -84,7 +84,7 @@ class PracticeService:
                 pass  # resources 搜尋尚未實作
 
             if conditions:
-                query = query.filter(*conditions)
+                query = query.filter(or_(*conditions))
 
             logger.info(
                 str(
