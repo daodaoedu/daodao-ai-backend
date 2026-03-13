@@ -17,6 +17,7 @@ router = APIRouter(prefix="/v1/users", tags=["users"])
 
 
 SUGGESTIONS_TTL = 600  # 10 分鐘
+COMPLETIONS_TTL = 300  # 5 分鐘
 
 
 @router.get(
@@ -54,6 +55,32 @@ def get_practice_suggestions(
     cache.client.set(cache_key, pickle.dumps(suggestions), ex=SUGGESTIONS_TTL)
 
     return {"data": suggestions, "pagination": None, "cache_hit": False}
+
+
+@router.get(
+    "/practices/completions",
+    description="關鍵字文字補全與預測下一個詞（輸入框即時補全用）",
+    response_model=APIResponse,
+)
+@api_response_decorator
+@observe_api
+def get_practice_completions(
+    db: SessionDep,
+    current_user: UserDep,
+    cache: CacheDep,
+    q: str = Query(..., min_length=1, max_length=50, description="輸入前綴或完整詞"),
+    limit: int = Query(10, ge=1, le=20, description="最多回傳幾個候選詞"),
+):
+    normalized_q = q.strip().lower()
+    cache_key = f"practice_completions:q:{normalized_q}:limit:{limit}"
+
+    cached = cache.client.get(cache_key)
+    if cached:
+        return {"data": pickle.loads(cached), "pagination": None, "cache_hit": True}
+
+    result = PracticeService.get_completions(db=db, prefix=normalized_q, limit=limit)
+    cache.client.set(cache_key, pickle.dumps(result), ex=COMPLETIONS_TTL)
+    return {"data": result, "pagination": None, "cache_hit": False}
 
 
 @router.get(
