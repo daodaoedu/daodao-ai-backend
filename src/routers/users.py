@@ -102,7 +102,7 @@ def get_my_practices(
         None, description="多維度關鍵字搜尋（標題、行動、標籤、資源、打卡內容）"
     ),
     # filter
-    tags: Optional[str] = Query(None),
+    tags: Optional[list[str]] = Query(None),
     duration_min: Optional[int] = None,
     duration_max: Optional[int] = None,
     status: Optional[str] = None,
