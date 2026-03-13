@@ -20,9 +20,9 @@ def setup_middlewares(app: FastAPI):
 
     # === CORS ===
     if settings.environment == "development":
-        origins = ["https://server.daoedu.tw", "http://localhost:8002"]
+        origins = ["https://server.daodao.so", "http://localhost:8002"]
     else:
-        origins = ["https://dao-server.daoedu.tw"]
+        origins = ["https://dao-server.daodao.so"]
 
     app.add_middleware(
         CORSMiddleware,
@@ -38,8 +38,8 @@ def setup_middlewares(app: FastAPI):
         allowed_hosts=[
             "localhost",
             "127.0.0.1",
-            "server-ai.daoedu.tw",
-            "dao-server-ai.daoedu.tw",
+            "server-ai.daodao.so",
+            "dao-server-ai.daodao.so",
         ],
     )
 
@@ -98,7 +98,8 @@ def setup_middlewares(app: FastAPI):
         environment=settings.environment,
     )
 
-    # === Prometheus Instrumentator ===
+    # === Prometheus Instrumentator === 
+    # /metrics endpoint for Prometheus to scrape
     _ = (
         Instrumentator()
         .add(

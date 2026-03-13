@@ -53,7 +53,17 @@ async def health_check(
 
     def _check_database():
         db.execute(text("SELECT 1"))
-        return ServiceStatus(status="healthy", message="Connected successfully")
+
+        # Get database details for identifiable message
+        db_name = db.execute(text("SELECT current_database()")).scalar()
+        pg_version = db.execute(text("SELECT version()")).scalar()
+        db_user = db.execute(text("SELECT current_user")).scalar()
+
+        # Extract version number from PostgreSQL version string
+        version_num = pg_version.split(" ")[1] if pg_version else "unknown"
+
+        message = f"PostgreSQL {version_num} - DB: {db_name} - User: {db_user}"
+        return ServiceStatus(status="healthy", message=message)
 
     # def _check_qdrant():
     #     try:
