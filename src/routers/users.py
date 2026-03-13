@@ -1,6 +1,7 @@
+import pickle
 from fastapi import APIRouter, Query
 from typing import Optional
-from src.dependencies import SessionDep, UserDep
+from src.dependencies import SessionDep, UserDep, CacheDep
 from src.logger import AppLogger
 from src.models.User import User
 from src.response_template import api_response_decorator
@@ -15,6 +16,9 @@ logger = AppLogger(__name__).get_logger()
 router = APIRouter(prefix="/v1/users", tags=["users"])
 
 
+SUGGESTIONS_TTL = 600  # 10 分鐘
+
+
 @router.get(
     "/practices/suggestions",
     description="取得搜尋建議關鍵字（近期熱門標籤 + 我的技能興趣相關標籤）",
@@ -25,6 +29,7 @@ router = APIRouter(prefix="/v1/users", tags=["users"])
 def get_practice_suggestions(
     db: SessionDep,
     current_user: UserDep,
+    cache: CacheDep,
 ):
     empty = {
         "data": {"popular_keywords": [], "interest_tags": []},
@@ -38,7 +43,16 @@ def get_practice_suggestions(
     if not user:
         return empty
 
+    cache_key = f"practice_suggestions:{user.id}"
+
+    cached = cache.client.get(cache_key)
+    if cached:
+        suggestions = pickle.loads(cached)
+        return {"data": suggestions, "pagination": None, "cache_hit": True}
+
     suggestions = PracticeService.get_search_suggestions(db=db, user_id=user.id)
+    cache.client.set(cache_key, pickle.dumps(suggestions), ex=SUGGESTIONS_TTL)
+
     return {"data": suggestions, "pagination": None, "cache_hit": False}
 
 
