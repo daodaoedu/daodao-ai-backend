@@ -1,4 +1,4 @@
-import pickle
+import json
 from fastapi import APIRouter, Query
 from typing import Optional
 from src.dependencies import SessionDep, UserDep, CacheDep
@@ -48,11 +48,11 @@ def get_practice_suggestions(
 
     cached = cache.client.get(cache_key)
     if cached:
-        suggestions = pickle.loads(cached)
+        suggestions = json.loads(cached)
         return {"data": suggestions, "pagination": None, "cache_hit": True}
 
     suggestions = PracticeService.get_search_suggestions(db=db, user_id=user.id)
-    cache.client.set(cache_key, pickle.dumps(suggestions), ex=SUGGESTIONS_TTL)
+    cache.client.set(cache_key, json.dumps(suggestions), ex=SUGGESTIONS_TTL)
 
     return {"data": suggestions, "pagination": None, "cache_hit": False}
 
@@ -76,10 +76,10 @@ def get_practice_completions(
 
     cached = cache.client.get(cache_key)
     if cached:
-        return {"data": pickle.loads(cached), "pagination": None, "cache_hit": True}
+        return {"data": json.loads(cached), "pagination": None, "cache_hit": True}
 
     result = PracticeService.get_completions(db=db, prefix=normalized_q, limit=limit)
-    cache.client.set(cache_key, pickle.dumps(result), ex=COMPLETIONS_TTL)
+    cache.client.set(cache_key, json.dumps(result), ex=COMPLETIONS_TTL)
     return {"data": result, "pagination": None, "cache_hit": False}
 
 
