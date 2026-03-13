@@ -1,18 +1,24 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from starlette.concurrency import run_in_threadpool
+
+# from starlette.concurrency import run_in_threadpool
 
 from src.config import get_settings
 from src.db.factory import make_database
 from src.logger import AppLogger
 from src.middleware.middleware import setup_middlewares
-from src.routers import ping, recommendation
+from src.routers import ping, recommendation, users
 from src.services.cache.factory import make_cache_client
 
+from sqlalchemy.orm import configure_mappers
+
+configure_mappers()
+
+
 # from src.services.clickhouse.factory import make_clickhouse_client
-from src.services.llm.factory import make_llm_client
-from src.services.qdrant.factory import make_qdrant_client
+# from src.services.llm.factory import make_llm_client
+# from src.services.qdrant.factory import make_qdrant_client
 
 logger = AppLogger(__name__).get_logger()
 
@@ -34,14 +40,14 @@ async def lifespan(app: FastAPI):
 
     app.state.database = make_database()
 
-    qdrant_client = make_qdrant_client()
-    app.state.qdrant_client = qdrant_client
+    # qdrant_client = make_qdrant_client()
+    # app.state.qdrant_client = qdrant_client
 
     # clickhouse_client = make_clickhouse_client()
     # app.state.clickhouse_client = clickhouse_client
 
-    llm_client = make_llm_client()
-    app.state.llm_client = llm_client
+    # llm_client = make_llm_client()
+    # app.state.llm_client = llm_client
 
     cache_client = make_cache_client(settings)
     app.state.cache_client = cache_client
@@ -50,8 +56,8 @@ async def lifespan(app: FastAPI):
     if not cache_client.check_redis_health():
         raise RuntimeError("Redis service is unavailable. App startup aborted!")
 
-    logger.info("🚀 startup_event triggered")
-    await run_in_threadpool(app.state.qdrant_client.create_collection)
+    # logger.info("🚀 startup_event triggered")
+    # await run_in_threadpool(app.state.qdrant_client.create_collection)
     logger.info("✅ daodao_collection ready")
 
     yield
@@ -80,6 +86,8 @@ setup_middlewares(app)
 # app.include_router(feedback.router, prefix="/api", tags=["feedback"])
 # app.include_router(resource.router, prefix="/api", tags=["resource"])
 app.include_router(recommendation.router, prefix="/api", tags=["recommendation"])
+app.include_router(users.router, prefix="/api", tags=["users"])
+
 app.include_router(ping.router, prefix="/api", tags=["Health"])
 
 

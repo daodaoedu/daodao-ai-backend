@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Request
-from qdrant_client.http.exceptions import UnexpectedResponse
+
+# from qdrant_client.http.exceptions import UnexpectedResponse
 from sqlalchemy import text
 
 from src.auto_metrics import observe_api
-from src.dependencies import QdrantDep, SessionDep, SettingsDep
+from src.dependencies import SessionDep, SettingsDep
 from src.schemas.health import HealthResponse, ServiceStatus
 
 router = APIRouter(prefix="/v1")
@@ -22,7 +23,7 @@ async def health_check(
     request: Request,
     db: SessionDep,
     settings: SettingsDep,
-    qdrant_client: QdrantDep,
+    # qdrant_client: QdrantDep,
     # clickhouse_client: ClickHouseDep,
 ) -> HealthResponse:
     """Comprehensive health check endpoint for monitoring and load balancer probes.
@@ -54,19 +55,19 @@ async def health_check(
         db.execute(text("SELECT 1"))
         return ServiceStatus(status="healthy", message="Connected successfully")
 
-    def _check_qdrant():
-        try:
-            collections = qdrant_client.get_collections()
-            col_names = [c.name for c in collections.collections]
-            if settings.collection_name in col_names:
-                return ServiceStatus(status="healthy", message="Qdrant reachable")
-            else:
-                return ServiceStatus(
-                    status="unhealthy",
-                    message=f"Collection `{settings.collection_name}` not found",
-                )
-        except UnexpectedResponse as e:
-            return ServiceStatus(status="unhealthy", message=str(e))
+    # def _check_qdrant():
+    #     try:
+    #         collections = qdrant_client.get_collections()
+    #         col_names = [c.name for c in collections.collections]
+    #         if settings.collection_name in col_names:
+    #             return ServiceStatus(status="healthy", message="Qdrant reachable")
+    #         else:
+    #             return ServiceStatus(
+    #                 status="unhealthy",
+    #                 message=f"Collection `{settings.collection_name}` not found",
+    #             )
+    #     except UnexpectedResponse as e:
+    #         return ServiceStatus(status="unhealthy", message=str(e))
 
     # def _check_clickhouse():
     #     try:
@@ -82,7 +83,7 @@ async def health_check(
 
     # Run synchronous checks
     _check_service("database", _check_database)
-    _check_service("qdrant", _check_qdrant)
+    # _check_service("qdrant", _check_qdrant)
     # _check_service("clickhouse", _check_clickhouse)
 
     return HealthResponse(

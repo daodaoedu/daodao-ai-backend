@@ -2,7 +2,7 @@
 # 🧱 基本設定
 # =========================================
 PLATFORM ?= linux/amd64
-PYTHON  := .venv/bin/python
+PYTHON  := .venv/bin/python3.12
 BLACK   := $(PYTHON) -m black
 RUFF    := $(PYTHON) -m ruff
 PYLINT  := $(PYTHON) -m pylint
@@ -51,7 +51,7 @@ up-dev: ## 啟動 Dev 環境
 
 down-dev: ## 停止並移除 Dev 容器與 Volume
 
-	$(COMPOSE_DEV) --profile dev down --volumes
+	$(COMPOSE_DEV) --profile dev down
 
 
 up-prod: ## 啟動 Prod 環境
@@ -59,24 +59,32 @@ up-prod: ## 啟動 Prod 環境
 
 
 down-prod: ## 停止並移除 Prod 容器與 Volume
-	$(COMPOSE_PROD) --profile prod down --volumes
+	$(COMPOSE_PROD) --profile prod down
 
 rebuild-dev: ## 重建 Dev 環境
-	$(COMPOSE_DEV) --profile dev down --volumes
+	$(COMPOSE_DEV) --profile dev down --volumes --remove-orphans
 	@echo "🔄 Rebuilding Dev environment..."
 	# 自動拉取官方 image
 	@docker image inspect redis:alpine > /dev/null 2>&1 || docker pull redis:alpine
 
 
-	$(COMPOSE_DEV) --profile dev up -d --build
+	# 強制不使用 cache rebuild
+	$(COMPOSE_DEV) --profile dev build --no-cache
+
+	# 啟動 dev container
+	$(COMPOSE_DEV) --profile dev up -d
 
 
 rebuild-prod:  ## 重建 Prod 環境
-	$(COMPOSE_PROD) --profile prod down --volumes
+	$(COMPOSE_PROD) --profile prod down --volumes --remove-orphans
 	@echo "🔄 Rebuilding Prod environment..."
 	@docker image inspect redis:alpine > /dev/null 2>&1 || docker pull redis:alpine
 
-	$(COMPOSE_PROD) --profile prod up -d --build
+	# 強制不使用 cache rebuild
+	$(COMPOSE_DEV) --profile prod build --no-cache
+
+	# 啟動 dev container
+	$(COMPOSE_DEV) --profile prod up -d
 
 
 up: up-dev up-prod ## 同時啟動 Dev 與 Prod 環境
@@ -180,6 +188,8 @@ lint: ## 靜態檢查 (pylint + bandit)
 rank_feed: ## 執行 rank_feed 測試腳本
 	$(COMPOSE_PROD) --profile prod exec backend-dev /bin/bash -c "python src/services/rank_feed.py  --to 50"
 
+# user_practice:
+# 	$(COMPOSE_PROD) --profile prod exec backend-dev /bin/bash -c "python src/user_practice.py"
 
 verify: ## 驗證 JWT 腳本
 	$(COMPOSE_DEV) --profile dev exec backend-dev /bin/bash -c "python src/verify_jwt.py"
