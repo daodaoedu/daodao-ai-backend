@@ -98,7 +98,9 @@ def get_my_practices(
     ),
     offset: int = Query(0, ge=0),
     # search
-    keyword: Optional[str] = Query(None, description="多維度關鍵字搜尋（標題、行動、標籤、資源、打卡內容）"),
+    keyword: Optional[str] = Query(
+        None, description="多維度關鍵字搜尋（標題、行動、標籤、資源、打卡內容）"
+    ),
     # filter
     tags: Optional[str] = Query(None),
     duration_min: Optional[int] = None,

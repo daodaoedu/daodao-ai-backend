@@ -1,8 +1,7 @@
-from sqlalchemy import and_, or_, select, func, literal
-from sqlalchemy.orm import aliased
+from sqlalchemy import or_, select, func, literal
 
 from src.models.Practice import Practice, PracticeStatus
-from src.models.EntityTag import EntityTag, EntityTagType
+from src.models.EntityTag import EntityTag
 from src.models.Tag import Tag
 from src.models.EntityResource import EntityResource
 from src.models.Resource import Resource
@@ -272,9 +271,8 @@ class PracticeService:
                 Resource.name.ilike(pattern),
             )
         )
-        checkin_match = (
-            select(PracticeCheckIn.practice_id)
-            .where(PracticeCheckIn.note.ilike(pattern))
+        checkin_match = select(PracticeCheckIn.practice_id).where(
+            PracticeCheckIn.note.ilike(pattern)
         )
 
         matching_ids = (
@@ -422,11 +420,7 @@ class PracticeService:
                 )
             )
             logger.info(
-                str(
-                    query.statement.compile(
-                        compile_kwargs={"literal_binds": True}
-                    )
-                )
+                str(query.statement.compile(compile_kwargs={"literal_binds": True}))
             )
         return query
 

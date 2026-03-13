@@ -98,7 +98,7 @@ def setup_middlewares(app: FastAPI):
         environment=settings.environment,
     )
 
-    # === Prometheus Instrumentator === 
+    # === Prometheus Instrumentator ===
     # /metrics endpoint for Prometheus to scrape
     _ = (
         Instrumentator()
