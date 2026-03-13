@@ -29,7 +29,7 @@ class PracticeService:
         duration_min=None,
         duration_max=None,
         status=None,
-        sort_by="newest",
+        sort_by="newest_updated",
         limit=20,
         offset=0,
     ):
@@ -57,8 +57,6 @@ class PracticeService:
         # ==============================
 
         if sort_by == "recommended" and user:
-            practices = query.all()
-
             practices = recommand_practices(db=db, user=user, query=query)
 
         else:
