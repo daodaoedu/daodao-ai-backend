@@ -103,7 +103,7 @@ make help          # 列出所有可用指令
 |--------|------|------|---------|
 | POST | `/feedback/generate` | 非同步產生 AI 回饋（reviewId、style、thinkingMethod） | 5/min |
 | GET | `/feedback/status/{task_id}` | 查詢回饋任務狀態 | 60/min |
-| GET | `/feedback/v1/{review_id}` | 取得指定 Review 的回饋詳情 | 20/min |
+| GET | /feedback/{review_id} | 取得指定 Review 的回饋詳情 | 20/min |
 
 ## 服務層說明
 
