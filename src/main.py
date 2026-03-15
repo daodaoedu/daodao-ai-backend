@@ -69,12 +69,15 @@ async def lifespan(app: FastAPI):
 
 
 def _build_servers(environment: str) -> list:
-    if environment == "production":
-        return [{"url": "https://ai.daodao.so", "description": "Production"}]
-    return [
-        {"url": "https://ai-dev.daodao.so", "description": "dev"},
-        {"url": "http://127.0.0.1:8002", "description": "local dev"},
-    ]
+    server_config = {
+        "production": [{"url": "https://ai.daodao.so", "description": "Production"}],
+        "development": [
+            {"url": "https://ai-dev.daodao.so", "description": "Development"},
+            {"url": "http://127.0.0.1:8002", "description": "Local Development"},
+        ],
+    }
+    # 若找不到對應的環境設定，預設回傳 development 的設定
+    return server_config.get(environment, server_config["development"])
 
 
 _settings = get_settings()
