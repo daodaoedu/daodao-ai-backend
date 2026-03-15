@@ -68,15 +68,21 @@ async def lifespan(app: FastAPI):
     logger.info("API shutdown complete")
 
 
+def _build_servers(environment: str) -> list:
+    if environment == "production":
+        return [{"url": "https://ai.daodao.so", "description": "Production"}]
+    return [
+        {"url": "https://ai-dev.daodao.so", "description": "dev"},
+        {"url": "http://127.0.0.1:8002", "description": "local dev"},
+    ]
+
+
+_settings = get_settings()
+
 app = FastAPI(
     title="DAODAO AI backend API",
     version="1.0.0",
-    servers=[
-        {"url": "http://127.0.0.1:8002", "description": "local dev"},
-        {"url": "http://127.0.0.1:8001", "description": "local Production"},
-        {"url": "server-ai.daoedu.tw", "description": "dev"},
-        {"url": "dao-server-ai.daoedu.tw", "description": "Production"},
-    ],
+    servers=_build_servers(_settings.environment),
     lifespan=lifespan,
 )
 
