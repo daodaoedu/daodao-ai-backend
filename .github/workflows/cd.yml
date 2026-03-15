@@ -208,26 +208,23 @@ jobs:
 
 
             # ===== 健康檢查 =====
-            # 使用 curl 呼叫 health API
-            # ===== 健康檢查 =====
-            container_name="daodao-ai-backend-${src_ENV}"
+            # 使用 docker compose exec 以 service 名稱操作，不依賴 container_name
+            service_name="backend-${src_ENV}"
             MAX_ATTEMPTS=10
             SLEEP_SECONDS=5
 
             for i in $(seq 1 $MAX_ATTEMPTS); do
-                # status=$(docker exec $container_name sh -c "curl -s http://localhost:8002/api/v1/health | jq -r '.status'")
-                status=$(docker exec $container_name python3 -c "import sys, json, urllib.request as u; print(json.load(u.urlopen('http://localhost:8002/api/v1/health'))['status'])")
-
+                status=$(docker compose --env-file .env.${src_ENV} -f $COMPOSE_FILE exec -T $service_name python3 -c "import sys, json, urllib.request as u; print(json.load(u.urlopen('http://localhost:8000/api/v1/health'))['status'])")
 
                 if [ "$status" = "ok" ]; then
-                    echo "✅ $container_name status OK"
+                    echo "✅ $service_name status OK"
                     break
                 else
-                    echo "⚠ Attempt $i/$MAX_ATTEMPTS: $container_name status NOT OK (status: $status)"
+                    echo "⚠ Attempt $i/$MAX_ATTEMPTS: $service_name status NOT OK (status: $status)"
                     if [ $i -eq $MAX_ATTEMPTS ]; then
-                        echo "❌ $container_name failed health check after $MAX_ATTEMPTS attempts"
+                        echo "❌ $service_name failed health check after $MAX_ATTEMPTS attempts"
                         echo "=== Container Logs ==="
-                        docker compose --env-file .env.${src_ENV} -f $COMPOSE_FILE logs --tail=100 $container_name || true
+                        docker compose --env-file .env.${src_ENV} -f $COMPOSE_FILE logs --tail=100 $service_name || true
                         exit 1
                     fi
                     sleep $SLEEP_SECONDS
