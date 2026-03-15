@@ -34,6 +34,7 @@ services:
       --reload-dir src
       --reload-include "*.py"
       --workers 1
+      --timeout-keep-alive 75
 
   redis-dev:
     image: redis:alpine
