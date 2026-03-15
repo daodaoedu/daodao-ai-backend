@@ -214,6 +214,9 @@ jobs:
             SLEEP_SECONDS=5
 
             for i in $(seq 1 $MAX_ATTEMPTS); do
+                echo "Waiting ${SLEEP_SECONDS}s before attempt $i/$MAX_ATTEMPTS..."
+                sleep $SLEEP_SECONDS
+
                 status=$(docker compose --env-file .env.${src_ENV} -f $COMPOSE_FILE exec -T $service_name python3 -c "import sys, json, urllib.request as u; print(json.load(u.urlopen('http://localhost:8000/api/v1/health'))['status'])")
 
                 if [ "$status" = "ok" ]; then
@@ -227,7 +230,6 @@ jobs:
                         docker compose --env-file .env.${src_ENV} -f $COMPOSE_FILE logs --tail=100 $service_name || true
                         exit 1
                     fi
-                    sleep $SLEEP_SECONDS
                 fi
             done
 
