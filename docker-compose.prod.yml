@@ -5,12 +5,13 @@ networks:
 services:
   backend-prod:
     build: .
-    container_name: daodao-ai-backend-prod
     image: daodao-ai-backend:latest
     # ports:
     #   - "8001:8000"
     networks:
-      - prod-daodao-network
+      prod-daodao-network:
+        aliases:
+          - backend-prod
     profiles:
       - prod
     healthcheck:

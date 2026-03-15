@@ -5,12 +5,13 @@ networks:
 services:
   backend-dev:
     build: .
-    container_name: daodao-ai-backend-dev
     image: daodao-ai-backend:latest
     ports:
       - "8002:8000"
     networks:
-      - dev-daodao-network
+      dev-daodao-network:
+        aliases:
+          - backend-dev
     healthcheck:
       test:
         [
