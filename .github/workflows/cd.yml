@@ -215,8 +215,8 @@ jobs:
             SLEEP_SECONDS=5
 
             for i in $(seq 1 $MAX_ATTEMPTS); do
-                # status=$(docker exec $container_name sh -c "curl -s http://localhost:8000/api/v1/health | jq -r '.status'")
-                status=$(docker exec $container_name python3 -c "import sys, json, urllib.request as u; print(json.load(u.urlopen('http://localhost:8000/api/v1/health'))['status'])")
+                # status=$(docker exec $container_name sh -c "curl -s http://localhost:8002/api/v1/health | jq -r '.status'")
+                status=$(docker exec $container_name python3 -c "import sys, json, urllib.request as u; print(json.load(u.urlopen('http://localhost:8002/api/v1/health'))['status'])")
 
 
                 if [ "$status" = "ok" ]; then
