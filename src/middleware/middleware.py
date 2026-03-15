@@ -20,9 +20,13 @@ def setup_middlewares(app: FastAPI):
 
     # === CORS ===
     if settings.environment == "development":
-        origins = ["https://server.daodao.so", "http://localhost:8002"]
+        origins = [
+            "https://app-dev.daodao.so",
+            "https://app-feat.daodao.so",
+            "http://localhost:8002",
+        ]
     else:
-        origins = ["https://dao-server.daodao.so"]
+        origins = ["https://app.daodao.so"]
 
     app.add_middleware(
         CORSMiddleware,
@@ -40,6 +44,8 @@ def setup_middlewares(app: FastAPI):
             "127.0.0.1",
             "server-ai.daodao.so",
             "dao-server-ai.daodao.so",
+            "ai-dev.daodao.so",
+            "ai.daodao.so",
         ],
     )
 
