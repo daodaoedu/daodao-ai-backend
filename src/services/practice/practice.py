@@ -404,6 +404,11 @@ class PracticeService:
                 .where(
                     PracticeCheckIn.practice_id == Practice.id,
                     PracticeCheckIn.note.ilike(pattern),
+                    # Don't match checkin notes for brewing practices
+                    ~(
+                        (Practice.privacy_status == "delayed")
+                        & (Practice.status == PracticeStatus.ACTIVE.value)
+                    ),
                 )
                 .correlate(Practice)
                 .exists()
@@ -457,8 +462,13 @@ class PracticeService:
     def _remove_unwanted_status(query):
         return query.filter(
             Practice.status.notin_(
-                [PracticeStatus.DRAFT.value, PracticeStatus.ARCHIVED.value]
+                [
+                    PracticeStatus.DRAFT.value,
+                    PracticeStatus.ARCHIVED.value,
+                    PracticeStatus.NOT_STARTED.value,
+                ]
             ),
+            Practice.privacy_status != "private",
             Practice.deleted_at.is_(None),
         )
 

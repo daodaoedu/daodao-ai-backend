@@ -1,6 +1,8 @@
 import json
+from collections import defaultdict
 from fastapi import APIRouter, Query
 from typing import Optional
+from sqlalchemy import text
 from src.dependencies import SessionDep, UserDep, CacheDep
 from src.logger import AppLogger
 from src.models.User import User
@@ -133,6 +135,55 @@ def get_my_practices(
     )
 
     results = [orm_to_dict(p) for p in practices]
+
+    # ── 2.2 Reactions aggregation (batch, not N+1) ────────────────────────
+    if results:
+        practice_ids = [r["id"] for r in results]
+        ids_placeholder = ",".join(str(pid) for pid in practice_ids)
+        reaction_rows = db.execute(
+            text(
+                f"""
+                SELECT
+                    r.target_id,
+                    r.reaction_type,
+                    COUNT(*) AS cnt,
+                    (
+                        SELECT u2.display_name
+                        FROM reactions r2
+                        LEFT JOIN users u2 ON u2.id = r2.actor_id
+                        WHERE r2.target_type = 'practice'
+                          AND r2.target_id = r.target_id
+                          AND r2.reaction_type = r.reaction_type
+                        ORDER BY r2.created_at DESC
+                        LIMIT 1
+                    ) AS latest_actor_name
+                FROM reactions r
+                WHERE r.target_type = 'practice'
+                  AND r.target_id IN ({ids_placeholder})
+                GROUP BY r.target_id, r.reaction_type
+                """
+            )
+        ).fetchall()
+
+        reactions_by_practice: dict = defaultdict(list)
+        for row in reaction_rows:
+            reactions_by_practice[row.target_id].append(
+                {
+                    "type": row.reaction_type,
+                    "count": row.cnt,
+                    "latestActorName": row.latest_actor_name,
+                }
+            )
+
+        for r in results:
+            r["reactions"] = reactions_by_practice.get(r["id"], [])
+
+    # ── 2.4 Brewing card logic ────────────────────────────────────────────
+    for r in results:
+        is_brewing = (
+            r.get("privacy_status") == "delayed" and r.get("status") == "active"
+        )
+        r["is_brewing"] = is_brewing
 
     for r in results:
         logger.info(f"get_my_practices result item: {r.get('title')}\n")

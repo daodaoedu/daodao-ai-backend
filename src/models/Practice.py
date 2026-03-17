@@ -69,6 +69,8 @@ class Practice(Base):
     # ===== 狀態 =====
     status = Column(String(20), default=PracticeStatus.DRAFT.value)
 
+    privacy_status = Column(String(20), default="private")
+
     has_resources = Column(Boolean, default=False)
 
     theme_color = Column(String(20))
