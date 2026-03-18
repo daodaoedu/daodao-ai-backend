@@ -136,6 +136,17 @@ def get_my_practices(
 
     results = [orm_to_dict(p) for p in practices]
 
+    # ── 2.1 Attach user info ───────────────────────────────────────────────
+    practice_map = {p.id: p for p in practices}
+    for r in results:
+        practice = practice_map.get(r["id"])
+        u = practice.user if practice else None
+        r["user"] = {
+            "id": str(u.external_id) if u and u.external_id else None,
+            "name": u.nickname or "",
+            "photo_url": u.contact.photo_url if u and u.contact else None,
+        } if u else None
+
     # ── 2.2 Reactions aggregation (batch, not N+1) ────────────────────────
     if results:
         practice_ids = [r["id"] for r in results]
@@ -148,9 +159,9 @@ def get_my_practices(
                     r.reaction_type,
                     COUNT(*) AS cnt,
                     (
-                        SELECT u2.display_name
+                        SELECT u2.nickname
                         FROM reactions r2
-                        LEFT JOIN users u2 ON u2.id = r2.actor_id
+                        LEFT JOIN users u2 ON u2.id = r2.user_id
                         WHERE r2.target_type = 'practice'
                           AND r2.target_id = r.target_id
                           AND r2.reaction_type = r.reaction_type
@@ -191,6 +202,10 @@ def get_my_practices(
     has_next = len(results) == limit
     logger.info(f"recommendation_feed next_cursor: {next_cursor}")
     logger.info(f"get_my_practices result count: {len(results)}")
+
+    # 將 id 替換為 external_id（UUID），供前端用於 reactions 和頁面導航
+    for r in results:
+        r["id"] = r.get("external_id") or r["id"]
 
     pagination = CursorPaginationInfo(
         cursors={

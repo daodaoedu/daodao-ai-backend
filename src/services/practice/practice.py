@@ -460,7 +460,7 @@ class PracticeService:
 
     @staticmethod
     def _remove_unwanted_status(query):
-        return query.filter(
+        return query.join(User, User.id == Practice.user_id).filter(
             Practice.status.notin_(
                 [
                     PracticeStatus.DRAFT.value,
@@ -470,6 +470,7 @@ class PracticeService:
             ),
             Practice.privacy_status != "private",
             Practice.deleted_at.is_(None),
+            User.is_open_profile == True,
         )
 
     # =========================================================
