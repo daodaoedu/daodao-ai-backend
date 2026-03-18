@@ -143,7 +143,9 @@ def get_my_practices(
                 payload = json.loads(cached)
                 return {**payload, "cache_hit": True}
             except Exception:
-                logger.warning(f"cache parse error for key={cache_key}, falling back to DB")
+                logger.warning(
+                    f"cache parse error for key={cache_key}, falling back to DB"
+                )
 
     # ── 實際查詢 ──
     practices = PracticeService.get_practices(
@@ -182,7 +184,8 @@ def get_my_practices(
             cache.client.set(
                 cache_key,
                 json.dumps(
-                    {"data": results, "pagination": pagination.model_dump()}, default=str
+                    {"data": results, "pagination": pagination.model_dump()},
+                    default=str,
                 ),
                 ex=MY_PRACTICES_TTL,
             )
