@@ -11,7 +11,6 @@ from src.models.UserProfile import UserProfile
 from src.services.practice.recommendation import recommand_practices
 from src.logger import AppLogger
 
-
 logger = AppLogger(__name__).get_logger()
 
 
