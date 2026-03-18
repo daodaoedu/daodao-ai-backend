@@ -107,7 +107,7 @@ async def generate_feedback(
 FEEDBACK_TTL = 3600  # 1 小時（feedback 生成後不會變動）
 
 
-@router.get("/v1/{review_id}", response_model=FeedbackDetailResponse)
+@router.get("/{review_id}", response_model=FeedbackDetailResponse)
 @limiter.limit("20/minute")
 async def get_feedback(
     request: Request,
@@ -122,7 +122,10 @@ async def get_feedback(
 
     cached = cache_client.client.get(cache_key)
     if cached:
-        return FeedbackDetailResponse(**json.loads(cached))
+        try:
+            return FeedbackDetailResponse(**json.loads(cached))
+        except Exception:
+            logger.warning(f"cache parse error for key={cache_key}, falling back to DB")
 
     ai_feedback = (
         db.query(AIReviewFeedback)
@@ -143,9 +146,12 @@ async def get_feedback(
         tokenUsage=ai_feedback.token_usage,
         createdAt=ai_feedback.created_at,
     )
-    cache_client.client.set(
-        cache_key,
-        json.dumps(response.model_dump(), default=str),
-        ex=FEEDBACK_TTL,
-    )
+    try:
+        cache_client.client.set(
+            cache_key,
+            json.dumps(response.model_dump(), default=str),
+            ex=FEEDBACK_TTL,
+        )
+    except Exception:
+        logger.warning(f"cache write error for key={cache_key}, skipping cache")
     return response

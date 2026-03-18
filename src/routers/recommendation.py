@@ -40,9 +40,12 @@ def recommendation_feed(
 
     cached = cache.client.get(cache_key)
     if cached:
-        payload = json.loads(cached)
-        logger.info(f"recommendation_feed cache_hit key={cache_key}")
-        return {**payload, "cache_hit": True}
+        try:
+            payload = json.loads(cached)
+            logger.info(f"recommendation_feed cache_hit key={cache_key}")
+            return {**payload, "cache_hit": True}
+        except Exception:
+            logger.warning(f"cache parse error for key={cache_key}, falling back to DB")
 
     posts, pagination = get_recommendation_feed(session, after_id, page_size, type)
     logger.info(
@@ -50,11 +53,14 @@ def recommendation_feed(
     )
 
     payload = {
-        "data": [p.dict() for p in posts],
+        "data": [p.model_dump() for p in posts],
         "pagination": pagination.model_dump(),
     }
-    cache.client.set(
-        cache_key, json.dumps(payload, default=str), ex=RECOMMENDATION_FEED_TTL
-    )
+    try:
+        cache.client.set(
+            cache_key, json.dumps(payload, default=str), ex=RECOMMENDATION_FEED_TTL
+        )
+    except Exception:
+        logger.warning(f"cache write error for key={cache_key}, skipping cache")
 
     return {**payload, "cache_hit": False}

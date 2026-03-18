@@ -1,3 +1,5 @@
+import re
+
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -14,6 +16,7 @@ def check_database(db: Session) -> ServiceStatus:
     pg_version = db.execute(text("SELECT version()")).scalar()
     db_user = db.execute(text("SELECT current_user")).scalar()
 
-    version_num = pg_version.split(" ")[1] if pg_version else "unknown"
+    match = re.search(r"PostgreSQL (\S+)", pg_version or "")
+    version_num = match.group(1) if match else "unknown"
     message = f"PostgreSQL {version_num} - DB: {db_name} - User: {db_user}"
     return ServiceStatus(status="healthy", message=message)

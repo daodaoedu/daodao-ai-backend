@@ -45,10 +45,16 @@ def get_practice_suggestions(
     cache_key = f"practice_suggestions:{user.id}"
     cached = cache.client.get(cache_key)
     if cached:
-        return {"data": json.loads(cached), "pagination": None, "cache_hit": True}
+        try:
+            return {"data": json.loads(cached), "pagination": None, "cache_hit": True}
+        except Exception:
+            logger.warning(f"cache parse error for key={cache_key}, falling back to DB")
 
     suggestions = PracticeService.get_search_suggestions(db=db, user_id=user.id)
-    cache.client.set(cache_key, json.dumps(suggestions), ex=SUGGESTIONS_TTL)
+    try:
+        cache.client.set(cache_key, json.dumps(suggestions), ex=SUGGESTIONS_TTL)
+    except Exception:
+        logger.warning(f"cache write error for key={cache_key}, skipping cache")
     return {"data": suggestions, "pagination": None, "cache_hit": False}
 
 
@@ -71,10 +77,16 @@ def get_practice_completions(
 
     cached = cache.client.get(cache_key)
     if cached:
-        return {"data": json.loads(cached), "pagination": None, "cache_hit": True}
+        try:
+            return {"data": json.loads(cached), "pagination": None, "cache_hit": True}
+        except Exception:
+            logger.warning(f"cache parse error for key={cache_key}, falling back to DB")
 
     result = PracticeService.get_completions(db=db, prefix=normalized_q, limit=limit)
-    cache.client.set(cache_key, json.dumps(result), ex=COMPLETIONS_TTL)
+    try:
+        cache.client.set(cache_key, json.dumps(result), ex=COMPLETIONS_TTL)
+    except Exception:
+        logger.warning(f"cache write error for key={cache_key}, skipping cache")
     return {"data": result, "pagination": None, "cache_hit": False}
 
 
@@ -118,17 +130,20 @@ def get_my_practices(
         tags_str = ",".join(sorted(tags)) if tags else ""
         cache_key = (
             f"practices:user:{user_id}"
-            f":kw:{keyword or ''}"
+            f":kw:{keyword if keyword is not None else '__none__'}"
             f":tags:{tags_str}"
-            f":dur:{duration_min or ''}-{duration_max or ''}"
-            f":status:{status or ''}"
+            f":dur:{duration_min if duration_min is not None else ''}-{duration_max if duration_max is not None else ''}"
+            f":status:{status if status is not None else '__none__'}"
             f":sort:{sort_by}"
             f":limit:{limit}:after:{after_id or 0}:offset:{offset}"
         )
         cached = cache.client.get(cache_key)
         if cached:
-            payload = json.loads(cached)
-            return {**payload, "cache_hit": True}
+            try:
+                payload = json.loads(cached)
+                return {**payload, "cache_hit": True}
+            except Exception:
+                logger.warning(f"cache parse error for key={cache_key}, falling back to DB")
 
     # ── 實際查詢 ──
     practices = PracticeService.get_practices(
@@ -163,12 +178,15 @@ def get_my_practices(
     payload = {"data": results, "pagination": pagination}
 
     if user_id:
-        cache.client.set(
-            cache_key,
-            json.dumps(
-                {"data": results, "pagination": pagination.model_dump()}, default=str
-            ),
-            ex=MY_PRACTICES_TTL,
-        )
+        try:
+            cache.client.set(
+                cache_key,
+                json.dumps(
+                    {"data": results, "pagination": pagination.model_dump()}, default=str
+                ),
+                ex=MY_PRACTICES_TTL,
+            )
+        except Exception:
+            logger.warning(f"cache write error for key={cache_key}, skipping cache")
 
     return {**payload, "cache_hit": False}

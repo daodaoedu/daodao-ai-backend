@@ -95,7 +95,7 @@ class TestRankFeedResponse:
 
     def test_pagination_has_next_when_full_page(self, client):
         post = MagicMock()
-        post.dict.return_value = {"id": "1", "type": "idea"}
+        post.model_dump.return_value = {"id": "1", "type": "idea"}
         posts = [post] * 20
         pagination = _make_pagination(count=20, has_next=True)
         with patch(
