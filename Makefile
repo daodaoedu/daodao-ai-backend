@@ -200,3 +200,7 @@ deploy:
 	@echo "🔐 Logging in to Docker Hub as $(DOCKERHUB_USERNAME)"
 	@echo "$(DOCKERHUB_TOKEN)" | docker login -u "$(DOCKERHUB_USERNAME)" --password-stdin
 	docker push $(DOCKERHUB_USERNAME)/$(IMAGE_NAME):$(TAG)
+
+
+test: ## 執行所有單元測試
+	.venv/bin/python3.12 -m pytest tests/ -v
