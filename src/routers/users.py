@@ -16,8 +16,8 @@ logger = AppLogger(__name__).get_logger()
 
 router = APIRouter(prefix="/v1/users", tags=["users"])
 
-SUGGESTIONS_TTL = 600   # 10 分鐘
-COMPLETIONS_TTL = 300   # 5 分鐘
+SUGGESTIONS_TTL = 600  # 10 分鐘
+COMPLETIONS_TTL = 300  # 5 分鐘
 MY_PRACTICES_TTL = 120  # 2 分鐘
 
 _EMPTY_SUGGESTIONS = {"popular_keywords": [], "interest_tags": []}
@@ -165,7 +165,9 @@ def get_my_practices(
     if user_id:
         cache.client.set(
             cache_key,
-            json.dumps({"data": results, "pagination": pagination.model_dump()}, default=str),
+            json.dumps(
+                {"data": results, "pagination": pagination.model_dump()}, default=str
+            ),
             ex=MY_PRACTICES_TTL,
         )
 

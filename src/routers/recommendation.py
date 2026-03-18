@@ -24,7 +24,9 @@ def recommendation_feed(
     request: Request,
     session: SessionDep,
     cache: CacheDep,
-    after_id: Optional[int] = Query(None, description="上一次最後一筆的 id，作為 cursor"),
+    after_id: Optional[int] = Query(
+        None, description="上一次最後一筆的 id，作為 cursor"
+    ),
     page_size: int = Query(20, description="每頁抓幾筆"),
     type: Optional[str] = Query(None, description="要抓哪些類型的 feed"),
 ):
@@ -43,12 +45,16 @@ def recommendation_feed(
         return {**payload, "cache_hit": True}
 
     posts, pagination = get_recommendation_feed(session, after_id, page_size, type)
-    logger.info(f"recommendation_feed count={len(posts)}, next_cursor={pagination.cursors}")
+    logger.info(
+        f"recommendation_feed count={len(posts)}, next_cursor={pagination.cursors}"
+    )
 
     payload = {
         "data": [p.dict() for p in posts],
         "pagination": pagination.model_dump(),
     }
-    cache.client.set(cache_key, json.dumps(payload, default=str), ex=RECOMMENDATION_FEED_TTL)
+    cache.client.set(
+        cache_key, json.dumps(payload, default=str), ex=RECOMMENDATION_FEED_TTL
+    )
 
     return {**payload, "cache_hit": False}
