@@ -1,11 +1,9 @@
 from fastapi import APIRouter, Request
 
-# from qdrant_client.http.exceptions import UnexpectedResponse
-from sqlalchemy import text
-
 from src.auto_metrics import observe_api
 from src.dependencies import SessionDep, SettingsDep
 from src.schemas.health import HealthResponse, ServiceStatus
+from src.services.health_service import check_database
 
 router = APIRouter(prefix="/v1")
 
@@ -34,67 +32,13 @@ async def health_check(
     services = {}
     overall_status = "ok"
 
-    def _check_service(name: str, check_func, *args, **kwargs):
-        """Helper to standardize service health checks."""
-        try:
-            if kwargs.get("is_async"):
-                # Handle async functions separately in the calling code
-                return check_func(*args)
-            result = check_func(*args)
-            services[name] = result
-            if result.status != "healthy":
-                nonlocal overall_status
-                overall_status = "degraded"
-        except Exception as e:
-            services[name] = ServiceStatus(status="unhealthy", message=str(e))
+    try:
+        services["database"] = check_database(db)
+        if services["database"].status != "healthy":
             overall_status = "degraded"
-
-    # Database check
-
-    def _check_database():
-        db.execute(text("SELECT 1"))
-
-        # Get database details for identifiable message
-        db_name = db.execute(text("SELECT current_database()")).scalar()
-        pg_version = db.execute(text("SELECT version()")).scalar()
-        db_user = db.execute(text("SELECT current_user")).scalar()
-
-        # Extract version number from PostgreSQL version string
-        version_num = pg_version.split(" ")[1] if pg_version else "unknown"
-
-        message = f"PostgreSQL {version_num} - DB: {db_name} - User: {db_user}"
-        return ServiceStatus(status="healthy", message=message)
-
-    # def _check_qdrant():
-    #     try:
-    #         collections = qdrant_client.get_collections()
-    #         col_names = [c.name for c in collections.collections]
-    #         if settings.collection_name in col_names:
-    #             return ServiceStatus(status="healthy", message="Qdrant reachable")
-    #         else:
-    #             return ServiceStatus(
-    #                 status="unhealthy",
-    #                 message=f"Collection `{settings.collection_name}` not found",
-    #             )
-    #     except UnexpectedResponse as e:
-    #         return ServiceStatus(status="unhealthy", message=str(e))
-
-    # def _check_clickhouse():
-    #     try:
-    #         result = clickhouse_client.client.execute("SELECT 1")
-    #         if result and result[0][0] == 1:
-    #             return ServiceStatus(status="healthy", message="ClickHouse reachable")
-    #         else:
-    #             return ServiceStatus(
-    #                 status="unhealthy", message="Unexpected response from ClickHouse"
-    #             )
-    #     except Exception as e:
-    #         return ServiceStatus(status="unhealthy", message=str(e))
-
-    # Run synchronous checks
-    _check_service("database", _check_database)
-    # _check_service("qdrant", _check_qdrant)
-    # _check_service("clickhouse", _check_clickhouse)
+    except Exception as e:
+        services["database"] = ServiceStatus(status="unhealthy", message=str(e))
+        overall_status = "degraded"
 
     return HealthResponse(
         status=overall_status,
