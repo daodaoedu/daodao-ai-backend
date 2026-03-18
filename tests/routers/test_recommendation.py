@@ -9,15 +9,22 @@ from fastapi.testclient import TestClient
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-from src.dependencies import get_db_session
+from src.dependencies import get_cache_client, get_db_session
 from src.routers.recommendation import router
 from src.schemas.pageInfo import CursorPaginationInfo
 
 # ── minimal app wiring ────────────────────────────────────────
+def _make_cache(cached_value=None):
+    cache = MagicMock()
+    cache.client.get.return_value = cached_value
+    return cache
+
+
 app = FastAPI()
 app.include_router(router, prefix="/api")
 app.state.limiter = Limiter(key_func=get_remote_address)
 app.dependency_overrides[get_db_session] = lambda: None
+app.dependency_overrides[get_cache_client] = lambda: _make_cache()
 
 
 @pytest.fixture
@@ -87,7 +94,9 @@ class TestRankFeedResponse:
         assert body["cacheHit"] is False
 
     def test_pagination_has_next_when_full_page(self, client):
-        posts = [MagicMock() for _ in range(20)]
+        post = MagicMock()
+        post.dict.return_value = {"id": "1", "type": "idea"}
+        posts = [post] * 20
         pagination = _make_pagination(count=20, has_next=True)
         with patch(
             "src.routers.recommendation.get_recommendation_feed",

@@ -94,13 +94,14 @@ class TestGetRecommendationFeedPagination:
             _, pagination = get_recommendation_feed(session, None, 20, None)
         assert pagination.hasNext is False
         assert pagination.count == 0
-        assert pagination.cursors["end"] is None
+        assert pagination.cursors.end is None
 
     def test_has_next_when_full_page_returned(self):
-        posts = [_make_post(i) for i in range(1, 21)]  # 20 posts = page_size
+        feed_items = [_make_feed_info(i) for i in range(1, 21)]  # 20 feed items
+        posts = [_make_post(i) for i in range(1, 21)]
         session = MagicMock()
         with (
-            patch("src.services.recommendation_service.get_feed", return_value=[MagicMock()] * 20),
+            patch("src.services.recommendation_service.get_feed", return_value=feed_items),
             patch("src.services.recommendation_service.get_posts", return_value=posts),
         ):
             _, pagination = get_recommendation_feed(session, after_id=0, page_size=20, type_filter=None)
@@ -108,10 +109,11 @@ class TestGetRecommendationFeedPagination:
         assert pagination.count == 20
 
     def test_no_next_when_partial_page_returned(self):
-        posts = [_make_post(i) for i in range(1, 5)]  # 4 < page_size=20
+        feed_items = [_make_feed_info(i) for i in range(1, 5)]  # 4 items < page_size=20
+        posts = [_make_post(i) for i in range(1, 5)]
         session = MagicMock()
         with (
-            patch("src.services.recommendation_service.get_feed", return_value=[MagicMock()] * 4),
+            patch("src.services.recommendation_service.get_feed", return_value=feed_items),
             patch("src.services.recommendation_service.get_posts", return_value=posts),
         ):
             _, pagination = get_recommendation_feed(session, None, 20, None)
