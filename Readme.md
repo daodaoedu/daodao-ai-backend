@@ -21,7 +21,7 @@ src/
 └── config.py       # 設定（pydantic-settings）
 ```
 
-## 🧩 系統架構
+## 系統架構
 
 ```mermaid
 flowchart TD
@@ -44,10 +44,12 @@ flowchart TD
 - PostgreSQL（主資料庫）
 - Redis（快取 / 限流）
 - Qdrant（向量搜尋）
+- ClickHouse（分析資料庫，選用）
 
 ## 快速開始
 
 1. 克隆專案
+
 ```bash
 git clone https://github.com/daodaoedu/daodao-ai-backend.git
 cd daodao-ai-backend
@@ -77,6 +79,50 @@ make up-dev
 # 正式環境
 make up-prod
 ```
+
+## API 端點
+
+所有端點皆掛載於 `/api/v1` 前綴。
+
+### Health
+
+| Method | Path | 說明 |
+|--------|------|------|
+| GET | `/ping` | 基本連線測試，回傳 `pong` |
+| GET | `/health` | 完整健康檢查（含 DB 連線狀態） |
+
+### Users
+
+| Method | Path | 說明 |
+|--------|------|------|
+| GET | `/users/practices/suggestions` | 搜尋關鍵字建議（熱門標籤 + 個人興趣標籤） |
+| GET | `/users/practices/completions` | 輸入框即時關鍵字補全（`q`, `limit`） |
+| GET | `/users/practices` | 取得使用者練習貼文列表（支援分頁、篩選、排序） |
+
+### Recommendation
+
+| Method | Path | 說明 | 速率限制 |
+|--------|------|------|---------|
+| GET | `/recommendation/rank_feed` | 取得個人化 Feed 推薦（idea / practice / project） | 60/min |
+
+### Feedback
+
+| Method | Path | 說明 | 速率限制 |
+|--------|------|------|---------|
+| POST | `/feedback/generate` | 非同步產生 AI 回饋（reviewId、style、thinkingMethod） | 5/min |
+| GET | `/feedback/status/{task_id}` | 查詢回饋任務狀態 | 60/min |
+| GET | /feedback/{review_id} | 取得指定 Review 的回饋詳情 | 20/min |
+
+## 服務層說明
+
+| Service | 說明 |
+|---------|------|
+| `rank_feed.py` | Feed 排名演算法（新鮮度、活躍度、基礎分數） |
+| `feedback.py` | 組裝 AI 回饋所需的完整 context（Review、Project、Milestone、Task） |
+| `process_feedback.py` | 背景任務：呼叫 LLM 並儲存回饋結果 |
+| `review_service.py` | 使用 LLM Prompt 產生個人化 Review 回饋 |
+| `resource_service.py` | 取得熱門 / 最新 / 推薦資源 |
+| `practice/` | 練習相關推薦邏輯 |
 
 ## 開發指南
 
