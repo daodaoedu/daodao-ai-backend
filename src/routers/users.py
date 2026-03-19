@@ -143,8 +143,7 @@ def get_my_practices(
     if results:
         practice_ids = [r["id"] for r in results]
         reaction_rows = db.execute(
-            text(
-                """
+            text("""
                 SELECT
                     r.target_id,
                     r.reaction_type,
@@ -163,8 +162,7 @@ def get_my_practices(
                 WHERE r.target_type = 'practice'
                   AND r.target_id IN :practice_ids
                 GROUP BY r.target_id, r.reaction_type
-                """
-            ).bindparams(bindparam("practice_ids", expanding=True)),
+                """).bindparams(bindparam("practice_ids", expanding=True)),
             {"practice_ids": practice_ids},
         ).fetchall()
 
@@ -186,11 +184,15 @@ def get_my_practices(
     for r in results:
         practice = practice_map.get(r["id"])
         u = practice.user if practice else None
-        r["user"] = {
-            "id": str(u.external_id) if u and u.external_id else None,
-            "name": u.nickname or "",
-            "photo_url": u.contact.photo_url if u and u.contact else None,
-        } if u else None
+        r["user"] = (
+            {
+                "id": str(u.external_id) if u and u.external_id else None,
+                "name": u.nickname or "",
+                "photo_url": u.contact.photo_url if u and u.contact else None,
+            }
+            if u
+            else None
+        )
         r["reactions"] = reactions_by_practice.get(r["id"], [])
         r["is_brewing"] = (
             r.get("privacy_status") == PracticePrivacyStatus.DELAYED.value
