@@ -9,11 +9,11 @@
       - id: check-added-large-files
         args: ['--maxkb=1000']
 
-  # - repo: https://github.com/psf/black
-  #   rev: 25.1.0
-  #   hooks:
-  #     - id: black
-  #       language_version: python3
+  - repo: https://github.com/psf/black
+    rev: 25.9.0
+    hooks:
+      - id: black
+        language_version: python3
 
   # - repo: https://github.com/astral-sh/ruff-pre-commit
   #   rev: v0.12.4
@@ -32,19 +32,12 @@
 
   - repo: local
     hooks:
-      - id: format-with-make
-        name: Format with Makefile
-        entry: make format
-        language: system
-        types: [python]
-
-  - repo: local
-    hooks:
       - id: check-with-make
-        name: Format with Makefile
+        name: Check with Makefile (ruff)
         entry: make check
         language: system
         types: [python]
+        pass_filenames: false
 
 
   # - repo: local

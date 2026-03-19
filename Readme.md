@@ -1,6 +1,6 @@
 # DaoDao AI Backend
 
-DaoDao AI Backend 是島島教育平台的後端服務，提供 AI 增強的教育服務功能。
+DaoDao AI Backend 是島島教育平台的後端服務，提供 AI 增強的教育功能，包含推薦系統、實踐追蹤與 LLM 整合。
 
 ## 專案結構
 
@@ -32,7 +32,8 @@ flowchart TD
 
 ## 環境要求
 
-- Python 3.10+
+- Python 3.10+（推薦 3.12）
+- [uv](https://docs.astral.sh/uv/) — 套件管理
 - Docker / Docker Compose
 - PostgreSQL（主資料庫）
 - Redis（快取 / 限流）
@@ -138,7 +139,8 @@ make format   # 格式化（ruff + black）
 make lint     # 靜態分析（pylint + bandit）
 ```
 
-## 文件
+- `src/models/` 下的資料模型需要與 [daodao-storage](https://github.com/daodaoedu/daodao-storage) 倉庫的 schema 保持一致
+- 新增或修改模型時，請確保同步更新兩個倉庫
 
 API 文件訪問地址：
 

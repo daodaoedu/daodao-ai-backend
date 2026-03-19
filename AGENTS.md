@@ -1,0 +1,12 @@
+# AI Agent Instructions
+
+## Commit 規範
+
+每次執行 git commit 時，必須使用 `.claude/skills/format-commit/SKILL.md` skill 的流程來產生 commit message。
+
+流程：
+1. 詢問使用者 commit 類型（feat / fix / refactor / perf / docs / style / test / chore）
+2. 詢問影響範圍與簡短描述
+3. 詢問 Why（原因）
+4. 從 git diff 自動推導 How（做了什麼）
+5. 產生 commit message 並請使用者確認後執行
