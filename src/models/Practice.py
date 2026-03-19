@@ -31,6 +31,12 @@ class PracticeStatus(str, Enum):
     ARCHIVED = "archived"
 
 
+class PracticePrivacyStatus(str, Enum):
+    PRIVATE = "private"
+    PUBLIC = "public"
+    DELAYED = "delayed"
+
+
 class Practice(Base):
     __tablename__ = "practices"
 
@@ -69,7 +75,7 @@ class Practice(Base):
     # ===== 狀態 =====
     status = Column(String(20), default=PracticeStatus.DRAFT.value)
 
-    privacy_status = Column(String(20), default="private")
+    privacy_status = Column(String(20), default=PracticePrivacyStatus.PRIVATE.value)
 
     has_resources = Column(Boolean, default=False)
 

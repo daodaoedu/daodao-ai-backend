@@ -2,13 +2,14 @@ import json
 from collections import defaultdict
 from fastapi import APIRouter, Query
 from typing import Optional
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from src.dependencies import SessionDep, UserDep, CacheDep
 from src.logger import AppLogger
 from src.models.User import User
 from src.response_template import api_response_decorator
 from src.schemas.pageInfo import APIResponse, CursorPaginationInfo
 from src.utils.orm_to_dict import orm_to_dict
+from src.models.Practice import PracticePrivacyStatus, PracticeStatus
 from src.services.practice.practice import PracticeService
 from src.auto_metrics import observe_api
 
@@ -136,24 +137,14 @@ def get_my_practices(
 
     results = [orm_to_dict(p) for p in practices]
 
-    # ── 2.1 Attach user info ───────────────────────────────────────────────
+    # ── 2.1 Reactions aggregation (batch) ────────────────────────────────
     practice_map = {p.id: p for p in practices}
-    for r in results:
-        practice = practice_map.get(r["id"])
-        u = practice.user if practice else None
-        r["user"] = {
-            "id": str(u.external_id) if u and u.external_id else None,
-            "name": u.nickname or "",
-            "photo_url": u.contact.photo_url if u and u.contact else None,
-        } if u else None
-
-    # ── 2.2 Reactions aggregation (batch, not N+1) ────────────────────────
+    reactions_by_practice: dict = defaultdict(list)
     if results:
         practice_ids = [r["id"] for r in results]
-        ids_placeholder = ",".join(str(pid) for pid in practice_ids)
         reaction_rows = db.execute(
             text(
-                f"""
+                """
                 SELECT
                     r.target_id,
                     r.reaction_type,
@@ -170,13 +161,13 @@ def get_my_practices(
                     ) AS latest_actor_name
                 FROM reactions r
                 WHERE r.target_type = 'practice'
-                  AND r.target_id IN ({ids_placeholder})
+                  AND r.target_id IN :practice_ids
                 GROUP BY r.target_id, r.reaction_type
                 """
-            )
+            ).bindparams(bindparam("practice_ids", expanding=True)),
+            {"practice_ids": practice_ids},
         ).fetchall()
 
-        reactions_by_practice: dict = defaultdict(list)
         for row in reaction_rows:
             reactions_by_practice[row.target_id].append(
                 {
@@ -186,25 +177,27 @@ def get_my_practices(
                 }
             )
 
-        for r in results:
-            r["reactions"] = reactions_by_practice.get(r["id"], [])
-
-    # ── 2.4 Brewing card logic ────────────────────────────────────────────
-    for r in results:
-        is_brewing = (
-            r.get("privacy_status") == "delayed" and r.get("status") == "active"
-        )
-        r["is_brewing"] = is_brewing
-
-    for r in results:
-        logger.info(f"get_my_practices result item: {r.get('title')}\n")
     next_cursor = results[-1].get("id") if results else None
     has_next = len(results) == limit
     logger.info(f"recommendation_feed next_cursor: {next_cursor}")
     logger.info(f"get_my_practices result count: {len(results)}")
 
-    # 將 id 替換為 external_id（UUID），供前端用於 reactions 和頁面導航
+    # ── 2.2 Enrich each result (user, reactions, brewing, id) ────────────
     for r in results:
+        practice = practice_map.get(r["id"])
+        u = practice.user if practice else None
+        r["user"] = {
+            "id": str(u.external_id) if u and u.external_id else None,
+            "name": u.nickname or "",
+            "photo_url": u.contact.photo_url if u and u.contact else None,
+        } if u else None
+        r["reactions"] = reactions_by_practice.get(r["id"], [])
+        r["is_brewing"] = (
+            r.get("privacy_status") == PracticePrivacyStatus.DELAYED.value
+            and r.get("status") == PracticeStatus.ACTIVE.value
+        )
+        logger.info(f"get_my_practices result item: {r.get('title')}\n")
+        # 將 id 替換為 external_id（UUID），供前端用於 reactions 和頁面導航
         r["id"] = r.get("external_id") or r["id"]
 
     pagination = CursorPaginationInfo(

@@ -1,6 +1,7 @@
 from sqlalchemy import or_, select, func, literal
+from sqlalchemy.orm import joinedload
 
-from src.models.Practice import Practice, PracticeStatus
+from src.models.Practice import Practice, PracticeStatus, PracticePrivacyStatus
 from src.models.EntityTag import EntityTag
 from src.models.Tag import Tag
 from src.models.EntityResource import EntityResource
@@ -44,7 +45,9 @@ class PracticeService:
             logger.info("No current user, returning default list for practices")
             user = None
 
-        query = db.query(Practice)
+        query = db.query(Practice).options(
+            joinedload(Practice.user).joinedload(User.contact)
+        )
         query = PracticeService._remove_unwanted_status(query)
         query = PracticeService._build_base_query(query, keyword)
 
@@ -406,7 +409,7 @@ class PracticeService:
                     PracticeCheckIn.note.ilike(pattern),
                     # Don't match checkin notes for brewing practices
                     ~(
-                        (Practice.privacy_status == "delayed")
+                        (Practice.privacy_status == PracticePrivacyStatus.DELAYED.value)
                         & (Practice.status == PracticeStatus.ACTIVE.value)
                     ),
                 )
@@ -468,9 +471,9 @@ class PracticeService:
                     PracticeStatus.NOT_STARTED.value,
                 ]
             ),
-            Practice.privacy_status != "private",
+            Practice.privacy_status != PracticePrivacyStatus.PRIVATE.value,
             Practice.deleted_at.is_(None),
-            User.is_open_profile == True,
+            User.is_open_profile.is_(True),
         )
 
     # =========================================================
