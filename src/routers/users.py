@@ -11,7 +11,7 @@ from src.schemas.pageInfo import APIResponse, CursorPaginationInfo
 from src.utils.orm_to_dict import orm_to_dict
 from src.models.Practice import PracticePrivacyStatus, PracticeStatus
 from src.services.practice.practice import PracticeService
-from src.utils.orm_to_dict import orm_to_dict
+from src.auto_metrics import observe_api
 
 logger = AppLogger(__name__).get_logger()
 
