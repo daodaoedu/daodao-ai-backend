@@ -54,7 +54,7 @@ description: Use when committing changes - asks user for commit type and Why, au
 
 **How — 從 git diff 自動推導，不詢問使用者：**
 
-執行 `git diff HEAD` 分析實際變更內容，自行歸納出 3-5 個具體的解決方式。
+執行 `git diff --staged` 分析實際變更內容，自行歸納出 3-5 個具體的解決方式。
 How 描述的是「做了什麼」，答案已在 code changes 中，不需要使用者選擇。
 
 ### 步驟 4: 生成 Commit Message
