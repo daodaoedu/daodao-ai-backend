@@ -6,3 +6,4 @@ cache_data
 ollama_models
 .venv
 *.egg-info/
+.worktrees/
