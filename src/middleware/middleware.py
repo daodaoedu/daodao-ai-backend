@@ -24,6 +24,7 @@ def setup_middlewares(app: FastAPI):
             "https://app-dev.daodao.so",
             "https://app-feat.daodao.so",
             "http://localhost:8002",
+            "http://localhost:3001",
         ]
     else:
         origins = ["https://app.daodao.so"]

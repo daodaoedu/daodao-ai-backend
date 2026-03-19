@@ -1,18 +1,24 @@
 # DaoDao AI Backend
 
-DaoDao AI Backend 是島島教育平台的後端服務，提供 AI 增強的教育服務功能。
+DaoDao AI Backend 是島島教育平台的後端服務，提供 AI 增強的教育功能，包含推薦系統、實踐追蹤與 LLM 整合。
 
 ## 專案結構
 
 ```
 src/
-├── routers/    # FastAPI 路由層
-├── middleware/ # 中介層（JWT 驗證、速率限制等）
-├── models/     # ORM 模型（對應 daodao-storage）
-├── db/         # 資料庫相關程式
-├── schemas/    # Pydantic 資料結構定義（request / response schema）
-├── services/   # 業務邏輯與外部整合（LLM、Redis、ClickHouse）
-└── utils/      # 共用工具函數
+├── routers/        # FastAPI 路由層（users, recommendation, ping）
+├── middleware/     # 中介層（JWT 驗證、速率限制）
+├── models/         # SQLAlchemy ORM 模型（對應 daodao-storage schema）
+├── schemas/        # Pydantic request / response 資料結構
+├── services/       # 業務邏輯
+│   ├── practice/   # 實踐查詢、推薦邏輯
+│   ├── cache/      # Redis 快取
+│   ├── llm/        # LLM 整合
+│   ├── qdrant/     # 向量搜尋
+│   └── clickhouse/ # 分析資料庫
+├── db/             # 資料庫連線
+├── utils/          # 共用工具函數
+└── config.py       # 設定（pydantic-settings）
 ```
 
 ## 系統架構
@@ -32,7 +38,8 @@ flowchart TD
 
 ## 環境要求
 
-- Python 3.10+
+- Python 3.10+（推薦 3.12）
+- [uv](https://docs.astral.sh/uv/) — 套件管理
 - Docker / Docker Compose
 - PostgreSQL（主資料庫）
 - Redis（快取 / 限流）
@@ -48,28 +55,29 @@ git clone https://github.com/daodaoedu/daodao-ai-backend.git
 cd daodao-ai-backend
 ```
 
-2. 配置環境變數
-
+2. 安裝依賴
 ```bash
-cp .env.dev.sample .env.dev    # 開發環境
-cp .env.prod.sample .env.prod  # 生產環境
-# 編輯對應的 .env 檔案，設定資料庫、API key 等參數
+uv sync
 ```
 
-3. 使用 Docker 啟動服務
-
+3. 配置環境變數
 ```bash
-make up-dev   # 啟動開發環境（port 8002）
-make up-prod  # 啟動生產環境
+cp .env.dev .env
+# 編輯 .env，設定資料庫、Redis、API key 等參數
 ```
 
-其他常用指令：
-
+4. 安裝 pre-commit hooks（確保 commit 前自動格式化）
 ```bash
-make rebuild-dev   # 重建開發環境
-make health        # 健康檢查（dev + prod）
-make quality_checks # 程式碼格式化 + 靜態分析
-make help          # 列出所有可用指令
+uvx pre-commit install
+```
+
+5. 使用 Docker 啟動服務
+```bash
+# 開發環境
+make up-dev
+
+# 正式環境
+make up-prod
 ```
 
 ## API 端點
@@ -118,39 +126,34 @@ make help          # 列出所有可用指令
 
 ## 開發指南
 
-### 資料模型
+### 常用指令
 
-`src/models/` 目錄下的 ORM 模型需與 [daodao-storage](https://github.com/daodaoedu/daodao-storage) 的 schema 保持一致，新增或修改模型時請同步更新兩個倉庫。
+| 指令 | 說明 |
+|------|------|
+| `make up-dev` | 啟動開發環境 |
+| `make down-dev` | 停止開發環境 |
+| `make rebuild-dev` | 重建開發環境 |
+| `make format` | 格式化程式碼（black + ruff） |
+| `make check` | 檢查格式（不修改） |
+| `make lint` | 靜態分析（pylint + bandit） |
+| `make quality_checks` | format + lint 一鍵執行 |
 
-### LLM 後端
+### 程式碼規範
 
-支援多後端切換，透過 `.env` 設定：
+- 格式化工具：`black 25.9.0`、`ruff`
+- commit 前 pre-commit hook 會自動執行 black，確保格式一致
+- CI 會執行 `make check` 驗證格式，格式錯誤會擋住 merge
 
-- **Ollama**（預設本地開發）
-- **OpenAI**
-- **Gemini**
-- **Grok**
+### 資料模型說明
 
-### 程式碼品質
+- `src/models/` 下的資料模型需要與 [daodao-storage](https://github.com/daodaoedu/daodao-storage) 倉庫的 schema 保持一致
+- 新增或修改模型時，請確保同步更新兩個倉庫
 
-```bash
-make format   # 格式化（ruff + black）
-make lint     # 靜態分析（pylint + bandit）
-```
+## API 文件
 
-## 文件
-
-API 文件訪問地址：
-
-| 環境 | Swagger UI | ReDoc |
-|------|-----------|-------|
-| 本地開發 | http://localhost:8002/docs | http://localhost:8002/redoc |
-| Dev | https://ai-dev.daodao.so/docs | https://ai-dev.daodao.so/redoc |
-| Production | https://ai.daodao.so/docs | https://ai.daodao.so/redoc |
-
-> Swagger 的 server 選單會依 `ENVIRONMENT` 環境變數自動切換：
-> - `development`（預設）：顯示 `https://ai-dev.daodao.so` 與 `http://127.0.0.1:8002`
-> - `production`：僅顯示 `https://ai.daodao.so`
+服務啟動後可訪問：
+- Swagger UI：http://localhost:8002/docs
+- ReDoc：http://localhost:8002/redoc
 
 ## 授權條款
 
