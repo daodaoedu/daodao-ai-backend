@@ -1,19 +1,20 @@
+import json
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Query, Request
 
-from src.dependencies import SessionDep
+from src.dependencies import CacheDep, SessionDep
 from src.logger import AppLogger
 from src.middleware.limiter import limiter
 from src.response_template import api_response_decorator
-from src.schemas.pageInfo import APIResponse, CursorPaginationInfo
-from src.schemas.recommendation import FeedItem
-from src.services.rank_feed import get_feed, get_posts
+from src.schemas.pageInfo import APIResponse
+from src.services.recommendation_service import get_recommendation_feed
 
 logger = AppLogger(__name__).get_logger()
 
-
 router = APIRouter(prefix="/v1/recommendation", tags=["recommendation"])
+
+RECOMMENDATION_FEED_TTL = 60  # 1 分鐘
 
 
 @router.get("/rank_feed", response_model=APIResponse)
@@ -21,8 +22,8 @@ router = APIRouter(prefix="/v1/recommendation", tags=["recommendation"])
 @api_response_decorator
 def recommendation_feed(
     request: Request,
-    session: SessionDep,  # ✅ FastAPI 會自動從 get_db_session() 拿 session
-    # limit: int = Query(100, description="最多取得幾筆 feed"),
+    session: SessionDep,
+    cache: CacheDep,
     after_id: Optional[int] = Query(
         None, description="上一次最後一筆的 id，作為 cursor"
     ),
@@ -31,53 +32,35 @@ def recommendation_feed(
 ):
     """
     推薦 feed API
-    - JWT 驗證透過 get_current_user 自動處理
     example:
-    curl -X POST "http://localhost:8002/api/recommendation/rank_feed?limit=10" \
-    -H "accept: application/json" \
+    curl -X GET "http://localhost:8002/api/v1/recommendation/rank_feed?page_size=10" \
     -H "Authorization: Bearer <YOUR_TOKEN_ID>"
-
     """
+    cache_key = f"recommendation_feed:after:{after_id or 0}:size:{page_size}:type:{type or 'all'}"
 
-    try:
-        if type:
-            if type not in ["idea", "practice", "project"]:
-                raise HTTPException(
-                    status_code=400,
-                    detail="type must be one of ['idea', 'practice', 'project']",
-                )
-            top_feed = get_feed(after_id=after_id, page_size=page_size, types=[type])
-        else:
-            top_feed = get_feed(after_id=after_id, page_size=page_size)
-        # 只取 id 與 type
-        filtered_feed = [FeedItem(id=item.id, type=item.type) for item in top_feed]
+    cached = cache.client.get(cache_key)
+    if cached:
+        try:
+            payload = json.loads(cached)
+            logger.info(f"recommendation_feed cache_hit key={cache_key}")
+            return {**payload, "cache_hit": True}
+        except Exception:
+            logger.warning(f"cache parse error for key={cache_key}, falling back to DB")
 
-        logger.info(f"recommendation_feed result: {len(filtered_feed)}")
-
-        posts = get_posts(filtered_feed, session=session)
-
-        # Cursor pagination info
-        paginated_posts = posts
-        next_cursor = paginated_posts[-1].id if paginated_posts else None
-        has_next = len(paginated_posts) == page_size
-        logger.info(f"recommendation_feed next_cursor: {next_cursor}")
-
-    except Exception as e:
-        logger.info(f"recommendation_feed error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-    pagination = CursorPaginationInfo(
-        cursors={
-            "start": str(after_id) if after_id else None,
-            "end": str(next_cursor) if next_cursor else None,
-        },
-        hasPrev=after_id is not None,
-        hasNext=has_next,
-        count=len(paginated_posts),
+    posts, pagination = get_recommendation_feed(session, after_id, page_size, type)
+    logger.info(
+        f"recommendation_feed count={len(posts)}, next_cursor={pagination.cursors}"
     )
 
-    return {
-        "data": paginated_posts,
-        "pagination": pagination,
-        "cache_hit": False,
+    payload = {
+        "data": [p.model_dump() for p in posts],
+        "pagination": pagination.model_dump(),
     }
+    try:
+        cache.client.set(
+            cache_key, json.dumps(payload, default=str), ex=RECOMMENDATION_FEED_TTL
+        )
+    except Exception:
+        logger.warning(f"cache write error for key={cache_key}, skipping cache")
+
+    return {**payload, "cache_hit": False}

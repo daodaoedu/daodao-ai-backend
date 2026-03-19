@@ -5,7 +5,6 @@ from src.models import Practice, PracticeCheckIn
 from src.dependencies import SessionDep
 from src.logger import AppLogger
 
-
 logger = AppLogger(__name__).get_logger()
 
 

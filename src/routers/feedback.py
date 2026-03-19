@@ -1,3 +1,4 @@
+import json
 import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
@@ -103,14 +104,29 @@ async def generate_feedback(
     }
 
 
-@router.get("/v1/{review_id}", response_model=FeedbackDetailResponse)
+FEEDBACK_TTL = 3600  # 1 小時（feedback 生成後不會變動）
+
+
+@router.get("/{review_id}", response_model=FeedbackDetailResponse)
 @limiter.limit("20/minute")
 async def get_feedback(
-    request: Request, review_id: int, db: ORMSession = Depends(get_db)
+    request: Request,
+    review_id: int,
+    cache_client: CacheDep,
+    db: ORMSession = Depends(get_db),
 ):
     """
     取得回饋
     """
+    cache_key = f"feedback:review:{review_id}"
+
+    cached = cache_client.client.get(cache_key)
+    if cached:
+        try:
+            return FeedbackDetailResponse(**json.loads(cached))
+        except Exception:
+            logger.warning(f"cache parse error for key={cache_key}, falling back to DB")
+
     ai_feedback = (
         db.query(AIReviewFeedback)
         .filter(AIReviewFeedback.review_id == review_id)
@@ -121,7 +137,7 @@ async def get_feedback(
     if not ai_feedback:
         raise HTTPException(status_code=404, detail="找不到對應的回饋留言")
 
-    return FeedbackDetailResponse(
+    response = FeedbackDetailResponse(
         feedbackId=ai_feedback.id,
         reviewId=ai_feedback.review_id,
         style=ai_feedback.style,
@@ -130,3 +146,12 @@ async def get_feedback(
         tokenUsage=ai_feedback.token_usage,
         createdAt=ai_feedback.created_at,
     )
+    try:
+        cache_client.client.set(
+            cache_key,
+            json.dumps(response.model_dump(), default=str),
+            ex=FEEDBACK_TTL,
+        )
+    except Exception:
+        logger.warning(f"cache write error for key={cache_key}, skipping cache")
+    return response

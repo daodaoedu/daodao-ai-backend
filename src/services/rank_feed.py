@@ -67,7 +67,7 @@ def get_feed(
         sql_fragments.append(
             """
             SELECT p.id, 'practice', p.title, p.created_at, p.updated_at,
-                   COUNT(er.entity_id), COALESCE(p.streak,0), COALESCE(p.current_progress/NULLIF(p.total_amount,0),0), 2
+                   COUNT(er.entity_id), 0, 0, 2
             FROM practices p
             JOIN users u ON u.id = p.user_id AND u.is_open_profile = true
             LEFT JOIN entity_resources er ON er.entity_id=p.id AND er.entity_type='practice'

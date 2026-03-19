@@ -11,16 +11,17 @@ from src.schemas.pageInfo import APIResponse, CursorPaginationInfo
 from src.utils.orm_to_dict import orm_to_dict
 from src.models.Practice import PracticePrivacyStatus, PracticeStatus
 from src.services.practice.practice import PracticeService
-from src.auto_metrics import observe_api
+from src.utils.orm_to_dict import orm_to_dict
 
 logger = AppLogger(__name__).get_logger()
 
-
 router = APIRouter(prefix="/v1/users", tags=["users"])
-
 
 SUGGESTIONS_TTL = 600  # 10 分鐘
 COMPLETIONS_TTL = 300  # 5 分鐘
+MY_PRACTICES_TTL = 120  # 2 分鐘
+
+_EMPTY_SUGGESTIONS = {"popular_keywords": [], "interest_tags": []}
 
 
 @router.get(
@@ -35,28 +36,26 @@ def get_practice_suggestions(
     current_user: UserDep,
     cache: CacheDep,
 ):
-    empty = {
-        "data": {"popular_keywords": [], "interest_tags": []},
-        "pagination": None,
-        "cache_hit": False,
-    }
     if not current_user:
-        return empty
+        return {"data": _EMPTY_SUGGESTIONS, "pagination": None, "cache_hit": False}
 
     user = db.query(User).filter(User.external_id == current_user).first()
     if not user:
-        return empty
+        return {"data": _EMPTY_SUGGESTIONS, "pagination": None, "cache_hit": False}
 
     cache_key = f"practice_suggestions:{user.id}"
-
     cached = cache.client.get(cache_key)
     if cached:
-        suggestions = json.loads(cached)
-        return {"data": suggestions, "pagination": None, "cache_hit": True}
+        try:
+            return {"data": json.loads(cached), "pagination": None, "cache_hit": True}
+        except Exception:
+            logger.warning(f"cache parse error for key={cache_key}, falling back to DB")
 
     suggestions = PracticeService.get_search_suggestions(db=db, user_id=user.id)
-    cache.client.set(cache_key, json.dumps(suggestions), ex=SUGGESTIONS_TTL)
-
+    try:
+        cache.client.set(cache_key, json.dumps(suggestions), ex=SUGGESTIONS_TTL)
+    except Exception:
+        logger.warning(f"cache write error for key={cache_key}, skipping cache")
     return {"data": suggestions, "pagination": None, "cache_hit": False}
 
 
@@ -79,10 +78,16 @@ def get_practice_completions(
 
     cached = cache.client.get(cache_key)
     if cached:
-        return {"data": json.loads(cached), "pagination": None, "cache_hit": True}
+        try:
+            return {"data": json.loads(cached), "pagination": None, "cache_hit": True}
+        except Exception:
+            logger.warning(f"cache parse error for key={cache_key}, falling back to DB")
 
     result = PracticeService.get_completions(db=db, prefix=normalized_q, limit=limit)
-    cache.client.set(cache_key, json.dumps(result), ex=COMPLETIONS_TTL)
+    try:
+        cache.client.set(cache_key, json.dumps(result), ex=COMPLETIONS_TTL)
+    except Exception:
+        logger.warning(f"cache write error for key={cache_key}, skipping cache")
     return {"data": result, "pagination": None, "cache_hit": False}
 
 
@@ -94,6 +99,7 @@ def get_practice_completions(
 def get_my_practices(
     db: SessionDep,
     current_user: UserDep,
+    cache: CacheDep,
     # pagination
     limit: int = Query(20, ge=1, le=100),
     after_id: Optional[int] = Query(
@@ -115,13 +121,34 @@ def get_my_practices(
         description="newest_updated | oldest_updated | newest_created | oldest_created| recommended",
     ),
 ):
-    # 會有filter, search, sort等功能
+    # ── cache key（只有登入用戶才 cache，anon 每次即時查詢）──
+    user_id: Optional[int] = None
+    if current_user:
+        _user = db.query(User).filter(User.external_id == current_user).first()
+        user_id = _user.id if _user else None
 
-    # filter: 依照分類、標籤、狀態等條件篩選實踐貼文
-    # search: 依照關鍵字搜尋實踐貼文（標題、行動、標籤、資源、打卡內容）
-    # sort: 依據推薦演算法排序，或是使用者選擇的排序方式（例如：最新、最舊、最多讚等）
-    # 如果是無痕頁面，會有預設的規則排序。按「最後一次打卡 (Check-in) 時間」或「實踐建立時間」降序排列。
+    if user_id:
+        tags_str = ",".join(sorted(tags)) if tags else ""
+        cache_key = (
+            f"practices:user:{user_id}"
+            f":kw:{keyword if keyword is not None else '__none__'}"
+            f":tags:{tags_str}"
+            f":dur:{duration_min if duration_min is not None else ''}-{duration_max if duration_max is not None else ''}"
+            f":status:{status if status is not None else '__none__'}"
+            f":sort:{sort_by}"
+            f":limit:{limit}:after:{after_id or 0}:offset:{offset}"
+        )
+        cached = cache.client.get(cache_key)
+        if cached:
+            try:
+                payload = json.loads(cached)
+                return {**payload, "cache_hit": True}
+            except Exception:
+                logger.warning(
+                    f"cache parse error for key={cache_key}, falling back to DB"
+                )
 
+    # ── 實際查詢 ──
     practices = PracticeService.get_practices(
         db=db,
         user_external_id=current_user,
@@ -179,8 +206,7 @@ def get_my_practices(
 
     next_cursor = results[-1].get("id") if results else None
     has_next = len(results) == limit
-    logger.info(f"recommendation_feed next_cursor: {next_cursor}")
-    logger.info(f"get_my_practices result count: {len(results)}")
+    logger.info(f"get_my_practices count={len(results)}, next_cursor={next_cursor}")
 
     # ── 2.2 Enrich each result (user, reactions, brewing, id) ────────────
     for r in results:
@@ -214,8 +240,19 @@ def get_my_practices(
         count=len(results),
     )
 
-    return {
-        "data": results,
-        "pagination": pagination,
-        "cache_hit": False,
-    }
+    payload = {"data": results, "pagination": pagination}
+
+    if user_id:
+        try:
+            cache.client.set(
+                cache_key,
+                json.dumps(
+                    {"data": results, "pagination": pagination.model_dump()},
+                    default=str,
+                ),
+                ex=MY_PRACTICES_TTL,
+            )
+        except Exception:
+            logger.warning(f"cache write error for key={cache_key}, skipping cache")
+
+    return {**payload, "cache_hit": False}
