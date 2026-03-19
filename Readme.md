@@ -53,7 +53,12 @@ cp .env.prod.sample .env.prod
 # 編輯 .env 檔案，設定資料庫、API key 等參數
 ```
 
-3. 使用 Docker 啟動服務
+3. 安裝 pre-commit hooks（確保 commit 前自動格式化）
+```bash
+uvx pre-commit install
+```
+
+4. 使用 Docker 啟動服務
 ```bash
 make up-prod
 ```
