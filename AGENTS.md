@@ -2,7 +2,7 @@
 
 ## Commit 規範
 
-每次執行 git commit 時，必須使用 `https://github.com/daodaoedu/daodao-f2e/blob/dev/.claude/skills/format-commit/SKILL.md` skill 的流程來產生 commit message。
+每次執行 git commit 時，必須使用 `.claude/skills/format-commit/SKILL.md` skill 的流程來產生 commit message。
 
 流程：
 1. 詢問使用者 commit 類型（feat / fix / refactor / perf / docs / style / test / chore）
