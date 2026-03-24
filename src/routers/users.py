@@ -26,7 +26,13 @@ _EMPTY_SUGGESTIONS = {"popular_keywords": [], "interest_tags": []}
 
 @router.get(
     "/practices/suggestions",
-    description="取得搜尋建議關鍵字（近期熱門標籤 + 我的技能興趣相關標籤）",
+    description="""
+    取得搜尋建議關鍵字（需登入使用者）。<br/>
+    - **登入使用者**會回傳：<br/>
+    `popular_keywords`: 近期熱門標籤<br/>
+    `interest_tags`: 與使用者技能或興趣相關的標籤<br/>
+    - **未登入使用者**會回傳空資料
+    """,
     response_model=APIResponse,
 )
 @api_response_decorator
@@ -61,7 +67,9 @@ def get_practice_suggestions(
 
 @router.get(
     "/practices/completions",
-    description="關鍵字文字補全與預測下一個詞（輸入框即時補全用）",
+    description="""
+    提供文字補全建議，支援輸入框即時建議
+    """,
     response_model=APIResponse,
 )
 @api_response_decorator
@@ -92,7 +100,15 @@ def get_practice_completions(
 
 
 @router.get(
-    "/practices", description="取得使用者的實踐貼文列表", response_model=APIResponse
+    "/practices",
+    description="""
+    取得使用者的實踐貼文列表。<br/>
+    - 登入用戶會有個人化排序與快取<br/>
+    - 未登入用戶仍可取得貼文列表，但無個人化<br/>
+    - 支援搜尋、過濾、排序與分頁<br/>
+    - 每筆貼文包含使用者資訊、回應統計與是否延遲公開<br/>
+    """,
+    response_model=APIResponse,
 )
 @api_response_decorator
 @observe_api
