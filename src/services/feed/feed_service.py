@@ -11,6 +11,7 @@ from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
 from src.logger import AppLogger
+from src.models.User import User
 from src.schemas.feed import FeedSortBy, FeedTypeFilter
 
 logger = AppLogger(__name__).get_logger()
@@ -35,12 +36,19 @@ class FeedService:
         2. Batch enrich: reactions, comments, user info
         3. Cursor pagination on (sort_time, item_id)
 
-        current_user_external_id 目前用於 router 層的 per-user cache key。
-        TODO v2 可進一步用於：
+        current_user_external_id 用於：
+        - Router 層 per-user cache key
+        - 推薦排序的個人化 BehaviorSignal（用戶對 practice 的打卡頻率）
+        TODO v2：
         - 在 feed response 中內嵌 currentUserReaction（減少前端 N+1）
-        - 個人化排序 / 朋友動態優先
         - 過濾已封鎖用戶的內容
         """
+        # --- 0. Resolve user_id for personalization ---
+        user_id: int | None = None
+        if current_user_external_id:
+            _user = db.query(User).filter(User.external_id == current_user_external_id).first()
+            user_id = _user.id if _user else None
+
         # --- 1. Parse cursor ---
         cursor_time = None
         cursor_id = None
@@ -197,7 +205,7 @@ class FeedService:
 
         # --- 5.5 Recommended sort ---
         if sort_by == FeedSortBy.RECOMMENDED and items:
-            items = FeedService._apply_recommended_sort(items, db)
+            items = FeedService._apply_recommended_sort(items, db, user_id=user_id)
 
         # Strip internal _row before returning
         for item in items:
@@ -218,7 +226,11 @@ class FeedService:
     # =========================================================================
 
     @staticmethod
-    def _apply_recommended_sort(items: list[dict], db: Session) -> list[dict]:
+    def _apply_recommended_sort(
+        items: list[dict],
+        db: Session,
+        user_id: Optional[int] = None,
+    ) -> list[dict]:
         """Apply recommendation scoring and re-sort feed items."""
         from datetime import datetime, timezone
 
@@ -242,6 +254,28 @@ class FeedService:
             for r in rows:
                 practice_extra[r.id] = r
 
+        # Batch fetch user's checkin stats per practice（個人化）
+        user_checkin_stats: dict = {}
+        if user_id and practice_ids:
+            checkin_rows = db.execute(
+                text("""
+                    SELECT
+                        practice_id,
+                        COUNT(*) AS checkin_count,
+                        MIN(created_at) AS first_checkin
+                    FROM practice_checkins
+                    WHERE user_id = :user_id
+                      AND practice_id IN :practice_ids
+                    GROUP BY practice_id
+                """).bindparams(bindparam("practice_ids", expanding=True)),
+                {"user_id": user_id, "practice_ids": practice_ids},
+            ).fetchall()
+            for r in checkin_rows:
+                user_checkin_stats[r.practice_id] = {
+                    "checkin_count": r.checkin_count,
+                    "first_checkin": r.first_checkin,
+                }
+
         scored = []
         for item in items:
             row = item["_row"]
@@ -251,7 +285,15 @@ class FeedService:
 
             if item["type"] == "practice":
                 extra = practice_extra.get(row.item_id)
-                s = score_practice(extra or row, reaction_count, comment_count, now)
+                stats = user_checkin_stats.get(row.item_id, {})
+                s = score_practice(
+                    extra or row,
+                    reaction_count,
+                    comment_count,
+                    now,
+                    user_checkin_count=stats.get("checkin_count", 0),
+                    user_first_checkin_at=stats.get("first_checkin"),
+                )
             else:
                 s = score_checkin(row, reaction_count, comment_count, now)
 
