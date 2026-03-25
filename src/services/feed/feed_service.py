@@ -11,7 +11,7 @@ from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
 from src.logger import AppLogger
-from src.schemas.feed import FeedTypeFilter
+from src.schemas.feed import FeedSortBy, FeedTypeFilter
 
 logger = AppLogger(__name__).get_logger()
 
@@ -26,6 +26,7 @@ class FeedService:
         keyword: Optional[str] = None,
         tags: Optional[list[str]] = None,
         type_filter: FeedTypeFilter = FeedTypeFilter.ALL,
+        sort_by: FeedSortBy = FeedSortBy.NEWEST,
     ) -> dict:
         """
         統一 feed 查詢：混合 practice + checkin，按時間排序。
@@ -176,7 +177,11 @@ class FeedService:
                 item["reactions"] = reactions_map.get(("practice", row.item_id), [])
                 comment_data = comments_map.get(("practice", row.item_id), {})
                 item["comment_count"] = comment_data.get("count", 0)
-                items.append({"type": "practice", "data": item})
+                items.append({
+                    "type": "practice",
+                    "data": item,
+                    "_row": row,
+                })
 
             elif row.item_type == "checkin" and row.item_id in checkins_map:
                 item = checkins_map[row.item_id]
@@ -184,7 +189,19 @@ class FeedService:
                 comment_data = comments_map.get(("checkin", row.item_id), {})
                 item["comment_count"] = comment_data.get("count", 0)
                 item["comment_preview"] = comment_data.get("preview", [])
-                items.append({"type": "checkin", "data": item})
+                items.append({
+                    "type": "checkin",
+                    "data": item,
+                    "_row": row,
+                })
+
+        # --- 5.5 Recommended sort ---
+        if sort_by == FeedSortBy.RECOMMENDED and items:
+            items = FeedService._apply_recommended_sort(items, db)
+
+        # Strip internal _row before returning
+        for item in items:
+            item.pop("_row", None)
 
         # --- 6. Build next_cursor ---
         next_cursor = None
@@ -195,6 +212,53 @@ class FeedService:
 
         logger.info(f"feed: {len(items)} items, has_next={has_next}")
         return {"data": items, "next_cursor": next_cursor}
+
+    # =========================================================================
+    # Ranking
+    # =========================================================================
+
+    @staticmethod
+    def _apply_recommended_sort(items: list[dict], db: Session) -> list[dict]:
+        """Apply recommendation scoring and re-sort feed items."""
+        from datetime import datetime, timezone
+
+        from src.services.feed.feed_ranking import score_checkin, score_practice
+
+        now = datetime.now(timezone.utc)
+
+        # Batch fetch extra practice fields for scoring
+        practice_ids = [
+            it["_row"].item_id for it in items if it["type"] == "practice"
+        ]
+        practice_extra = {}
+        if practice_ids:
+            rows = db.execute(
+                text("""
+                    SELECT id, has_resources, progress_percentage, template_id, updated_at
+                    FROM practices WHERE id IN :ids
+                """).bindparams(bindparam("ids", expanding=True)),
+                {"ids": practice_ids},
+            ).fetchall()
+            for r in rows:
+                practice_extra[r.id] = r
+
+        scored = []
+        for item in items:
+            row = item["_row"]
+            reactions = item["data"].get("reactions", [])
+            reaction_count = sum(r.get("count", 0) for r in reactions)
+            comment_count = item["data"].get("comment_count", 0)
+
+            if item["type"] == "practice":
+                extra = practice_extra.get(row.item_id)
+                s = score_practice(extra or row, reaction_count, comment_count, now)
+            else:
+                s = score_checkin(row, reaction_count, comment_count, now)
+
+            scored.append((s, item))
+
+        scored.sort(key=lambda x: x[0], reverse=True)
+        return [item for _, item in scored]
 
     # =========================================================================
     # Batch fetch helpers

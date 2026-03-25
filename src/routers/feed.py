@@ -8,7 +8,7 @@ from src.logger import AppLogger
 from src.models.User import User
 from src.response_template import api_response_decorator
 from src.auto_metrics import observe_api
-from src.schemas.feed import FeedTypeFilter
+from src.schemas.feed import FeedSortBy, FeedTypeFilter
 from src.schemas.pageInfo import CursorPaginationInfo
 from src.services.feed.feed_service import FeedService
 
@@ -62,6 +62,9 @@ def get_feed(
             except Exception:
                 logger.warning(f"cache parse error for key={cache_key}, falling back to DB")
 
+    # ── 登入用戶自動啟用推薦排序 ──
+    sort_by = FeedSortBy.RECOMMENDED if user_id else FeedSortBy.NEWEST
+
     # ── 實際查詢 ──
     result = FeedService.get_feed(
         db=db,
@@ -71,6 +74,7 @@ def get_feed(
         keyword=keyword,
         tags=tags,
         type_filter=type,
+        sort_by=sort_by,
     )
 
     next_cursor = result.get("next_cursor")
