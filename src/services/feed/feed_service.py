@@ -268,10 +268,12 @@ class FeedService:
 
             # 1b. Connections (normalized: user_a_id < user_b_id)
             conn_rows = db.execute(
-                text("""
+                text(
+                    """
                     SELECT user_a_id, user_b_id FROM connections
                     WHERE user_a_id = :uid OR user_b_id = :uid
-                """),
+                """
+                ),
                 {"uid": user_id},
             ).fetchall()
             for r in conn_rows:
@@ -280,10 +282,12 @@ class FeedService:
 
             # 1c. Interaction counts
             interact_rows = db.execute(
-                text("""
+                text(
+                    """
                     SELECT user_a_id, user_b_id, count FROM interaction_counts
                     WHERE user_a_id = :uid OR user_b_id = :uid
-                """),
+                """
+                ),
                 {"uid": user_id},
             ).fetchall()
             for r in interact_rows:
@@ -295,10 +299,12 @@ class FeedService:
         practice_extra = {}
         if practice_ids:
             rows = db.execute(
-                text("""
+                text(
+                    """
                     SELECT id, user_id, has_resources, progress_percentage, template_id, updated_at
                     FROM practices WHERE id IN :ids
-                """).bindparams(bindparam("ids", expanding=True)),
+                """
+                ).bindparams(bindparam("ids", expanding=True)),
                 {"ids": practice_ids},
             ).fetchall()
             for r in rows:
@@ -309,10 +315,12 @@ class FeedService:
         checkin_extra = {}
         if checkin_ids:
             rows = db.execute(
-                text("""
+                text(
+                    """
                     SELECT c.id, c.user_id, c.practice_id, c.image_urls, c.note, c.mood
                     FROM practice_checkins c WHERE c.id IN :ids
-                """).bindparams(bindparam("ids", expanding=True)),
+                """
+                ).bindparams(bindparam("ids", expanding=True)),
                 {"ids": checkin_ids},
             ).fetchall()
             for r in rows:
@@ -368,7 +376,8 @@ class FeedService:
             return {}
 
         rows = db.execute(
-            text("""
+            text(
+                """
                 SELECT
                     p.id,
                     p.external_id,
@@ -389,7 +398,8 @@ class FeedService:
                 JOIN users u ON u.id = p.user_id
                 LEFT JOIN contacts ct ON ct.id = u.id
                 WHERE p.id IN :ids
-            """).bindparams(bindparam("ids", expanding=True)),
+            """
+            ).bindparams(bindparam("ids", expanding=True)),
             {"ids": ids},
         ).fetchall()
 
@@ -424,7 +434,8 @@ class FeedService:
             return {}
 
         rows = db.execute(
-            text("""
+            text(
+                """
                 SELECT
                     c.id,
                     c.checkin_date::text AS checkin_date,
@@ -442,7 +453,8 @@ class FeedService:
                 JOIN users u ON u.id = c.user_id
                 LEFT JOIN contacts ct ON ct.id = u.id
                 WHERE c.id IN :ids
-            """).bindparams(bindparam("ids", expanding=True)),
+            """
+            ).bindparams(bindparam("ids", expanding=True)),
             {"ids": ids},
         ).fetchall()
 
@@ -476,7 +488,8 @@ class FeedService:
             if not ids:
                 continue
             rows = db.execute(
-                text("""
+                text(
+                    """
                     SELECT
                         r.target_id,
                         r.reaction_type,
@@ -495,7 +508,8 @@ class FeedService:
                     WHERE r.target_type = :target_type
                       AND r.target_id IN :ids
                     GROUP BY r.target_id, r.reaction_type
-                """).bindparams(bindparam("ids", expanding=True)),
+                """
+                ).bindparams(bindparam("ids", expanding=True)),
                 {"target_type": target_type, "ids": ids},
             ).fetchall()
 
@@ -522,14 +536,16 @@ class FeedService:
 
             # 1. Counts
             count_rows = db.execute(
-                text("""
+                text(
+                    """
                     SELECT target_id, COUNT(*) AS cnt
                     FROM comments
                     WHERE target_type = :target_type
                       AND target_id IN :ids
                       AND visibility = 'public'
                     GROUP BY target_id
-                """).bindparams(bindparam("ids", expanding=True)),
+                """
+                ).bindparams(bindparam("ids", expanding=True)),
                 {"target_type": target_type, "ids": ids},
             ).fetchall()
 
@@ -538,7 +554,8 @@ class FeedService:
 
             # 2. Preview (latest 2 per target) using LATERAL join
             preview_rows = db.execute(
-                text("""
+                text(
+                    """
                     SELECT sub.target_id, sub.id, sub.content, sub.created_at,
                            u.external_id AS user_external_id,
                            u.nickname AS user_name,
@@ -561,7 +578,8 @@ class FeedService:
                     ) sub
                     JOIN users u ON u.id = sub.user_id
                     LEFT JOIN contacts ct ON ct.id = u.id
-                """).bindparams(bindparam("ids", expanding=True)),
+                """
+                ).bindparams(bindparam("ids", expanding=True)),
                 {"target_type": target_type, "ids": ids},
             ).fetchall()
 
