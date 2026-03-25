@@ -60,7 +60,9 @@ def get_feed(
                 payload = json.loads(cached)
                 return {**payload, "cache_hit": True}
             except Exception:
-                logger.warning(f"cache parse error for key={cache_key}, falling back to DB")
+                logger.warning(
+                    f"cache parse error for key={cache_key}, falling back to DB"
+                )
 
     # ── 登入用戶自動啟用推薦排序 ──
     sort_by = FeedSortBy.RECOMMENDED if user_id else FeedSortBy.NEWEST
@@ -94,7 +96,9 @@ def get_feed(
     # ── 寫入 cache ──
     if user_id:
         try:
-            cache.client.set(cache_key, json.dumps(payload, default=str), ex=FEED_CACHE_TTL)
+            cache.client.set(
+                cache_key, json.dumps(payload, default=str), ex=FEED_CACHE_TTL
+            )
         except Exception:
             logger.warning(f"cache write error for key={cache_key}, skipping cache")
 

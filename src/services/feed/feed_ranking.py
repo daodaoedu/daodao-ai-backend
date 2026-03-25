@@ -82,7 +82,9 @@ def score_practice(
     social = 0.0
     if social_graph and owner_user_id:
         social = social_graph.social_score_for_user(owner_user_id)
-        if practice_internal_id and social_graph.is_following_practice(practice_internal_id):
+        if practice_internal_id and social_graph.is_following_practice(
+            practice_internal_id
+        ):
             social += SOCIAL_FOLLOW_PRACTICE
 
     # --- Content Signal ---
@@ -102,7 +104,12 @@ def score_practice(
     updated_at = getattr(practice_row, "updated_at", None) or created_at
     decay = _time_decay(_days_since(updated_at, now))
 
-    return W_SOCIAL * social + W_ENGAGE * engagement + W_CONTENT * content + W_DECAY * decay
+    return (
+        W_SOCIAL * social
+        + W_ENGAGE * engagement
+        + W_CONTENT * content
+        + W_DECAY * decay
+    )
 
 
 def score_checkin(
@@ -120,7 +127,9 @@ def score_checkin(
     social = 0.0
     if social_graph and owner_user_id:
         social = social_graph.social_score_for_user(owner_user_id)
-        if practice_internal_id and social_graph.is_following_practice(practice_internal_id):
+        if practice_internal_id and social_graph.is_following_practice(
+            practice_internal_id
+        ):
             social += SOCIAL_FOLLOW_PRACTICE
 
     # --- Content Richness ---
@@ -141,7 +150,12 @@ def score_checkin(
     # --- Time Decay ---
     decay = _time_decay(_days_since(created_at, now))
 
-    return W_SOCIAL * social + W_ENGAGE * engagement + W_CONTENT * content + W_DECAY * decay
+    return (
+        W_SOCIAL * social
+        + W_ENGAGE * engagement
+        + W_CONTENT * content
+        + W_DECAY * decay
+    )
 
 
 def _days_since(dt, now: datetime) -> int:
