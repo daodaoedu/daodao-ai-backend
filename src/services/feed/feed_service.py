@@ -231,14 +231,56 @@ class FeedService:
         db: Session,
         user_id: Optional[int] = None,
     ) -> list[dict]:
-        """Apply recommendation scoring and re-sort feed items."""
+        """Apply recommendation scoring with social graph personalization."""
         from datetime import datetime, timezone
 
-        from src.services.feed.feed_ranking import score_checkin, score_practice
+        from src.services.feed.feed_ranking import (
+            UserSocialGraph,
+            score_checkin,
+            score_practice,
+        )
 
         now = datetime.now(timezone.utc)
 
-        # Batch fetch extra practice fields for scoring
+        # --- 1. Build user's social graph (3 batch queries) ---
+        social_graph = UserSocialGraph()
+        if user_id:
+            # 1a. Follows
+            follow_rows = db.execute(
+                text("SELECT target_type, target_id FROM follows WHERE follower_id = :uid"),
+                {"uid": user_id},
+            ).fetchall()
+            for r in follow_rows:
+                if r.target_type == "user":
+                    social_graph.following_user_ids.add(r.target_id)
+                elif r.target_type == "practice":
+                    social_graph.following_practice_ids.add(r.target_id)
+
+            # 1b. Connections (normalized: user_a_id < user_b_id)
+            conn_rows = db.execute(
+                text("""
+                    SELECT user_a_id, user_b_id FROM connections
+                    WHERE user_a_id = :uid OR user_b_id = :uid
+                """),
+                {"uid": user_id},
+            ).fetchall()
+            for r in conn_rows:
+                other = r.user_b_id if r.user_a_id == user_id else r.user_a_id
+                social_graph.connected_user_ids.add(other)
+
+            # 1c. Interaction counts
+            interact_rows = db.execute(
+                text("""
+                    SELECT user_a_id, user_b_id, count FROM interaction_counts
+                    WHERE user_a_id = :uid OR user_b_id = :uid
+                """),
+                {"uid": user_id},
+            ).fetchall()
+            for r in interact_rows:
+                other = r.user_b_id if r.user_a_id == user_id else r.user_a_id
+                social_graph.interaction_counts[other] = r.count or 0
+
+        # --- 2. Batch fetch extra practice fields ---
         practice_ids = [
             it["_row"].item_id for it in items if it["type"] == "practice"
         ]
@@ -246,7 +288,7 @@ class FeedService:
         if practice_ids:
             rows = db.execute(
                 text("""
-                    SELECT id, has_resources, progress_percentage, template_id, updated_at
+                    SELECT id, user_id, has_resources, progress_percentage, template_id, updated_at
                     FROM practices WHERE id IN :ids
                 """).bindparams(bindparam("ids", expanding=True)),
                 {"ids": practice_ids},
@@ -254,28 +296,23 @@ class FeedService:
             for r in rows:
                 practice_extra[r.id] = r
 
-        # Batch fetch user's checkin stats per practice（個人化）
-        user_checkin_stats: dict = {}
-        if user_id and practice_ids:
-            checkin_rows = db.execute(
+        # --- 3. Batch fetch checkin owner info ---
+        checkin_ids = [
+            it["_row"].item_id for it in items if it["type"] == "checkin"
+        ]
+        checkin_extra = {}
+        if checkin_ids:
+            rows = db.execute(
                 text("""
-                    SELECT
-                        practice_id,
-                        COUNT(*) AS checkin_count,
-                        MIN(created_at) AS first_checkin
-                    FROM practice_checkins
-                    WHERE user_id = :user_id
-                      AND practice_id IN :practice_ids
-                    GROUP BY practice_id
-                """).bindparams(bindparam("practice_ids", expanding=True)),
-                {"user_id": user_id, "practice_ids": practice_ids},
+                    SELECT c.id, c.user_id, c.practice_id, c.image_urls, c.note, c.mood
+                    FROM practice_checkins c WHERE c.id IN :ids
+                """).bindparams(bindparam("ids", expanding=True)),
+                {"ids": checkin_ids},
             ).fetchall()
-            for r in checkin_rows:
-                user_checkin_stats[r.practice_id] = {
-                    "checkin_count": r.checkin_count,
-                    "first_checkin": r.first_checkin,
-                }
+            for r in rows:
+                checkin_extra[r.id] = r
 
+        # --- 4. Score each item ---
         scored = []
         for item in items:
             row = item["_row"]
@@ -285,17 +322,29 @@ class FeedService:
 
             if item["type"] == "practice":
                 extra = practice_extra.get(row.item_id)
-                stats = user_checkin_stats.get(row.item_id, {})
+                owner_id = extra.user_id if extra else None
                 s = score_practice(
                     extra or row,
                     reaction_count,
                     comment_count,
                     now,
-                    user_checkin_count=stats.get("checkin_count", 0),
-                    user_first_checkin_at=stats.get("first_checkin"),
+                    social_graph=social_graph if user_id else None,
+                    owner_user_id=owner_id,
+                    practice_internal_id=row.item_id,
                 )
             else:
-                s = score_checkin(row, reaction_count, comment_count, now)
+                extra = checkin_extra.get(row.item_id)
+                owner_id = extra.user_id if extra else None
+                practice_id = extra.practice_id if extra else None
+                s = score_checkin(
+                    extra or row,
+                    reaction_count,
+                    comment_count,
+                    now,
+                    social_graph=social_graph if user_id else None,
+                    owner_user_id=owner_id,
+                    practice_internal_id=practice_id,
+                )
 
             scored.append((s, item))
 
