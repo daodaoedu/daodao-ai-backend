@@ -1,14 +1,22 @@
+import json
+
 from fastapi import APIRouter, Query
 from typing import Optional
 
 from src.dependencies import SessionDep, UserDep, CacheDep
+from src.logger import AppLogger
+from src.models.User import User
 from src.response_template import api_response_decorator
 from src.auto_metrics import observe_api
 from src.schemas.feed import FeedTypeFilter
 from src.schemas.pageInfo import CursorPaginationInfo
 from src.services.feed.feed_service import FeedService
 
+logger = AppLogger(__name__).get_logger()
+
 router = APIRouter(prefix="/v1/feed", tags=["feed"])
+
+FEED_CACHE_TTL = 120  # 2 分鐘
 
 
 @router.get(
@@ -30,6 +38,31 @@ def get_feed(
         FeedTypeFilter.ALL, description="篩選類型: all | practice | checkin"
     ),
 ):
+    # ── 解析 user_id（沿用 /v1/users/practices pattern）──
+    user_id: Optional[int] = None
+    if current_user:
+        _user = db.query(User).filter(User.external_id == current_user).first()
+        user_id = _user.id if _user else None
+
+    # ── cache（登入用戶才 cache）──
+    if user_id:
+        tags_str = ",".join(sorted(tags)) if tags else ""
+        cache_key = (
+            f"feed:user:{user_id}"
+            f":kw:{keyword if keyword is not None else '__none__'}"
+            f":tags:{tags_str}"
+            f":type:{type.value}"
+            f":limit:{limit}:cursor:{cursor or '0'}"
+        )
+        cached = cache.client.get(cache_key)
+        if cached:
+            try:
+                payload = json.loads(cached)
+                return {**payload, "cache_hit": True}
+            except Exception:
+                logger.warning(f"cache parse error for key={cache_key}, falling back to DB")
+
+    # ── 實際查詢 ──
     result = FeedService.get_feed(
         db=db,
         current_user_external_id=current_user,
@@ -41,7 +74,7 @@ def get_feed(
     )
 
     next_cursor = result.get("next_cursor")
-    return {
+    payload = {
         "data": result["data"],
         "pagination": CursorPaginationInfo(
             cursors={
@@ -52,5 +85,13 @@ def get_feed(
             hasNext=next_cursor is not None,
             count=len(result["data"]),
         ),
-        "cache_hit": False,
     }
+
+    # ── 寫入 cache ──
+    if user_id:
+        try:
+            cache.client.set(cache_key, json.dumps(payload, default=str), ex=FEED_CACHE_TTL)
+        except Exception:
+            logger.warning(f"cache write error for key={cache_key}, skipping cache")
+
+    return {**payload, "cache_hit": False}

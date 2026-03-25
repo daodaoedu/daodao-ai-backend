@@ -34,7 +34,8 @@ class FeedService:
         2. Batch enrich: reactions, comments, user info
         3. Cursor pagination on (sort_time, item_id)
 
-        TODO: current_user_external_id 目前未使用。v2 可用於：
+        current_user_external_id 目前用於 router 層的 per-user cache key。
+        TODO v2 可進一步用於：
         - 在 feed response 中內嵌 currentUserReaction（減少前端 N+1）
         - 個人化排序 / 朋友動態優先
         - 過濾已封鎖用戶的內容
