@@ -8,7 +8,7 @@ from src.config import get_settings
 from src.db.factory import make_database
 from src.logger import AppLogger
 from src.middleware.middleware import setup_middlewares
-from src.routers import ping, recommendation, users
+from src.routers import feed, ping, recommendation, users
 from src.services.cache.factory import make_cache_client
 
 from sqlalchemy.orm import configure_mappers
@@ -96,6 +96,7 @@ setup_middlewares(app)
 # app.include_router(resource.router, prefix="/api", tags=["resource"])
 app.include_router(recommendation.router, prefix="/api", tags=["recommendation"])
 app.include_router(users.router, prefix="/api", tags=["users"])
+app.include_router(feed.router, prefix="/api", tags=["feed"])
 
 app.include_router(ping.router, prefix="/api", tags=["Health"])
 
