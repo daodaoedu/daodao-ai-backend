@@ -396,7 +396,7 @@ class FeedService:
                     ct.photo_url AS user_photo_url
                 FROM practices p
                 JOIN users u ON u.id = p.user_id
-                LEFT JOIN contacts ct ON ct.id = u.id
+                LEFT JOIN contacts ct ON ct.id = u.contact_id
                 WHERE p.id IN :ids
             """
             ).bindparams(bindparam("ids", expanding=True)),
@@ -451,7 +451,7 @@ class FeedService:
                 FROM practice_checkins c
                 JOIN practices p ON p.id = c.practice_id
                 JOIN users u ON u.id = c.user_id
-                LEFT JOIN contacts ct ON ct.id = u.id
+                LEFT JOIN contacts ct ON ct.id = u.contact_id
                 WHERE c.id IN :ids
             """
             ).bindparams(bindparam("ids", expanding=True)),
@@ -577,7 +577,7 @@ class FeedService:
                         LIMIT 2
                     ) sub
                     JOIN users u ON u.id = sub.user_id
-                    LEFT JOIN contacts ct ON ct.id = u.id
+                    LEFT JOIN contacts ct ON ct.id = u.contact_id
                 """
                 ).bindparams(bindparam("ids", expanding=True)),
                 {"target_type": target_type, "ids": ids},
