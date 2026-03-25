@@ -5,7 +5,6 @@ Feed Service
 沿用 routers/users.py 的 practice 查詢與 enrichment 模式。
 """
 
-from collections import defaultdict
 from typing import Optional
 
 from sqlalchemy import bindparam, text
