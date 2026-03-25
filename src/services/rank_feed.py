@@ -54,18 +54,15 @@ def get_feed(
     # SQL 片段動態生成
     sql_fragments = []
     if "idea" in types:
-        sql_fragments.append(
-            """
+        sql_fragments.append("""
             SELECT i.id, 'idea' as type, i.content as title, i.created_at, i.updated_at,
                    COUNT(er.entity_id) as resource_count, 0 as streak, 0 as progress_ratio, 1 as base_score
             FROM ideas i
             LEFT JOIN entity_resources er ON er.entity_id=i.id AND er.entity_type='idea'
             GROUP BY i.id
-            """
-        )
+            """)
     if "practice" in types:
-        sql_fragments.append(
-            """
+        sql_fragments.append("""
             SELECT p.id, 'practice', p.title, p.created_at, p.updated_at,
                    COUNT(er.entity_id), 0, 0, 2
             FROM practices p
@@ -73,18 +70,15 @@ def get_feed(
             LEFT JOIN entity_resources er ON er.entity_id=p.id AND er.entity_type='practice'
             WHERE p.privacy_status = 'public'
             GROUP BY p.id
-            """
-        )
+            """)
     if "project" in types:
-        sql_fragments.append(
-            """
+        sql_fragments.append("""
             SELECT pr.id, 'project', pr.title, pr.created_at, pr.updated_at,
                    COUNT(er.entity_id), 0, 0, 3
             FROM project pr
             LEFT JOIN entity_resources er ON er.entity_id=pr.id AND er.entity_type='project'
             GROUP BY pr.id
-            """
-        )
+            """)
 
     # 將 fragment 用 UNION ALL 合併
     combined_sql = " UNION ALL ".join(sql_fragments)
