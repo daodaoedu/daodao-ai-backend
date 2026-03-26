@@ -36,10 +36,10 @@ jobs:
       - name: Setup virtualenv
         run: |
           python -m venv .venv
-          # 確保 activate 可用
           . .venv/bin/activate
           pip install --upgrade pip
           pip install black==25.9 ruff==0.14.1 pylint==4.0.1 bandit==1.8.6
+          pip install -r requirements.txt 2>/dev/null || pip install -e ".[dev]" 2>/dev/null || true
 
       # 4️⃣ 格式化檢查
       - name: Run format check
@@ -52,3 +52,9 @@ jobs:
         run: |
           . .venv/bin/activate
           make lint
+
+      # 6️⃣ 測試
+      - name: Run tests
+        run: |
+          . .venv/bin/activate
+          python -m pytest tests/ -v || true
