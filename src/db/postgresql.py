@@ -1,6 +1,6 @@
 import logging
 from contextlib import contextmanager
-from typing import Generator, Optional
+from typing import Generator, List, Optional
 from urllib.parse import quote_plus
 
 
@@ -10,9 +10,17 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from src.config import PostgreSQLSettings
 from src.db.interface_db import BaseDatabase
-from src.models.base import Base
 
 logger = logging.getLogger(__name__)
+
+# AI 後端運作所必要的核心資料表，啟動時驗證是否已存在
+# Schema 管理由 Alembic migration 負責，此服務不執行 DDL
+_REQUIRED_TABLES: List[str] = [
+    "users",
+    "practices",
+    "practice_check_ins",
+    "practice_insights",
+]
 
 
 class PostgreSQLDatabase(BaseDatabase):
@@ -26,7 +34,6 @@ class PostgreSQLDatabase(BaseDatabase):
     def startup(self) -> None:
         """Initialize the database connection."""
         try:
-            # Log connection attempt
             db_password = quote_plus(self.config.db_password)
 
             db_url = (
@@ -50,39 +57,44 @@ class PostgreSQLDatabase(BaseDatabase):
                 bind=self.engine, expire_on_commit=False
             )
 
-            # Test the connection
+            # 驗證連線
             assert self.engine is not None
             with self.engine.connect() as conn:
                 conn.execute(text("SELECT 1"))
                 logger.info("Database connection test successful")
 
-            # Check which tables exist before creating
-            inspector = inspect(self.engine)
-            existing_tables = inspector.get_table_names()
-
-            # Create tables if they don't exist (idempotent operation)
-            Base.metadata.create_all(bind=self.engine)
-
-            # Check if any new tables were created
-            updated_tables = inspector.get_table_names()
-            new_tables = set(updated_tables) - set(existing_tables)
-
-            if new_tables:
-                logger.info(f"Created new tables: {', '.join(new_tables)}")
-            else:
-                logger.info("All tables already exist - no new tables created")
+            # 驗證必要資料表已存在（唯讀，不執行 DDL）
+            # Schema 應由 Alembic migration 管理，AI 後端不負責建表
+            self._verify_required_tables()
 
             logger.info("PostgreSQL database initialized successfully")
-            assert self.engine is not None
             logger.info(f"Database: {self.engine.url.database}")
-            logger.info(
-                f"Total tables: {', '.join(updated_tables) if updated_tables else 'None'}"
-            )
             logger.info("Database connection established")
 
         except Exception as e:
             logger.error(f"Failed to initialize PostgreSQL database: {e}")
             raise
+
+    def _verify_required_tables(self) -> None:
+        """
+        驗證必要資料表是否存在，僅做唯讀檢查。
+        若缺少資料表，記錄警告但不中斷啟動（允許 migration 後補跑）。
+        Schema 管理應透過 Alembic migration，不在此執行 DDL。
+        """
+        assert self.engine is not None
+        inspector = inspect(self.engine)
+        existing = set(inspector.get_table_names())
+
+        missing = [t for t in _REQUIRED_TABLES if t not in existing]
+        present = [t for t in _REQUIRED_TABLES if t in existing]
+
+        if present:
+            logger.info(f"已驗證資料表存在: {', '.join(present)}")
+
+        if missing:
+            logger.warning(
+                f"以下資料表不存在，請確認 migration 是否已執行: {', '.join(missing)}"
+            )
 
     def teardown(self) -> None:
         """Close the database connection."""

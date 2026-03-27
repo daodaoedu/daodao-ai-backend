@@ -8,7 +8,8 @@ from src.config import get_settings
 from src.db.factory import make_database
 from src.logger import AppLogger
 from src.middleware.middleware import setup_middlewares
-from src.routers import feed, ping, recommendation, users
+from src.routers import feed, insight, ping, recommendation, users
+from src.services.insight.insight_scheduler import InsightScheduler
 from src.services.cache.factory import make_cache_client
 
 from sqlalchemy.orm import configure_mappers
@@ -60,10 +61,15 @@ async def lifespan(app: FastAPI):
     # await run_in_threadpool(app.state.qdrant_client.create_collection)
     logger.info("✅ daodao_collection ready")
 
+    # 啟動精選洞察排程
+    insight_scheduler = InsightScheduler(settings, app.state.database)
+    insight_scheduler.start()
+    app.state.insight_scheduler = insight_scheduler
+
     yield
 
     # Cleanup
-
+    app.state.insight_scheduler.stop()
     # database.teardown()
     logger.info("API shutdown complete")
 
@@ -97,6 +103,7 @@ setup_middlewares(app)
 app.include_router(recommendation.router, prefix="/api", tags=["recommendation"])
 app.include_router(users.router, prefix="/api", tags=["users"])
 app.include_router(feed.router, prefix="/api", tags=["feed"])
+app.include_router(insight.router, prefix="/api", tags=["insights"])
 
 app.include_router(ping.router, prefix="/api", tags=["Health"])
 

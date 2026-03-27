@@ -202,5 +202,42 @@ deploy:
 	docker push $(DOCKERHUB_USERNAME)/$(IMAGE_NAME):$(TAG)
 
 
+# =========================================
+# 💡 精選洞察
+# =========================================
+
+insight-run: ## 手動觸發精選洞察生成（使用 .env 預設 backend）
+	$(PYTHON) scripts/run_insight_job.py
+
+insight-run-gemini: ## 手動觸發精選洞察生成（Gemini）
+	$(PYTHON) scripts/run_insight_job.py --backend gemini
+
+insight-run-anthropic: ## 手動觸發精選洞察生成（Anthropic Claude）
+	$(PYTHON) scripts/run_insight_job.py --backend anthropic
+
+insight-run-openai: ## 手動觸發精選洞察生成（OpenAI）
+	$(PYTHON) scripts/run_insight_job.py --backend openai
+
+insight-dry-run: ## 顯示待處理 Practice 清單（不實際生成）
+	$(PYTHON) scripts/run_insight_job.py --dry-run
+
+
+# =========================================
+# 🧪 測試
+# =========================================
+
 test: ## 執行所有單元測試
 	.venv/bin/python3.12 -m pytest tests/ -v
+
+test-cov: ## 執行測試並顯示覆蓋率報告
+	.venv/bin/python3.12 -m pytest tests/ -v \
+		--cov=src \
+		--cov-report=term-missing \
+		--cov-report=html:.coverage_html
+
+test-insight: ## 只跑精選洞察相關測試
+	.venv/bin/python3.12 -m pytest \
+		tests/services/test_insight_service.py \
+		tests/services/test_insight_schema.py \
+		tests/services/test_insight_scheduler.py \
+		-v

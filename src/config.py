@@ -81,6 +81,21 @@ class ClickHouseSettings(BaseSettings):
     database: str = Field(default="default", description="ClickHouse 資料庫名稱")
 
 
+class InsightSettings(BaseConfigSettings):
+    """精選洞察排程設定"""
+
+    model_config = SettingsConfigDict(
+        env_file=[".env", str(ENV_FILE_PATH)],
+        env_prefix="INSIGHT__",
+        extra="ignore",
+        frozen=True,
+        case_sensitive=False,
+    )
+
+    schedule_cron: str = "0 1 * * *"  # 預設每天 01:00 UTC
+    llm_backend: str = "gemini"  # 預設使用 Gemini
+
+
 class Settings(BaseConfigSettings):
     app_version: str = "0.1.0"
     debug: bool = True
@@ -90,6 +105,7 @@ class Settings(BaseConfigSettings):
     redis: RedisSettings = Field(default_factory=RedisSettings)
     postgresql: PostgreSQLSettings = Field(default_factory=PostgreSQLSettings)
     clickhouse: ClickHouseSettings = Field(default_factory=ClickHouseSettings)
+    insight: InsightSettings = Field(default_factory=InsightSettings)
 
     llm_backend: Dict[str, LLMBackendConfig] = Field(
         default_factory=lambda: {
@@ -97,15 +113,20 @@ class Settings(BaseConfigSettings):
                 url="http://ollama-dev:11434/api/generate",
                 model="phi3:mini",
             ),
-            # "openai": LLMBackendConfig(
-            #     url="https://api.openai.com/v1/responses",
-            #     model="gpt-4",
-            #     api_key=os.getenv("OPENAI_API_KEY"),
-            # ),
+            "openai": LLMBackendConfig(
+                url="https://api.openai.com/v1/responses",
+                model="gpt-4o",
+                api_key=os.getenv("OPENAI_API_KEY"),
+            ),
             "gemini": LLMBackendConfig(
-                url="https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
-                model="gemini",
+                url="https://generativelanguage.googleapis.com",
+                model="gemini-2.0-flash",
                 api_key=os.getenv("GEMINI_API_KEY"),
+            ),
+            "anthropic": LLMBackendConfig(
+                url="https://api.anthropic.com/v1/messages",
+                model="claude-3-5-sonnet-20241022",
+                api_key=os.getenv("ANTHROPIC_API_KEY"),
             ),
             # "grok": LLMBackendConfig(
             #     url="https://api.x.ai/v1/chat/completions",
