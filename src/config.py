@@ -93,7 +93,7 @@ class InsightSettings(BaseConfigSettings):
     )
 
     schedule_cron: str = "0 1 * * *"  # 預設每天 01:00 UTC
-    llm_backend: str = "gemini"  # 預設使用 Gemini
+    llm_backend: str = "groq"  # 預設使用 Groq
 
 
 class Settings(BaseConfigSettings):
