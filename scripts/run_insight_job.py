@@ -108,11 +108,13 @@ async def run_job(backend: str, dry_run: bool, setup_db: bool) -> None:
     database = make_database()
     print("✅ 資料庫連線成功\n")
 
-    # ── 查詢待處理 Practice ───────────────────────────────────
+    # ── 查詢待處理 Practice IDs ───────────────────────────────
+    # 只存 id + title，避免 session 關閉後物件 detached
     with database.get_session() as db:
         practices = insight_service.get_pending_practices(db)
+        pending = [(p.id, p.title) for p in practices]
 
-    pending_count = len(practices)
+    pending_count = len(pending)
     print(f"📋 待處理 Practice 數量：{pending_count}")
 
     if pending_count == 0:
@@ -124,8 +126,8 @@ async def run_job(backend: str, dry_run: bool, setup_db: bool) -> None:
     # ── Dry run 模式：只顯示清單 ──────────────────────────────
     if dry_run:
         print("\n[Dry Run] 以下 Practice 將被生成洞察：")
-        for p in practices:
-            print(f"  - practice_id={p.id}  title={p.title}")
+        for pid, title in pending:
+            print(f"  - practice_id={pid}  title={title}")
         print("\n[Dry Run] 未實際生成，請移除 --dry-run 後再執行。")
         database.teardown()
         return
@@ -137,12 +139,12 @@ async def run_job(backend: str, dry_run: bool, setup_db: bool) -> None:
 
     print(f"\n🚀 開始生成（共 {pending_count} 筆）...\n")
 
-    for i, practice in enumerate(practices, 1):
-        print(f"  [{i}/{pending_count}] practice_id={practice.id}  {practice.title}")
+    for i, (practice_id, title) in enumerate(pending, 1):
+        print(f"  [{i}/{pending_count}] practice_id={practice_id}  {title}")
         try:
             with database.get_session() as db:
-                result = await insight_service.generate_for_practice(
-                    db, llm_client, practice
+                result = await insight_service.generate_for_practice_by_id(
+                    db, llm_client, practice_id
                 )
             if result:
                 total += 1

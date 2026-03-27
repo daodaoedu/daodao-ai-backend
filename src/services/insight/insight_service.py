@@ -160,6 +160,22 @@ def get_checkins_for_practice(db: Session, practice_id: int) -> list:
     return list(db.execute(stmt).scalars().all())
 
 
+async def generate_for_practice_by_id(
+    db: Session,
+    llm_client: LLMClient,
+    practice_id: int,
+) -> Optional[Practice]:
+    """
+    根據 practice_id 重新 load Practice，再生成洞察。
+    避免跨 session 傳遞 ORM 物件造成 detached instance 錯誤。
+    """
+    practice = db.get(Practice, practice_id)
+    if practice is None:
+        logger.warning(f"[InsightService] practice_id={practice_id} 不存在，跳過")
+        return None
+    return await generate_for_practice(db, llm_client, practice)
+
+
 async def generate_for_practice(
     db: Session,
     llm_client: LLMClient,
