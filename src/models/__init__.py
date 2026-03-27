@@ -24,6 +24,7 @@ from .Position import Position
 from .Post import Post
 from .Practice import Practice
 from .PracticeCheckIn import PracticeCheckIn
+from .PracticeTemplates import PracticeTemplate
 from .Project import Project
 from .ProjectMarathon import ProjectMarathon
 from .Resource import Resource
@@ -77,6 +78,7 @@ __all__ = [
     "EntityResource",
     "EntityTag",
     "Tag",
+    "PracticeTemplate",
 ]
 
 

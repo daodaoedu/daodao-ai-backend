@@ -164,7 +164,7 @@ async def generate_for_practice_by_id(
     db: Session,
     llm_client: LLMClient,
     practice_id: int,
-) -> Optional[Practice]:
+) -> Optional[int]:
     """
     根據 practice_id 重新 load Practice，再生成洞察。
     避免跨 session 傳遞 ORM 物件造成 detached instance 錯誤。
@@ -180,7 +180,7 @@ async def generate_for_practice(
     db: Session,
     llm_client: LLMClient,
     practice: Practice,
-) -> Optional[Practice]:
+) -> Optional[int]:
     """
     為單一 Practice 生成洞察並寫入 practices.insight 欄位。
     若已存在（冪等）則直接回傳 None。
@@ -200,13 +200,16 @@ async def generate_for_practice(
         prompt, max_tokens=600
     )
 
+    # commit 前先存 id，避免 commit 後 ORM expired 物件存取 FK 欄位觸發 lazy reload
+    pid = practice.id
+
     if output.startswith("錯誤："):
-        logger.error(f"[InsightService] LLM 失敗 practice_id={practice.id}: {output}")
+        logger.error(f"[InsightService] LLM 失敗 practice_id={pid}: {output}")
         return None
 
     practice.insight = output
     db.commit()
     logger.info(
-        f"[InsightService] 洞察已寫入 practice_id={practice.id} backend={backend_name}"
+        f"[InsightService] 洞察已寫入 practice_id={pid} backend={backend_name}"
     )
-    return practice
+    return pid

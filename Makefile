@@ -221,8 +221,29 @@ insight-run-anthropic: ## 手動觸發精選洞察生成（Anthropic Claude）
 insight-run-openai: ## 手動觸發精選洞察生成（OpenAI）
 	$(COMPOSE_DEV) exec backend-dev $(_INSIGHT_SCRIPT) --backend openai
 
+insight-run-ollama: ## 手動觸發精選洞察生成（Ollama 本地）
+	$(COMPOSE_DEV) exec backend-dev $(_INSIGHT_SCRIPT) --backend ollama
+
+insight-run-groq: ## 手動觸發精選洞察生成（Groq，免費）
+	$(COMPOSE_DEV) exec backend-dev $(_INSIGHT_SCRIPT) --backend groq
+
 insight-dry-run: ## 顯示待處理 Practice 清單，不實際生成（容器內執行）
 	$(COMPOSE_DEV) exec backend-dev $(_INSIGHT_SCRIPT) --dry-run
+
+ollama-up: ## 啟動 Ollama 本地 LLM 服務
+	$(COMPOSE_DEV) --profile ollama up -d ollama-dev
+
+ollama-down: ## 停止 Ollama 服務
+	$(COMPOSE_DEV) --profile ollama down ollama-dev
+
+ollama-pull: ## 下載推薦模型 qwen2.5:7b（需先啟動 ollama-up）
+	docker exec daodao-ai-backend-ollama ollama pull qwen2.5:7b
+
+ollama-pull-small: ## 下載輕量模型 qwen2.5:1.5b（RAM 不足時使用, RAM: 2GB)
+	docker exec daodao-ai-backend-ollama ollama pull qwen2.5:1.5b
+
+ollama-list: ## 列出已下載的模型
+	docker exec daodao-ai-backend-ollama ollama list
 
 
 # =========================================

@@ -128,6 +128,11 @@ class Settings(BaseConfigSettings):
                 model="claude-3-5-sonnet-20241022",
                 api_key=os.getenv("ANTHROPIC_API_KEY"),
             ),
+            "groq": LLMBackendConfig(
+                url="https://api.groq.com/openai/v1",
+                model="llama-3.3-70b-versatile",
+                api_key=os.getenv("GROQ_API_KEY"),
+            ),
         }
     )
 

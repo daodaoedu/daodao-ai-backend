@@ -18,12 +18,16 @@ class OllamaBackend(BaseLLMBackend):
     async def generate(
         self, prompt: str, **kwargs
     ) -> Tuple[str, float, Dict[str, Any], str]:
-        url = self.config["url"]
+        base = self.config["url"].rstrip("/")
+        url = base if base.endswith("/api/generate") else f"{base}/api/generate"
         payload = {
             "model": self.config["model"],
             "prompt": prompt,
-            "max_tokens": kwargs.get("max_tokens", 500),
-            "temperature": kwargs.get("temperature", 0.7),
+            "stream": False,
+            "options": {
+                "num_predict": kwargs.get("max_tokens", 500),
+                "temperature": kwargs.get("temperature", 0.7),
+            },
         }
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             try:
@@ -37,7 +41,7 @@ class OllamaBackend(BaseLLMBackend):
                 logger.error(f"Ollama 呼叫失敗: {e}")
                 return f"錯誤：{e}", 0.0, {}, "ollama"
             data = resp.json()
-            output = data.get("completion", "未提供回應")
+            output = data.get("response", "未提供回應")
             tokens = self._estimate_tokens(prompt + output)
-            cost = self._estimate_token_cost(tokens, 0.005)
+            cost = self._estimate_token_cost(tokens, 0.0)
             return output, cost, {"estimated_tokens": tokens}, "ollama"

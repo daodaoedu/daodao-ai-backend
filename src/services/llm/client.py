@@ -5,6 +5,7 @@ from src.logger import AppLogger
 from src.services.llm.anthropic_backend import AnthropicBackend
 from src.services.llm.base import BaseLLMBackend
 from src.services.llm.gemini_backend import GeminiBackend
+from src.services.llm.groq_backend import GroqBackend
 from src.services.llm.ollama_backend import OllamaBackend
 from src.services.llm.openai_backend import OpenAIBackend
 from src.services.prompts.prompts import RAGPromptBuilder, ResponseParser
@@ -16,6 +17,7 @@ _BACKEND_MAP: Dict[str, type] = {
     "gemini": GeminiBackend,
     "anthropic": AnthropicBackend,
     "ollama": OllamaBackend,
+    "groq": GroqBackend,
 }
 
 

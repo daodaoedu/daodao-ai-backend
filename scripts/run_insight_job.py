@@ -39,7 +39,7 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--backend",
-        choices=["gemini", "anthropic", "openai", "ollama"],
+        choices=["gemini", "anthropic", "openai", "ollama", "groq"],
         default=None,
         help="指定 LLM backend（預設使用 env 的 INSIGHT__LLM_BACKEND 設定）",
     )
@@ -148,7 +148,7 @@ async def run_job(backend: str, dry_run: bool, setup_db: bool) -> None:
                 )
             if result:
                 total += 1
-                print(f"    ✅ 洞察已寫入 practice_id={result.id}")
+                print(f"    ✅ 洞察已寫入 practice_id={result}")
             else:
                 print("    ⚠️  跳過（已存在或 LLM 回傳空值）")
         except Exception as exc:  # pylint: disable=broad-exception-caught
