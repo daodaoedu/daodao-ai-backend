@@ -206,7 +206,6 @@ async def generate_for_practice(
 
     practice.insight = output
     db.commit()
-    db.refresh(practice)
     logger.info(
         f"[InsightService] 洞察已寫入 practice_id={practice.id} backend={backend_name}"
     )
