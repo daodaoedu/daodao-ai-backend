@@ -18,8 +18,7 @@ logger = logging.getLogger(__name__)
 _REQUIRED_TABLES: List[str] = [
     "users",
     "practices",
-    "practice_check_ins",
-    "practice_insights",
+    "practice_checkins",
 ]
 
 

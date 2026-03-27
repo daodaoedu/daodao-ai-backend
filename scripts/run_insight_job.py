@@ -2,31 +2,23 @@
 手動觸發精選洞察排程（等同排程器的 _run_job）
 
 使用方式：
-  python scripts/run_insight_job.py                  # 使用 .env 預設 backend
+  python scripts/run_insight_job.py                         # 使用 .env
+  python scripts/run_insight_job.py --env-file .env.dev    # 指定 env 檔
   python scripts/run_insight_job.py --backend gemini
   python scripts/run_insight_job.py --backend anthropic
-  python scripts/run_insight_job.py --backend openai
-  python scripts/run_insight_job.py --dry-run        # 只顯示待處理數量，不生成
+  python scripts/run_insight_job.py --dry-run               # 只顯示待處理數量，不生成
 """
 
 import argparse
 import asyncio
+import os
 import sys
 import time
 from pathlib import Path
 
 # 確保專案 root 在 import path 中
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from src.config import get_settings  # noqa: E402
-from src.db.factory import make_database  # noqa: E402
-from src.logger import AppLogger  # noqa: E402
-from src.services.insight import insight_service  # noqa: E402
-from src.services.llm.client import LLMClient  # noqa: E402
-
-logger = AppLogger(__name__).get_logger()
-
-VALID_BACKENDS = ["gemini", "anthropic", "openai", "ollama"]
+_PROJECT_ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(_PROJECT_ROOT))
 
 
 def _parse_args() -> argparse.Namespace:
@@ -35,26 +27,69 @@ def _parse_args() -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 範例：
-  python scripts/run_insight_job.py
-  python scripts/run_insight_job.py --backend anthropic
-  python scripts/run_insight_job.py --dry-run
+  python scripts/run_insight_job.py --env-file .env.dev
+  python scripts/run_insight_job.py --env-file .env.dev --backend anthropic
+  python scripts/run_insight_job.py --env-file .env.dev --dry-run
         """,
     )
     parser.add_argument(
-        "--backend",
-        choices=VALID_BACKENDS,
+        "--env-file",
         default=None,
-        help=f"指定 LLM backend（預設使用 .env INSIGHT__LLM_BACKEND 設定）",
+        help="指定要載入的 .env 檔路徑（例如 .env.dev）",
+    )
+    parser.add_argument(
+        "--backend",
+        choices=["gemini", "anthropic", "openai", "ollama"],
+        default=None,
+        help="指定 LLM backend（預設使用 env 的 INSIGHT__LLM_BACKEND 設定）",
     )
     parser.add_argument(
         "--dry-run",
         action="store_true",
         help="只顯示待處理 Practice 數量，不實際生成",
     )
+    parser.add_argument(
+        "--setup-db",
+        action="store_true",
+        help="建立 AI 後端自有的資料表（practice_insights），首次使用時執行",
+    )
     return parser.parse_args()
 
 
-async def run_job(backend: str, dry_run: bool) -> None:
+def _load_env(env_file: str | None) -> None:
+    """
+    在 Settings 初始化前載入指定的 .env 檔，
+    讓 os.environ 先有值，pydantic-settings 才讀得到正確的設定。
+    """
+    # 優先用指定檔，沒指定就找 .env.dev → .env
+    candidates = [env_file] if env_file else [".env.dev", ".env"]
+
+    for candidate in candidates:
+        path = _PROJECT_ROOT / candidate
+        if path.exists():
+            print(f"  env 檔案    : {candidate}")
+            # 手動讀取並注入 os.environ（不覆蓋已存在的環境變數）
+            with open(path, encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    key, _, value = line.partition("=")
+                    key = key.strip()
+                    value = value.strip().strip('"').strip("'")
+                    os.environ.setdefault(key, value)
+            return
+
+    print("  env 檔案    : （未找到，使用系統環境變數）")
+
+
+async def run_job(backend: str, dry_run: bool, setup_db: bool) -> None:
+    # env 載入後才 import（讓 pydantic-settings 讀到正確值）
+    from src.config import get_settings  # noqa: E402
+    from src.db.factory import make_database  # noqa: E402
+    from src.services.insight import insight_service  # noqa: E402
+    from src.services.llm.client import LLMClient  # noqa: E402
+
     start = time.time()
 
     print("=" * 55)
@@ -111,7 +146,7 @@ async def run_job(backend: str, dry_run: bool) -> None:
                 )
             if result:
                 total += 1
-                print(f"    ✅ 已生成 insight_id={result.id}  cost=${result.llm_cost:.6f}")
+                print(f"    ✅ 洞察已寫入 practice_id={result.id}")
             else:
                 print("    ⚠️  跳過（已存在或 LLM 回傳空值）")
         except Exception as exc:  # pylint: disable=broad-exception-caught
@@ -130,7 +165,8 @@ def _print_summary(total: int, failed: int, elapsed: float) -> None:
 
 def main() -> None:
     args = _parse_args()
-    asyncio.run(run_job(backend=args.backend, dry_run=args.dry_run))
+    _load_env(args.env_file)
+    asyncio.run(run_job(backend=args.backend, dry_run=args.dry_run, setup_db=args.setup_db))
 
 
 if __name__ == "__main__":

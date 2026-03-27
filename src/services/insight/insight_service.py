@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 from src.logger import AppLogger
 from src.models.Practice import Practice, PracticeStatus
 from src.models.PracticeCheckIn import PracticeCheckIn
-from src.models.PracticeInsight import PracticeInsight
 from src.services.llm.client import LLMClient
 
 logger = AppLogger(__name__).get_logger()
@@ -99,7 +98,7 @@ def _analyze_checkins(checkins: list) -> dict:
 
 
 def _build_prompt(practice: Practice, checkins: list) -> str:
-    """組合洞察生成 prompt（三輪對話格式）"""
+    """組合洞察生成 prompt"""
     system = _load_system_prompt()
     stats = _analyze_checkins(checkins)
 
@@ -136,18 +135,15 @@ def _build_prompt(practice: Practice, checkins: list) -> str:
 
 def get_pending_practices(db: Session) -> List[Practice]:
     """
-    查詢所有 status='completed' 且尚無 PracticeInsight 的 Practice。
-    使用 NOT EXISTS subquery，避免已生成的重複處理（冪等）。
+    查詢所有 status='completed' 且 insight IS NULL 的 Practice。
+    insight 欄位為 NULL 表示尚未生成，確保冪等。
     """
-    insight_exists = select(PracticeInsight.id).where(
-        PracticeInsight.practice_id == Practice.id
-    )
     stmt = (
         select(Practice)
         .where(
             Practice.status == PracticeStatus.COMPLETED.value,
             Practice.deleted_at.is_(None),
-            ~insight_exists.exists(),
+            Practice.insight.is_(None),
         )
         .order_by(Practice.id)
     )
@@ -168,17 +164,13 @@ async def generate_for_practice(
     db: Session,
     llm_client: LLMClient,
     practice: Practice,
-) -> Optional[PracticeInsight]:
+) -> Optional[Practice]:
     """
-    為單一 Practice 生成三輪對話式洞察並儲存。
-    若已存在（race condition）則直接回傳 None。
-    LLM 輸出為 JSON 字串，儲存於 content 欄位。
+    為單一 Practice 生成洞察並寫入 practices.insight 欄位。
+    若已存在（冪等）則直接回傳 None。
     """
-    # Double-check 冪等
-    existing = db.execute(
-        select(PracticeInsight).where(PracticeInsight.practice_id == practice.id)
-    ).scalar_one_or_none()
-    if existing:
+    # 冪等：已有 insight 就跳過
+    if practice.insight is not None:
         return None
 
     checkins = get_checkins_for_practice(db, practice.id)
@@ -188,7 +180,7 @@ async def generate_for_practice(
         f"[InsightService] 生成洞察 practice_id={practice.id} checkins={len(checkins)}"
     )
 
-    output, cost, _usage, backend_name = await llm_client.generate(
+    output, _cost, _usage, backend_name = await llm_client.generate(
         prompt, max_tokens=600
     )
 
@@ -196,15 +188,10 @@ async def generate_for_practice(
         logger.error(f"[InsightService] LLM 失敗 practice_id={practice.id}: {output}")
         return None
 
-    insight = PracticeInsight(
-        practice_id=practice.id,
-        user_id=practice.user_id,
-        content=output,  # JSON 字串
-        llm_backend=backend_name,
-        llm_cost=cost,
-    )
-    db.add(insight)
+    practice.insight = output
     db.commit()
-    db.refresh(insight)
-    logger.info(f"[InsightService] 洞察已儲存 insight_id={insight.id} cost=${cost:.6f}")
-    return insight
+    db.refresh(practice)
+    logger.info(
+        f"[InsightService] 洞察已寫入 practice_id={practice.id} backend={backend_name}"
+    )
+    return practice

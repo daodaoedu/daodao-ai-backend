@@ -5,11 +5,14 @@ from pydantic import BaseModel
 
 
 class PracticeInsightResponse(BaseModel):
+    """
+    精選洞察 API response。
+    insight 欄位直接儲存於 practices 表，此 schema 從 Practice ORM 物件轉換。
+    """
+
     id: int
-    practice_id: int
-    content: str
-    llm_backend: str
-    llm_cost: Optional[float] = None
-    created_at: datetime
+    title: str
+    insight: str
+    updated_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}

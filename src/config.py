@@ -128,11 +128,6 @@ class Settings(BaseConfigSettings):
                 model="claude-3-5-sonnet-20241022",
                 api_key=os.getenv("ANTHROPIC_API_KEY"),
             ),
-            # "grok": LLMBackendConfig(
-            #     url="https://api.x.ai/v1/chat/completions",
-            #     model="grok-2-latest",
-            #     api_key=os.getenv("GROK_API_KEY"),
-            # ),
         }
     )
 

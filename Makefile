@@ -206,20 +206,23 @@ deploy:
 # 💡 精選洞察
 # =========================================
 
-insight-run: ## 手動觸發精選洞察生成（使用 .env 預設 backend）
-	$(PYTHON) scripts/run_insight_job.py
+_INSIGHT_CONTAINER := daodao-ai-backend-backend-dev-1
+_INSIGHT_SCRIPT    := python scripts/run_insight_job.py --env-file .env.dev
+
+insight-run: ## 手動觸發精選洞察生成（容器內執行，使用 .env.dev 預設 backend）
+	$(COMPOSE_DEV) exec backend-dev $(_INSIGHT_SCRIPT)
 
 insight-run-gemini: ## 手動觸發精選洞察生成（Gemini）
-	$(PYTHON) scripts/run_insight_job.py --backend gemini
+	$(COMPOSE_DEV) exec backend-dev $(_INSIGHT_SCRIPT) --backend gemini
 
 insight-run-anthropic: ## 手動觸發精選洞察生成（Anthropic Claude）
-	$(PYTHON) scripts/run_insight_job.py --backend anthropic
+	$(COMPOSE_DEV) exec backend-dev $(_INSIGHT_SCRIPT) --backend anthropic
 
 insight-run-openai: ## 手動觸發精選洞察生成（OpenAI）
-	$(PYTHON) scripts/run_insight_job.py --backend openai
+	$(COMPOSE_DEV) exec backend-dev $(_INSIGHT_SCRIPT) --backend openai
 
-insight-dry-run: ## 顯示待處理 Practice 清單（不實際生成）
-	$(PYTHON) scripts/run_insight_job.py --dry-run
+insight-dry-run: ## 顯示待處理 Practice 清單，不實際生成（容器內執行）
+	$(COMPOSE_DEV) exec backend-dev $(_INSIGHT_SCRIPT) --dry-run
 
 
 # =========================================

@@ -26,6 +26,7 @@ services:
       - .env.dev
     volumes:
       - ./src:/app/src
+      - ./scripts:/app/scripts
     command: >
       uvicorn src.main:app
       --host 0.0.0.0

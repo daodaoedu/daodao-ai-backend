@@ -3,9 +3,9 @@ Unit tests for src.services.insight.insight_service
 
 涵蓋：
   - _analyze_checkins      — 統計分析（streak、星期、心情、筆記）
-  - get_pending_practices  — 只回傳 completed + 尚無 insight 的 Practice
+  - get_pending_practices  — 只回傳 completed + insight IS NULL 的 Practice
   - get_checkins_for_practice — 依日期排序
-  - generate_for_practice — 正常生成、race condition（已存在）、LLM 錯誤
+  - generate_for_practice — 正常生成、冪等（insight 已存在）、LLM 錯誤
 """
 
 from datetime import date
@@ -26,13 +26,14 @@ from src.services.insight.insight_service import (
 # ─────────────────────────────────────────────────────────────
 
 
-def _make_practice(practice_id: int, user_id: int = 1) -> MagicMock:
+def _make_practice(practice_id: int, user_id: int = 1, insight: str | None = None) -> MagicMock:
     p = MagicMock()
     p.id = practice_id
     p.user_id = user_id
     p.title = f"Practice {practice_id}"
     p.practice_action = "每天閱讀 30 分鐘"
     p.duration_days = 30
+    p.insight = insight  # None 表示尚未生成
     return p
 
 
@@ -43,18 +44,6 @@ def _make_checkin(practice_id: int, date_str: str, mood: str = "good") -> MagicM
     c.mood = mood
     c.note = "今天完成了！"
     return c
-
-
-def _make_insight(insight_id: int, practice_id: int) -> MagicMock:
-    i = MagicMock()
-    i.id = insight_id
-    i.practice_id = practice_id
-    return i
-
-
-# ─────────────────────────────────────────────────────────────
-# _analyze_checkins
-# ─────────────────────────────────────────────────────────────
 
 
 def _make_real_checkin(
@@ -70,6 +59,11 @@ def _make_real_checkin(
     c.mood = mood
     c.note = note
     return c
+
+
+# ─────────────────────────────────────────────────────────────
+# _analyze_checkins
+# ─────────────────────────────────────────────────────────────
 
 
 class TestAnalyzeCheckins:
@@ -131,7 +125,6 @@ class TestAnalyzeCheckins:
         ]
         result = _analyze_checkins(checkins)
         notes = result["notable_notes"]
-        # 只有超過 5 字的才進來
         assert all(len(c.note.strip()) > 5 for c in notes)
 
     def test_notable_notes_max_two(self):
@@ -245,14 +238,9 @@ class TestGenerateForPractice:
 
     @pytest.mark.asyncio
     async def test_generates_and_saves_insight(self):
-        """正常流程：LLM 成功，insight 應被存入 DB 並回傳"""
-        practice = _make_practice(1)
+        """正常流程：LLM 成功，insight 應寫入 practice.insight 並 commit"""
+        practice = _make_practice(1, insight=None)
         db = MagicMock()
-
-        # scalar_one_or_none → None 表示尚無 insight（冪等通過）
-        db.execute.return_value.scalar_one_or_none.return_value = None
-        # get_checkins 查詢
-        db.execute.return_value.scalars.return_value.all.return_value = []
 
         llm_client = MagicMock()
         llm_client.generate = AsyncMock(
@@ -272,37 +260,34 @@ class TestGenerateForPractice:
             result = await generate_for_practice(db, llm_client, practice)
 
         assert result is not None
-        db.add.assert_called_once()
+        assert practice.insight == "你的成長洞察很棒！"
         db.commit.assert_called_once()
         db.refresh.assert_called_once()
+        # 更新欄位，不需要 db.add()
+        db.add.assert_not_called()
 
-    # ── Race condition：insight 已存在 ─────────────────────────
+    # ── 冪等：insight 已存在 ──────────────────────────────────
 
     @pytest.mark.asyncio
     async def test_returns_none_if_insight_already_exists(self):
-        """Race condition：insight 已存在時，不重複生成，回傳 None"""
-        practice = _make_practice(1)
+        """insight 已存在時，不重複生成，回傳 None"""
+        practice = _make_practice(1, insight="已有洞察了")
         db = MagicMock()
-
-        existing_insight = _make_insight(99, practice_id=1)
-        db.execute.return_value.scalar_one_or_none.return_value = existing_insight
-
         llm_client = MagicMock()
 
         result = await generate_for_practice(db, llm_client, practice)
 
         assert result is None
         llm_client.generate.assert_not_called()
-        db.add.assert_not_called()
+        db.commit.assert_not_called()
 
     # ── LLM 回傳錯誤 ──────────────────────────────────────────
 
     @pytest.mark.asyncio
     async def test_returns_none_on_llm_error(self):
         """LLM 回傳 '錯誤：...' 前綴時，不儲存，回傳 None"""
-        practice = _make_practice(1)
+        practice = _make_practice(1, insight=None)
         db = MagicMock()
-        db.execute.return_value.scalar_one_or_none.return_value = None
 
         llm_client = MagicMock()
         llm_client.generate = AsyncMock(
@@ -322,30 +307,21 @@ class TestGenerateForPractice:
             result = await generate_for_practice(db, llm_client, practice)
 
         assert result is None
-        db.add.assert_not_called()
+        assert practice.insight is None  # 不應被改動
         db.commit.assert_not_called()
 
-    # ── Insight 內容正確 ──────────────────────────────────────
+    # ── Insight 內容正確寫入 practice ────────────────────────
 
     @pytest.mark.asyncio
-    async def test_insight_contains_llm_output_and_backend(self):
-        """儲存的 PracticeInsight 應包含 LLM 輸出與 backend 名稱"""
-        practice = _make_practice(5, user_id=10)
+    async def test_insight_content_is_saved_to_practice(self):
+        """儲存的洞察應正確寫入 practice.insight"""
+        practice = _make_practice(5, user_id=10, insight=None)
         db = MagicMock()
-        db.execute.return_value.scalar_one_or_none.return_value = None
 
         llm_client = MagicMock()
         llm_client.generate = AsyncMock(
             return_value=("洞察文字內容", 0.000025, {"input_tokens": 200}, "gemini")
         )
-
-        saved_insight = None
-
-        def _capture_add(obj):
-            nonlocal saved_insight
-            saved_insight = obj
-
-        db.add.side_effect = _capture_add
 
         with (
             patch(
@@ -357,10 +333,8 @@ class TestGenerateForPractice:
                 return_value="prompt",
             ),
         ):
-            await generate_for_practice(db, llm_client, practice)
+            result = await generate_for_practice(db, llm_client, practice)
 
-        assert saved_insight is not None
-        assert saved_insight.content == "洞察文字內容"
-        assert saved_insight.llm_backend == "gemini"
-        assert saved_insight.practice_id == 5
-        assert saved_insight.user_id == 10
+        assert result is practice  # 回傳同一個 practice 物件
+        assert practice.insight == "洞察文字內容"
+        assert practice.id == 5

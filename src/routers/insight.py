@@ -6,7 +6,7 @@ from sqlalchemy import select
 
 from src.dependencies import CacheDep, SessionDep, UserDep
 from src.logger import AppLogger
-from src.models.PracticeInsight import PracticeInsight
+from src.models.Practice import Practice, PracticeStatus
 from src.models.User import User
 from src.response_template import api_response_decorator
 from src.schemas.insight import PracticeInsightResponse
@@ -23,7 +23,7 @@ INSIGHTS_TTL = 300  # 5 分鐘快取
     "/insights",
     description="""
     取得當前登入用戶的精選洞察列表（需登入）。<br/>
-    每個已完成的 Practice 會有一份由 AI 生成的個人成長洞察，
+    每個已完成的 Practice 在 insight 欄位寫入 AI 生成的個人成長洞察，
     每日 01:00 由排程自動生成。
     """,
     response_model=APIResponse,
@@ -53,17 +53,23 @@ def get_my_insights(
         except Exception:  # pylint: disable=broad-exception-caught
             logger.warning(f"insight cache parse error key={cache_key}")
 
+    # 查詢該用戶已完成且有 insight 的 practices
     stmt = (
-        select(PracticeInsight)
-        .where(PracticeInsight.user_id == user.id)
-        .order_by(PracticeInsight.created_at.desc())
+        select(Practice)
+        .where(
+            Practice.user_id == user.id,
+            Practice.status == PracticeStatus.COMPLETED.value,
+            Practice.insight.isnot(None),
+            Practice.deleted_at.is_(None),
+        )
+        .order_by(Practice.updated_at.desc())
         .offset(offset)
         .limit(limit)
     )
-    insights = list(db.execute(stmt).scalars().all())
+    practices = list(db.execute(stmt).scalars().all())
 
     data = [
-        PracticeInsightResponse.model_validate(ins).model_dump() for ins in insights
+        PracticeInsightResponse.model_validate(p).model_dump() for p in practices
     ]
 
     cache.client.setex(cache_key, INSIGHTS_TTL, json.dumps(data, default=str))

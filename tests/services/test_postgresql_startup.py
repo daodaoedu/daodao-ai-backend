@@ -127,12 +127,14 @@ class TestVerifyRequiredTables:
         """缺少資料表時，應記錄 warning（不 raise）"""
         import logging
 
-        existing = [t for t in _REQUIRED_TABLES if t != "practice_insights"]
+        # 移除第一個必要表來模擬缺失情境
+        missing_table = _REQUIRED_TABLES[0]
+        existing = _REQUIRED_TABLES[1:]
 
         with caplog.at_level(logging.WARNING, logger="src.db.postgresql"):
             self._db_with_engine(existing)
 
-        assert "practice_insights" in caplog.text
+        assert missing_table in caplog.text
 
     def test_all_tables_missing_logs_warning_not_raise(self):
         """所有資料表都缺失時，不應 raise（允許 migration 後補跑）"""
