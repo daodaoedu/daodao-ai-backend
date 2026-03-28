@@ -5,9 +5,9 @@ networks:
 services:
   backend-dev:
     build: .
-    image: daodao-ai-backend:latest
-    # ports:
-    #   - "8002:8000"
+    image: daodao-ai-backend:dev
+    ports:
+      - "8002:8000"
     networks:
       dev-daodao-network:
         aliases:

@@ -190,13 +190,9 @@ jobs:
                 echo "⚠️ No old containers found or cleanup failed, continuing..."
             fi
 
-            # 檢查 image 是否存在再刪除
-            if docker image inspect daodao-ai-backend:latest > /dev/null 2>&1; then
-                docker rmi daodao-ai-backend:latest
-                echo "✅ Removed old daodao-ai-backend:latest image"
-            else
-                echo "⚠️ No existing daodao-ai-backend:latest image found, skipping removal"
-            fi
+            # 強制移除舊 image（加 -f 避免被執行中容器擋住）
+            docker rmi -f daodao-ai-backend:${IMAGE_TAG} 2>/dev/null || true
+            echo "✅ Cleaned up old daodao-ai-backend:${IMAGE_TAG} image"
 
             sleep 3
 
@@ -256,7 +252,7 @@ jobs:
             echo "CPU Load:" && uptime
             echo "Memory Usage:" && free -h
             echo "Disk Usage:" && df -h /
-            
+
           ENDSSH
       - name: Verify Deployment
         env:
