@@ -4,7 +4,9 @@ from sqlalchemy.dialects.postgresql import ENUM
 metadata = MetaData()
 
 gender_t = ENUM("male", "female", "other", name="gender_t")
-education_stage_t = ENUM("university", "high", "other", name="education_stage_t")
+education_stage_t = ENUM(
+    "university", "high", "master", "doctorate", "other", name="education_stage_t"
+)
 identity_list_t = ENUM(
     "normal-student",
     "citizen",
