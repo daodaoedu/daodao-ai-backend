@@ -7,6 +7,7 @@
   python scripts/run_insight_job.py --backend gemini
   python scripts/run_insight_job.py --backend anthropic
   python scripts/run_insight_job.py --dry-run               # 只顯示待處理數量，不生成
+  python scripts/run_insight_job.py --force                 # 強制覆蓋已有洞察
 """
 
 import argparse
@@ -49,6 +50,12 @@ def _parse_args() -> argparse.Namespace:
         help="只顯示待處理 Practice 數量，不實際生成",
     )
     parser.add_argument(
+        "--force",
+        action="store_true",
+        default=False,
+        help="強制重新生成已有洞察的 Practice（覆蓋既有內容）",
+    )
+    parser.add_argument(
         "--setup-db",
         action="store_true",
         help="建立 AI 後端自有的資料表（practice_insights），首次使用時執行",
@@ -83,7 +90,7 @@ def _load_env(env_file: str | None) -> None:
     print("  env 檔案    : （未找到，使用系統環境變數）")
 
 
-async def run_job(backend: str, dry_run: bool, setup_db: bool) -> None:
+async def run_job(backend: str, dry_run: bool, setup_db: bool, force: bool = False) -> None:
     # env 載入後才 import（讓 pydantic-settings 讀到正確值）
     from src.config import get_settings  # noqa: E402
     from src.db.factory import make_database  # noqa: E402
@@ -102,6 +109,7 @@ async def run_job(backend: str, dry_run: bool, setup_db: bool) -> None:
 
     print(f"  LLM backend : {effective_backend}")
     print(f"  Dry run     : {'是' if dry_run else '否'}")
+    print(f"  Force       : {'是' if force else '否'}")
     print("-" * 55)
 
     print("⏳ 連線資料庫...")
@@ -111,11 +119,12 @@ async def run_job(backend: str, dry_run: bool, setup_db: bool) -> None:
     # ── 查詢待處理 Practice IDs ───────────────────────────────
     # 只存 id + title，避免 session 關閉後物件 detached
     with database.get_session() as db:
-        practices = insight_service.get_pending_practices(db)
+        practices = insight_service.get_pending_practices(db, force=force)
         pending = [(p.id, p.title) for p in practices]
 
     pending_count = len(pending)
-    print(f"📋 待處理 Practice 數量：{pending_count}")
+    label = "待處理（含已有洞察）" if force else "待處理"
+    print(f"📋 {label} Practice 數量：{pending_count}")
 
     if pending_count == 0:
         print("\n✨ 沒有待處理的 Practice，任務結束。")
@@ -168,7 +177,7 @@ def _print_summary(total: int, failed: int, elapsed: float) -> None:
 def main() -> None:
     args = _parse_args()
     _load_env(args.env_file)
-    asyncio.run(run_job(backend=args.backend, dry_run=args.dry_run, setup_db=args.setup_db))
+    asyncio.run(run_job(backend=args.backend, dry_run=args.dry_run, setup_db=args.setup_db, force=args.force))
 
 
 if __name__ == "__main__":

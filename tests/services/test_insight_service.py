@@ -189,6 +189,31 @@ class TestGetPendingPractices:
 
         db.execute.assert_called_once()
 
+    def test_force_includes_practices_with_existing_insight(self):
+        """force=True 時，已有 insight 的 practice 也應被回傳"""
+        practices = [
+            _make_practice(1, insight="已有洞察"),
+            _make_practice(2, insight=None),
+        ]
+        db = MagicMock()
+        db.execute.return_value.scalars.return_value.all.return_value = practices
+
+        result = get_pending_practices(db, force=True)
+
+        assert result == practices
+        db.execute.assert_called_once()
+
+    def test_no_force_excludes_practices_with_existing_insight(self):
+        """force=False（預設）：有 insight 的 practice 不應出現在結果"""
+        practices_without_insight = [_make_practice(2, insight=None)]
+        db = MagicMock()
+        db.execute.return_value.scalars.return_value.all.return_value = practices_without_insight
+
+        result = get_pending_practices(db, force=False)
+
+        assert result == practices_without_insight
+        db.execute.assert_called_once()
+
 
 # ─────────────────────────────────────────────────────────────
 # get_checkins_for_practice
@@ -265,21 +290,6 @@ class TestGenerateForPractice:
         db.refresh.assert_called_once()
         # 更新欄位，不需要 db.add()
         db.add.assert_not_called()
-
-    # ── 冪等：insight 已存在 ──────────────────────────────────
-
-    @pytest.mark.asyncio
-    async def test_returns_none_if_insight_already_exists(self):
-        """insight 已存在時，不重複生成，回傳 None"""
-        practice = _make_practice(1, insight="已有洞察了")
-        db = MagicMock()
-        llm_client = MagicMock()
-
-        result = await generate_for_practice(db, llm_client, practice)
-
-        assert result is None
-        llm_client.generate.assert_not_called()
-        db.commit.assert_not_called()
 
     # ── LLM 回傳錯誤 ──────────────────────────────────────────
 

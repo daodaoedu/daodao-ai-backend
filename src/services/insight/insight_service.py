@@ -2,7 +2,7 @@ from collections import Counter
 from pathlib import Path
 from typing import List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from src.logger import AppLogger
@@ -133,20 +133,19 @@ def _build_prompt(practice: Practice, checkins: list) -> str:
     return f"{system}\n\n---\n以下是用戶的實踐資料：\n\n{user_data}"
 
 
-def get_pending_practices(db: Session) -> List[Practice]:
+def get_pending_practices(db: Session, force: bool = False) -> List[Practice]:
     """
-    查詢所有 status='completed' 且 insight IS NULL 的 Practice。
-    insight 欄位為 NULL 表示尚未生成，確保冪等。
+    查詢所有 status='completed' 的 Practice。
+    force=False（預設）：只回傳 insight IS NULL 的（冪等行為）。
+    force=True：回傳全部已完成，包含已有 insight 的（強制覆蓋用）。
     """
-    stmt = (
-        select(Practice)
-        .where(
-            Practice.status == PracticeStatus.COMPLETED.value,
-            Practice.deleted_at.is_(None),
-            Practice.insight.is_(None),
-        )
-        .order_by(Practice.id)
-    )
+    conditions = [
+        Practice.status == PracticeStatus.COMPLETED.value,
+        Practice.deleted_at.is_(None),
+    ]
+    if not force:
+        conditions.append(Practice.insight.is_(None))
+    stmt = select(Practice).where(*conditions).order_by(Practice.id)
     return list(db.execute(stmt).scalars().all())
 
 
@@ -183,11 +182,8 @@ async def generate_for_practice(
 ) -> Optional[int]:
     """
     為單一 Practice 生成洞察並寫入 practices.insight 欄位。
-    若已存在（冪等）則直接回傳 None。
+    是否重複生成由呼叫端（get_pending_practices force 參數）控制。
     """
-    # 冪等：已有 insight 就跳過
-    if practice.insight is not None:
-        return None
 
     checkins = get_checkins_for_practice(db, practice.id)
     prompt = _build_prompt(practice, checkins)
@@ -207,7 +203,12 @@ async def generate_for_practice(
         logger.error(f"[InsightService] LLM 失敗 practice_id={pid}: {output}")
         return None
 
-    practice.insight = output
+    # 使用 Core-level UPDATE 只寫入 insight，避免觸發 ORM 的 onupdate 自動更新 updated_at
+    db.execute(
+        update(Practice)
+        .where(Practice.id == pid)
+        .values(insight=output)
+    )
     db.commit()
     logger.info(
         f"[InsightService] 洞察已寫入 practice_id={pid} backend={backend_name}"
