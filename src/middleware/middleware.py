@@ -96,8 +96,11 @@ def setup_middlewares(app: FastAPI):
                 if request.url.path.startswith(path):
                     return await call_next(request)
 
-            api_key = request.headers.get("x-api-key")
             expected_key = settings.api_secret_key
+            if not expected_key:
+                return await call_next(request)
+
+            api_key = request.headers.get("x-api-key")
             if not api_key or api_key != expected_key:
                 raise HTTPException(
                     status_code=403, detail="Forbidden: Invalid API Key"
