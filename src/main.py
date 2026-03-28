@@ -1,6 +1,10 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+from sqlalchemy.orm import configure_mappers
 
 # from starlette.concurrency import run_in_threadpool
 
@@ -9,10 +13,9 @@ from src.db.factory import make_database
 from src.logger import AppLogger
 from src.middleware.middleware import setup_middlewares
 from src.routers import feed, insight, ping, recommendation, users
-from src.services.insight.insight_scheduler import InsightScheduler
+from src.routers.admin import router as admin_router
 from src.services.cache.factory import make_cache_client
-
-from sqlalchemy.orm import configure_mappers
+from src.services.insight.insight_scheduler import InsightScheduler
 
 configure_mappers()
 
@@ -106,6 +109,27 @@ app.include_router(feed.router, prefix="/api", tags=["feed"])
 app.include_router(insight.router, prefix="/api", tags=["insights"])
 
 app.include_router(ping.router, prefix="/api", tags=["Health"])
+app.include_router(admin_router, prefix="/api", tags=["admin"])
+
+# === Admin UI 靜態服務 ===
+_ADMIN_UI_DIR = Path(__file__).parent.parent / "admin-ui" / "dist"
+
+if _ADMIN_UI_DIR.exists():
+    # 靜態資源（JS/CSS/images）— 必須在 catch-all 之前 mount
+    app.mount(
+        "/admin/assets",
+        StaticFiles(directory=str(_ADMIN_UI_DIR / "assets")),
+        name="admin-ui-assets",
+    )
+
+    @app.get("/admin/{full_path:path}", include_in_schema=False)
+    async def serve_admin_spa(full_path: str):  # noqa: ARG001
+        """SPA catch-all：所有 /admin/* 路徑都回傳 index.html。"""
+        return FileResponse(str(_ADMIN_UI_DIR / "index.html"))
+
+    @app.get("/admin", include_in_schema=False)
+    async def serve_admin_root():
+        return FileResponse(str(_ADMIN_UI_DIR / "index.html"))
 
 
 @app.get("/")

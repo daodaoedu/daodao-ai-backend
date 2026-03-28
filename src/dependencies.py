@@ -1,12 +1,14 @@
 from typing import Annotated, Generator, Optional
 
-from fastapi import Depends, Request
+from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from src.config import Settings, get_settings
 from src.db.interface_db import BaseDatabase
 from src.db.postgresql import PostgreSQLDatabase
+from src.models.Role import Role
+from src.models.User import User
 from src.services.cache.client import CacheClient
 from src.services.clickhouse.client import ClickHouseClient
 from src.services.llm.client import LLMClient
@@ -83,6 +85,36 @@ def get_clickhouse_client(request: Request) -> ClickHouseClient:
     return request.app.state.clickhouse_client
 
 
+def get_admin_user(
+    current_user_mongo_id: "UserDep",
+    db: "SessionDep",
+) -> User:
+    """
+    FastAPI Dependency：驗證 JWT 存在且用戶 role.name == 'admin'。
+    回傳 User ORM 物件供 admin routes 使用。
+    """
+    if not current_user_mongo_id:
+        raise HTTPException(
+            status_code=403, detail="Admin access required: not authenticated"
+        )
+
+    user: Optional[User] = (
+        db.query(User).filter(User.mongo_id == current_user_mongo_id).first()
+    )
+    if user is None:
+        raise HTTPException(
+            status_code=403, detail="Admin access required: user not found"
+        )
+
+    role: Optional[Role] = db.query(Role).filter(Role.id == user.role_id).first()
+    if role is None or role.name != "admin":
+        raise HTTPException(
+            status_code=403, detail="Admin access required: insufficient permissions"
+        )
+
+    return user
+
+
 # Dependency annotations
 
 
@@ -97,3 +129,4 @@ CacheDep = Annotated[CacheClient, Depends(get_cache_client)]
 DatabaseDep = Annotated[BaseDatabase, Depends(get_database_postgres)]
 SessionDep = Annotated[Session, Depends(get_db_session)]
 UserDep = Annotated[Optional[str], Depends(get_current_user)]
+AdminDep = Annotated[User, Depends(get_admin_user)]

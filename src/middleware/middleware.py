@@ -25,6 +25,7 @@ def setup_middlewares(app: FastAPI):
             "https://app-feat.daodao.so",
             "http://localhost:8002",
             "http://localhost:3001",
+            "http://localhost:5173",  # Vite dev server (admin UI)
         ]
     else:
         origins = ["https://app.daodao.so"]
@@ -76,6 +77,8 @@ def setup_middlewares(app: FastAPI):
             self.exempt_paths = (
                 "/api/v1/ping",
                 "/api/v1/health",
+                "/api/v1/admin",  # JWT 驗證已足夠，瀏覽器不送 x-api-key
+                "/admin",  # React UI 靜態資源
                 "/metrics",
                 "/docs",
                 "/redoc",

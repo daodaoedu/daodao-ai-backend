@@ -1,3 +1,13 @@
+# ====== Stage 0: Build React Admin UI ======
+FROM node:20-alpine AS ui-builder
+
+WORKDIR /admin-ui
+COPY admin-ui/package*.json ./
+RUN npm ci --quiet
+COPY admin-ui/ .
+RUN npm run build
+# Output: /admin-ui/dist/
+
 # ====== 第一階段：建構依賴環境 ======
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS builder
 
@@ -47,6 +57,9 @@ RUN groupadd -r appuser && \
 # 只複製虛擬環境和原始碼
 COPY --from=builder --chown=appuser:appuser /app/.venv /app/.venv
 COPY --chown=appuser:appuser src /app/src
+
+# 複製 Admin UI 靜態檔案
+COPY --from=ui-builder --chown=appuser:appuser /ui/dist /app/admin-ui/dist
 
 # 切換到非特權使用者
 USER appuser
