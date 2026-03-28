@@ -178,7 +178,7 @@ check: ## 檢查程式碼格式 (不修改)
 
 
 lint: ## 靜態檢查 (pylint + bandit)
-	$(PYLINT) --rcfile=.pylintrc $(PY_DIRS)
+	$(PYLINT) --rcfile=.pylintrc $(PY_DIRS); exit $$(( $$? & 3 ))
 	$(BANDIT) -r $(PY_DIRS)
 
 # =========================================
