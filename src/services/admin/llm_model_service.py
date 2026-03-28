@@ -43,7 +43,6 @@ _KNOWN_COSTS: dict[tuple[str, str], dict[str, Decimal]] = {
         "output": Decimal("0.400000"),
         "cached_input": Decimal("0.000000"),
     },
-    
 }
 
 
@@ -76,7 +75,9 @@ def seed_llm_models(db: Session, settings: Settings) -> None:
                     is_active=True,
                     input_cost_per_1m=costs["input"] if costs else Decimal("0"),
                     output_cost_per_1m=costs["output"] if costs else Decimal("0"),
-                    cached_input_cost_per_1m=costs["cached_input"] if costs else Decimal("0"),
+                    cached_input_cost_per_1m=(
+                        costs["cached_input"] if costs else Decimal("0")
+                    ),
                 )
             )
             logger.info(f"[LLMModelSeed] 已插入 {provider}/{model_name}")

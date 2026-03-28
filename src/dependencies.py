@@ -119,11 +119,7 @@ def get_admin_user(
     if user is None and mongo_id:
         user = db.query(User).filter(User.mongo_id == mongo_id).first()
     if user is None and mongo_id:
-        user = (
-            db.query(User)
-            .filter(User.external_id.cast(String) == mongo_id)
-            .first()
-        )
+        user = db.query(User).filter(User.external_id.cast(String) == mongo_id).first()
 
     if user is None:
         raise HTTPException(

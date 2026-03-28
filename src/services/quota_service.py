@@ -111,7 +111,9 @@ def seed_admin_quotas(db: Session) -> None:
 
     if created:
         db.commit()
-        logger.info(f"[seed_admin_quotas] 建立 {created} 筆 admin quota (月限 {DEFAULT_ADMIN_MONTHLY_TOKEN_LIMIT:,} tokens)")
+        logger.info(
+            f"[seed_admin_quotas] 建立 {created} 筆 admin quota (月限 {DEFAULT_ADMIN_MONTHLY_TOKEN_LIMIT:,} tokens)"
+        )
 
 
 def check_user_quota(db: Session, user_id: int) -> None:

@@ -34,16 +34,24 @@ async def playground_chat(
         .first()
     )
     if model is None:
-        raise HTTPException(status_code=404, detail=f"LLM model {body.model_id} not found or inactive")
+        raise HTTPException(
+            status_code=404, detail=f"LLM model {body.model_id} not found or inactive"
+        )
 
     # 2. 組合 prompt
     system_content = ""
     if body.system_prompt_id is not None:
-        sp = db.query(SystemPrompt).filter(SystemPrompt.id == body.system_prompt_id).first()
+        sp = (
+            db.query(SystemPrompt)
+            .filter(SystemPrompt.id == body.system_prompt_id)
+            .first()
+        )
         if sp:
             system_content = sp.content
 
-    full_prompt = f"{system_content}\n\n---\n{body.message}" if system_content else body.message
+    full_prompt = (
+        f"{system_content}\n\n---\n{body.message}" if system_content else body.message
+    )
 
     # 3. 建立 LLM client（使用 model.provider 對應的 backend）
     llm_client = LLMClient(settings, model.provider)
