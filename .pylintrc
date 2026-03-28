@@ -6,4 +6,9 @@ disable=
     R0903,  # too-few-public-methods
     import-error,
     no-name-in-module,
-    unused-argument
+    unused-argument,
+    not-callable  # SQLAlchemy func.now()/func.count() 等為已知誤判
+
+[TYPECHECK]
+# SQLAlchemy func proxy (func.now, func.count, ...) 是動態屬性，pylint 無法靜態分析
+ignored-classes=func,scoped_session
