@@ -87,28 +87,44 @@ def get_clickhouse_client(request: Request) -> ClickHouseClient:
 
 
 def get_admin_user(
-    current_user_mongo_id: "UserDep",
-    db: "SessionDep",
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db_session),
 ) -> User:
     """
-    FastAPI Dependency：驗證 JWT 存在且用戶 role.name == 'admin'。
+    FastAPI Dependency：驗證 JWT 存在且用戶 role.name == 'admin' / 'superadmin'。
     回傳 User ORM 物件供 admin routes 使用。
+
+    查詢順序：
+    1. JWT 的 id（PostgreSQL PK，最可靠）
+    2. JWT 的 _id → mongo_id 欄位
+    3. JWT 的 _id → external_id 欄位（UUID 格式 fallback）
     """
-    if not current_user_mongo_id:
+    if credentials is None:
         raise HTTPException(
             status_code=403, detail="Admin access required: not authenticated"
         )
 
-    # JWT _id 可能是 mongo_id 或 external_id（UUID），兩者都嘗試
-    user: Optional[User] = (
-        db.query(User).filter(User.mongo_id == current_user_mongo_id).first()
-    )
-    if user is None:
+    decoded = verify(credentials.credentials)
+    if not decoded:
+        raise HTTPException(
+            status_code=403, detail="Admin access required: invalid or expired token"
+        )
+
+    numeric_id = decoded.get("id")
+    mongo_id = decoded.get("_id")
+
+    user: Optional[User] = None
+    if numeric_id:
+        user = db.query(User).filter(User.id == int(numeric_id)).first()
+    if user is None and mongo_id:
+        user = db.query(User).filter(User.mongo_id == mongo_id).first()
+    if user is None and mongo_id:
         user = (
             db.query(User)
-            .filter(User.external_id.cast(String) == current_user_mongo_id)
+            .filter(User.external_id.cast(String) == mongo_id)
             .first()
         )
+
     if user is None:
         raise HTTPException(
             status_code=403, detail="Admin access required: user not found"
