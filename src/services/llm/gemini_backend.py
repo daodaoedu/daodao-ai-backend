@@ -24,9 +24,15 @@ class GeminiBackend(BaseLLMBackend):
                 contents=prompt,
             )
             output = response.text or "未提供回應"
-            tokens = self._estimate_tokens(prompt + output)
-            cost = self._estimate_token_cost(tokens, 0.01)
-            return output, cost, {"estimated_tokens": tokens}, "gemini"
+            meta = response.usage_metadata
+            input_tokens = getattr(meta, "prompt_token_count", 0) or 0
+            output_tokens = getattr(meta, "candidates_token_count", 0) or 0
+            usage_dict = {
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+            }
+            cost = self._estimate_token_cost(input_tokens + output_tokens, 0.01)
+            return output, cost, usage_dict, "gemini"
         except Exception as e:
             logger.error(f"Gemini 呼叫失敗: {e}")
             return f"錯誤：{e}", 0.0, {}, "gemini"

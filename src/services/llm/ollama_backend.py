@@ -42,6 +42,11 @@ class OllamaBackend(BaseLLMBackend):
                 return f"錯誤：{e}", 0.0, {}, "ollama"
             data = resp.json()
             output = data.get("response", "未提供回應")
-            tokens = self._estimate_tokens(prompt + output)
-            cost = self._estimate_token_cost(tokens, 0.0)
-            return output, cost, {"estimated_tokens": tokens}, "ollama"
+            input_tokens = data.get("prompt_eval_count", 0) or 0
+            output_tokens = data.get("eval_count", 0) or 0
+            usage_dict = {
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+            }
+            cost = self._estimate_token_cost(input_tokens + output_tokens, 0.0)
+            return output, cost, usage_dict, "ollama"
