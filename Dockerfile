@@ -59,7 +59,7 @@ COPY --from=builder --chown=appuser:appuser /app/.venv /app/.venv
 COPY --chown=appuser:appuser src /app/src
 
 # 複製 Admin UI 靜態檔案
-COPY --from=ui-builder --chown=appuser:appuser /ui/dist /app/admin-ui/dist
+COPY --from=ui-builder --chown=appuser:appuser /admin-ui/dist /app/admin-ui/dist
 
 # 切換到非特權使用者
 USER appuser
