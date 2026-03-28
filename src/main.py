@@ -61,15 +61,20 @@ async def lifespan(app: FastAPI):
     # await run_in_threadpool(app.state.qdrant_client.create_collection)
     logger.info("✅ daodao_collection ready")
 
-    # 啟動精選洞察排程
-    insight_scheduler = InsightScheduler(settings, app.state.database)
-    insight_scheduler.start()
-    app.state.insight_scheduler = insight_scheduler
+    # 啟動精選洞察排程（LLM backend 未設定時跳過，不影響主服務）
+    try:
+        insight_scheduler = InsightScheduler(settings, app.state.database)
+        insight_scheduler.start()
+        app.state.insight_scheduler = insight_scheduler
+    except ValueError as exc:
+        logger.warning(f"InsightScheduler 啟動失敗，已跳過: {exc}")
+        app.state.insight_scheduler = None
 
     yield
 
     # Cleanup
-    app.state.insight_scheduler.stop()
+    if app.state.insight_scheduler:
+        app.state.insight_scheduler.stop()
     # database.teardown()
     logger.info("API shutdown complete")
 
