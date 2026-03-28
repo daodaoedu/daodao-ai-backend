@@ -17,6 +17,7 @@ from src.routers.admin import router as admin_router
 from src.services.cache.factory import make_cache_client
 from src.services.admin.llm_model_service import seed_llm_models
 from src.services.admin.prompt_service import seed_default_prompts
+from src.services.quota_service import seed_admin_quotas
 from src.services.insight.insight_scheduler import InsightScheduler
 
 configure_mappers()
@@ -66,10 +67,11 @@ async def lifespan(app: FastAPI):
     # await run_in_threadpool(app.state.qdrant_client.create_collection)
     logger.info("✅ daodao_collection ready")
 
-    # 啟動時 seed system prompts + llm models（冪等）
+    # 啟動時 seed system prompts + llm models + admin quotas（冪等）
     with app.state.database.get_session() as db:
         seed_default_prompts(db)
         seed_llm_models(db, settings)
+        seed_admin_quotas(db)
 
     # 啟動精選洞察排程
     insight_scheduler = InsightScheduler(settings, app.state.database)

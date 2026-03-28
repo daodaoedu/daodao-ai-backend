@@ -13,7 +13,12 @@ from typing import Optional
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from src.logger import AppLogger
 from src.models.UserTokenQuota import UserTokenQuota
+
+logger = AppLogger(__name__).get_logger()
+
+DEFAULT_ADMIN_MONTHLY_TOKEN_LIMIT = 100_000
 
 
 class QuotaExceededError(Exception):
@@ -68,6 +73,45 @@ def get_user_quota(db: Session, user_id: int) -> Optional[UserTokenQuota]:
         )
         .first()
     )
+
+
+def seed_admin_quotas(db: Session) -> None:
+    """
+    為所有 admin / superadmin 使用者補建預設 quota（冪等）。
+    已有 quota_month IS NULL 記錄者跳過，不覆蓋既有設定。
+    """
+    from src.models.Role import Role  # noqa: PLC0415
+    from src.models.User import User  # noqa: PLC0415
+
+    admin_roles = db.query(Role).filter(Role.name.in_(["admin", "superadmin"])).all()
+    role_ids = [r.id for r in admin_roles]
+    if not role_ids:
+        return
+
+    admin_users = db.query(User).filter(User.role_id.in_(role_ids)).all()
+    created = 0
+    for user in admin_users:
+        exists = (
+            db.query(UserTokenQuota)
+            .filter(
+                UserTokenQuota.user_id == user.id,
+                UserTokenQuota.quota_month.is_(None),
+            )
+            .first()
+        )
+        if exists:
+            continue
+        db.add(
+            UserTokenQuota(
+                user_id=user.id,
+                monthly_token_limit=DEFAULT_ADMIN_MONTHLY_TOKEN_LIMIT,
+            )
+        )
+        created += 1
+
+    if created:
+        db.commit()
+        logger.info(f"[seed_admin_quotas] 建立 {created} 筆 admin quota (月限 {DEFAULT_ADMIN_MONTHLY_TOKEN_LIMIT:,} tokens)")
 
 
 def check_user_quota(db: Session, user_id: int) -> None:
