@@ -5,6 +5,7 @@ import {
   List,
   LogOut,
   Cpu,
+  MessageSquare,
   Users,
 } from 'lucide-react'
 import { useAuth } from '@/auth/AuthContext'
@@ -15,6 +16,7 @@ const navItems = [
   { to: '/system-prompts', label: 'System Prompts', icon: FileText },
   { to: '/models', label: '模型管理', icon: Cpu },
   { to: '/user-quotas', label: 'Token 配額', icon: Users },
+  { to: '/playground', label: 'Playground', icon: MessageSquare },
 ]
 
 export function Sidebar() {

@@ -111,7 +111,7 @@ class Settings(BaseConfigSettings):
         default_factory=lambda: {
             "ollama": LLMBackendConfig(
                 url="http://ollama-dev:11434/api/generate",
-                model="phi3:mini",
+                model="qwen2.5:1.5b",
             ),
             "openai": LLMBackendConfig(
                 url="https://api.openai.com/v1/responses",

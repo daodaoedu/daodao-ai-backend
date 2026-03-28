@@ -42,7 +42,7 @@ def list_llm_models(
     if is_active is not None:
         query = query.filter(LLMModel.is_active == is_active)
 
-    models = query.order_by(LLMModel.provider, LLMModel.model_name).all()
+    models = query.order_by(LLMModel.input_cost_per_1m, LLMModel.output_cost_per_1m).all()
     data: List[LLMModelRead] = [LLMModelRead.model_validate(m) for m in models]
     payload = [d.model_dump(mode="json") for d in data]
 

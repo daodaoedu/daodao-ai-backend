@@ -50,7 +50,16 @@ class LoggingLLMClient:
         """
         呼叫 LLM 並記錄查詢日誌。
         回傳 (output, cost, usage, backend_name)，與 LLMClient.generate() 相同。
+
+        若 user_id 不為 None，呼叫前先檢查 token quota。
+        QuotaExceededError 向上拋出，由呼叫端決定如何處理。
         """
+        if self.user_id is not None:
+            from src.services.quota_service import check_user_quota  # noqa: PLC0415
+
+            with self._session_factory() as db:
+                check_user_quota(db, int(self.user_id))
+
         start_ms = time.monotonic()
         status = "success"
         error_message: Optional[str] = None

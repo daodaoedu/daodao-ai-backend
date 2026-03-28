@@ -15,6 +15,7 @@ def admin_ping(admin: AdminDep, db: SessionDep) -> dict:
             "status": "ok",
             "admin_id": admin.id,
             "admin_mongo_id": admin.mongo_id,
+            "nickname": admin.nickname,
         },
         "pagination": None,
         "cache_hit": False,

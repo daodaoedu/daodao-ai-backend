@@ -8,20 +8,30 @@ from sqlalchemy.orm import Session
 from src.logger import AppLogger
 from src.models.Practice import Practice, PracticeStatus
 from src.models.PracticeCheckIn import PracticeCheckIn
+from src.services.admin.prompt_service import get_active_system_prompt
 from src.services.llm.client import LLMClient
 
 logger = AppLogger(__name__).get_logger()
 
 _PROMPT_FILE = Path(__file__).parent.parent / "prompts" / "insight_system.txt"
+_HARDCODED_FALLBACK = "你是個人成長教練，請根據用戶的實踐記錄生成成長洞察。"
 
 # 星期中文對照
 _WEEKDAY_ZH = ["週一", "週二", "週三", "週四", "週五", "週六", "週日"]
 
 
-def _load_system_prompt() -> str:
+def _load_system_prompt(db: Optional[Session] = None) -> str:
+    """
+    載入 system prompt，優先順序：DB（name='insight', is_active=True）→ txt 檔 → 硬編碼。
+    """
+    if db is not None:
+        content = get_active_system_prompt(db, "insight")
+        if content:
+            logger.debug("[InsightService] 使用 DB system prompt (name='insight')")
+            return content
     if _PROMPT_FILE.exists():
         return _PROMPT_FILE.read_text(encoding="utf-8").strip()
-    return "你是個人成長教練，請根據用戶的實踐記錄生成成長洞察。"
+    return _HARDCODED_FALLBACK
 
 
 def _analyze_checkins(checkins: list) -> dict:
@@ -93,9 +103,13 @@ def _analyze_checkins(checkins: list) -> dict:
     }
 
 
-def _build_prompt(practice: Practice, checkins: list) -> str:
+def _build_prompt(
+    practice: Practice,
+    checkins: list,
+    db: Optional[Session] = None,
+) -> str:
     """組合洞察生成 prompt"""
-    system = _load_system_prompt()
+    system = _load_system_prompt(db)
     stats = _analyze_checkins(checkins)
 
     # ── 統計摘要 ──────────────────────────────────────────────
@@ -182,7 +196,7 @@ async def generate_for_practice(
     """
 
     checkins = get_checkins_for_practice(db, practice.id)
-    prompt = _build_prompt(practice, checkins)
+    prompt = _build_prompt(practice, checkins, db=db)
 
     logger.info(
         f"[InsightService] 生成洞察 practice_id={practice.id} checkins={len(checkins)}"

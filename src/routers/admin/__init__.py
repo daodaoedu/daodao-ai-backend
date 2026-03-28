@@ -4,6 +4,7 @@ from src.routers.admin import (
     dashboard,
     llm_models,
     ping,
+    playground,
     query_logs,
     system_prompts,
     user_quotas,
@@ -17,3 +18,4 @@ router.include_router(query_logs.router, tags=["admin-query-logs"])
 router.include_router(system_prompts.router, tags=["admin-system-prompts"])
 router.include_router(llm_models.router, tags=["admin-llm-models"])
 router.include_router(user_quotas.router, tags=["admin-user-quotas"])
+router.include_router(playground.router, tags=["admin-playground"])

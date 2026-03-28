@@ -17,6 +17,14 @@ export interface OffsetPagination {
   has_next: boolean
 }
 
+// ── Auth ──────────────────────────────────────────────────
+export interface AdminPingData {
+  status: string
+  admin_id: number
+  admin_mongo_id: string | null
+  nickname: string | null
+}
+
 // ── Dashboard ─────────────────────────────────────────────
 export interface BackendStat {
   backend: string
@@ -110,6 +118,34 @@ export interface AIQueryLog {
   prompt_chars: number | null
   created_at: string
   usage_detail?: Record<string, unknown>
+}
+
+// ── Playground ────────────────────────────────────────────
+export interface PlaygroundChatRequest {
+  model_id: number
+  system_prompt_id?: number | null
+  message: string
+}
+
+export interface PlaygroundChatResponse {
+  response: string
+  model_used: string
+  input_tokens: number
+  output_tokens: number
+  cost_usd: number
+  latency_ms: number
+}
+
+export interface ChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+  meta?: {
+    input_tokens: number
+    output_tokens: number
+    cost_usd: number
+    latency_ms: number
+    model_used: string
+  }
 }
 
 // ── User Quotas ───────────────────────────────────────────

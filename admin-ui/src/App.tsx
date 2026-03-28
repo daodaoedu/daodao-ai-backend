@@ -7,6 +7,7 @@ import { DashboardPage } from '@/pages/DashboardPage'
 import { QueryLogsPage } from '@/pages/QueryLogsPage'
 import { SystemPromptsPage } from '@/pages/SystemPromptsPage'
 import { ModelManagementPage } from '@/pages/ModelManagementPage'
+import { PlaygroundPage } from '@/pages/PlaygroundPage'
 import { UserQuotasPage } from '@/pages/UserQuotasPage'
 
 export function App() {
@@ -39,6 +40,10 @@ export function App() {
         <Route
           path="/user-quotas"
           element={<AppShell><UserQuotasPage /></AppShell>}
+        />
+        <Route
+          path="/playground"
+          element={<AppShell><PlaygroundPage /></AppShell>}
         />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

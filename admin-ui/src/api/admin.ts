@@ -1,11 +1,14 @@
 import apiClient from './client'
 import type {
+  AdminPingData,
   AIQueryLog,
   ApiResponse,
   DashboardStats,
   LLMModel,
   LLMModelCreate,
   OffsetPagination,
+  PlaygroundChatRequest,
+  PlaygroundChatResponse,
   SystemPrompt,
   SystemPromptCreate,
   SystemPromptUpdate,
@@ -15,7 +18,7 @@ import type {
 
 // ── Auth ──────────────────────────────────────────────────
 export const ping = () =>
-  apiClient.get<ApiResponse<{ status: string }>>('/api/v1/admin/ping')
+  apiClient.get<ApiResponse<AdminPingData>>('/api/v1/admin/ping')
 
 // ── Dashboard ─────────────────────────────────────────────
 export const getDashboardStats = (dateFrom?: string, dateTo?: string) =>
@@ -100,6 +103,11 @@ export const getUserQuota = (userId: number) =>
     }>
   >(`/api/v1/admin/users/${userId}/quota`)
 
+// ── Playground ────────────────────────────────────────────
+export const playgroundChat = (data: PlaygroundChatRequest) =>
+  apiClient.post<ApiResponse<PlaygroundChatResponse>>('/api/v1/admin/playground/chat', data)
+
+// ── User Quotas ───────────────────────────────────────────
 export const upsertUserQuota = (
   userId: number,
   data: {
