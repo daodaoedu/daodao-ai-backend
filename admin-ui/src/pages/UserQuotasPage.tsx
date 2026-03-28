@@ -39,7 +39,7 @@ export function UserQuotasPage() {
 
   const openEdit = (u: UserWithQuota) => {
     setQuotaForm({
-      monthly_token_limit: u.quota ? String(u.quota.monthly_token_limit) : '1000000',
+      monthly_token_limit: u.quota ? String(u.quota.monthly_token_limit) : '100000',
       daily_token_limit: u.quota?.daily_token_limit ? String(u.quota.daily_token_limit) : '',
     })
     setEditing(u)
