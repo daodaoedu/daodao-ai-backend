@@ -68,9 +68,7 @@ def get_my_insights(
     )
     practices = list(db.execute(stmt).scalars().all())
 
-    data = [
-        PracticeInsightResponse.model_validate(p).model_dump() for p in practices
-    ]
+    data = [PracticeInsightResponse.model_validate(p).model_dump() for p in practices]
 
     cache.client.setex(cache_key, INSIGHTS_TTL, json.dumps(data, default=str))
 

@@ -79,13 +79,9 @@ def _analyze_checkins(checkins: list) -> dict:
         mood_summary = f"心情起伏，但持續到最後（共打卡 {total} 次）"
 
     # ── 精選筆記（有實質文字的） ──────────────────────────────
-    notes_with_content = [
-        c for c in checkins if c.note and len(c.note.strip()) > 5
-    ]
+    notes_with_content = [c for c in checkins if c.note and len(c.note.strip()) > 5]
     # 優先選 mood=happy/frustrated 的（情緒最強的那幾天）
-    priority = [
-        c for c in notes_with_content if c.mood in ("happy", "frustrated")
-    ]
+    priority = [c for c in notes_with_content if c.mood in ("happy", "frustrated")]
     notable_notes = (priority + notes_with_content)[:2]
 
     return {
@@ -117,7 +113,7 @@ def _build_prompt(practice: Practice, checkins: list) -> str:
         for c in stats["notable_notes"]:
             date_str = str(c.checkin_date) if c.checkin_date else "未知日期"
             mood_str = c.mood or "未記錄"
-            note_lines.append(f'  - {date_str} | {mood_str} | 「{c.note.strip()}」')
+            note_lines.append(f"  - {date_str} | {mood_str} | 「{c.note.strip()}」")
         notes_block = "精選打卡筆記（情緒最鮮明的紀錄）：\n" + "\n".join(note_lines)
     else:
         notes_block = "精選打卡筆記：（用戶未留下筆記，請根據統計數據生成洞察）"
@@ -204,13 +200,7 @@ async def generate_for_practice(
         return None
 
     # 使用 Core-level UPDATE 只寫入 insight，避免觸發 ORM 的 onupdate 自動更新 updated_at
-    db.execute(
-        update(Practice)
-        .where(Practice.id == pid)
-        .values(insight=output)
-    )
+    db.execute(update(Practice).where(Practice.id == pid).values(insight=output))
     db.commit()
-    logger.info(
-        f"[InsightService] 洞察已寫入 practice_id={pid} backend={backend_name}"
-    )
+    logger.info(f"[InsightService] 洞察已寫入 practice_id={pid} backend={backend_name}")
     return pid
