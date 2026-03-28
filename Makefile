@@ -81,10 +81,10 @@ rebuild-prod:  ## 重建 Prod 環境
 	@docker image inspect redis:alpine > /dev/null 2>&1 || docker pull redis:alpine
 
 	# 強制不使用 cache rebuild
-	$(COMPOSE_DEV) --profile prod build --no-cache
+	$(COMPOSE_PROD) --profile prod build --no-cache
 
-	# 啟動 dev container
-	$(COMPOSE_DEV) --profile prod up -d
+	# 啟動 prod container
+	$(COMPOSE_PROD) --profile prod up -d
 
 
 up: up-dev up-prod ## 同時啟動 Dev 與 Prod 環境
@@ -142,7 +142,7 @@ health-dev:
 	fi
 
 health-prod:
-	@echo "Checking backend-dev health via API..."
+	@echo "Checking backend-prod health via API..."
 	@container_id=$$($(COMPOSE_PROD) ps -q backend-prod); \
 	if [ -z "$$container_id" ]; then \
 		echo "❌ backend-prod container not running"; \
@@ -178,8 +178,8 @@ check: ## 檢查程式碼格式 (不修改)
 
 
 lint: ## 靜態檢查 (pylint + bandit)
-	$(PYLINT) --rcfile=.pylintrc $(PY_DIRS) || true
-	$(BANDIT) -r $(PY_DIRS) || true
+	$(PYLINT) --rcfile=.pylintrc $(PY_DIRS)
+	$(BANDIT) -r $(PY_DIRS)
 
 # =========================================
 # 🧪 測試與工具
@@ -229,6 +229,12 @@ insight-run-groq: ## 手動觸發精選洞察生成（Groq，免費）
 
 insight-dry-run: ## 顯示待處理 Practice 清單，不實際生成（容器內執行）
 	$(COMPOSE_DEV) exec backend-dev $(_INSIGHT_SCRIPT) --dry-run
+
+insight-run-force: ## 強制重新生成所有已完成 Practice 的洞察（覆蓋既有內容）
+	$(COMPOSE_DEV) exec backend-dev $(_INSIGHT_SCRIPT) --force
+
+insight-dry-run-force: ## 顯示 force 模式下將被重新生成的 Practice 清單
+	$(COMPOSE_DEV) exec backend-dev $(_INSIGHT_SCRIPT) --dry-run --force
 
 ollama-up: ## 啟動 Ollama 本地 LLM 服務
 	$(COMPOSE_DEV) --profile ollama up -d ollama-dev
