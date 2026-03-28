@@ -72,6 +72,8 @@ class Practice(Base):
 
     other_context = Column(Text)
 
+    insight = Column(Text, nullable=True)  # AI 生成的成長洞察（排程寫入）
+
     # ===== 狀態 =====
     status = Column(String(20), default=PracticeStatus.DRAFT.value)
 

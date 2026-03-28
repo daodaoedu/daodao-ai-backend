@@ -81,10 +81,10 @@ rebuild-prod:  ## 重建 Prod 環境
 	@docker image inspect redis:alpine > /dev/null 2>&1 || docker pull redis:alpine
 
 	# 強制不使用 cache rebuild
-	$(COMPOSE_DEV) --profile prod build --no-cache
+	$(COMPOSE_PROD) --profile prod build --no-cache
 
-	# 啟動 dev container
-	$(COMPOSE_DEV) --profile prod up -d
+	# 啟動 prod container
+	$(COMPOSE_PROD) --profile prod up -d
 
 
 up: up-dev up-prod ## 同時啟動 Dev 與 Prod 環境
@@ -142,7 +142,7 @@ health-dev:
 	fi
 
 health-prod:
-	@echo "Checking backend-dev health via API..."
+	@echo "Checking backend-prod health via API..."
 	@container_id=$$($(COMPOSE_PROD) ps -q backend-prod); \
 	if [ -z "$$container_id" ]; then \
 		echo "❌ backend-prod container not running"; \
@@ -202,5 +202,72 @@ deploy:
 	docker push $(DOCKERHUB_USERNAME)/$(IMAGE_NAME):$(TAG)
 
 
+# =========================================
+# 💡 精選洞察
+# =========================================
+
+_INSIGHT_CONTAINER := daodao-ai-backend-backend-dev-1
+_INSIGHT_SCRIPT    := python scripts/run_insight_job.py --env-file .env.dev
+
+insight-run: ## 手動觸發精選洞察生成（容器內執行，使用 .env.dev 預設 backend）
+	$(COMPOSE_DEV) exec backend-dev $(_INSIGHT_SCRIPT)
+
+insight-run-gemini: ## 手動觸發精選洞察生成（Gemini）
+	$(COMPOSE_DEV) exec backend-dev $(_INSIGHT_SCRIPT) --backend gemini
+
+insight-run-anthropic: ## 手動觸發精選洞察生成（Anthropic Claude）
+	$(COMPOSE_DEV) exec backend-dev $(_INSIGHT_SCRIPT) --backend anthropic
+
+insight-run-openai: ## 手動觸發精選洞察生成（OpenAI）
+	$(COMPOSE_DEV) exec backend-dev $(_INSIGHT_SCRIPT) --backend openai
+
+insight-run-ollama: ## 手動觸發精選洞察生成（Ollama 本地）
+	$(COMPOSE_DEV) exec backend-dev $(_INSIGHT_SCRIPT) --backend ollama
+
+insight-run-groq: ## 手動觸發精選洞察生成（Groq，免費）
+	$(COMPOSE_DEV) exec backend-dev $(_INSIGHT_SCRIPT) --backend groq
+
+insight-dry-run: ## 顯示待處理 Practice 清單，不實際生成（容器內執行）
+	$(COMPOSE_DEV) exec backend-dev $(_INSIGHT_SCRIPT) --dry-run
+
+insight-run-force: ## 強制重新生成所有已完成 Practice 的洞察（覆蓋既有內容）
+	$(COMPOSE_DEV) exec backend-dev $(_INSIGHT_SCRIPT) --force
+
+insight-dry-run-force: ## 顯示 force 模式下將被重新生成的 Practice 清單
+	$(COMPOSE_DEV) exec backend-dev $(_INSIGHT_SCRIPT) --dry-run --force
+
+ollama-up: ## 啟動 Ollama 本地 LLM 服務
+	$(COMPOSE_DEV) --profile ollama up -d ollama-dev
+
+ollama-down: ## 停止 Ollama 服務
+	$(COMPOSE_DEV) --profile ollama down ollama-dev
+
+ollama-pull: ## 下載推薦模型 qwen2.5:7b（需先啟動 ollama-up）
+	docker exec daodao-ai-backend-ollama ollama pull qwen2.5:7b
+
+ollama-pull-small: ## 下載輕量模型 qwen2.5:1.5b（RAM 不足時使用, RAM: 2GB)
+	docker exec daodao-ai-backend-ollama ollama pull qwen2.5:1.5b
+
+ollama-list: ## 列出已下載的模型
+	docker exec daodao-ai-backend-ollama ollama list
+
+
+# =========================================
+# 🧪 測試
+# =========================================
+
 test: ## 執行所有單元測試
 	.venv/bin/python3.12 -m pytest tests/ -v
+
+test-cov: ## 執行測試並顯示覆蓋率報告
+	.venv/bin/python3.12 -m pytest tests/ -v \
+		--cov=src \
+		--cov-report=term-missing \
+		--cov-report=html:.coverage_html
+
+test-insight: ## 只跑精選洞察相關測試
+	.venv/bin/python3.12 -m pytest \
+		tests/services/test_insight_service.py \
+		tests/services/test_insight_schema.py \
+		tests/services/test_insight_scheduler.py \
+		-v

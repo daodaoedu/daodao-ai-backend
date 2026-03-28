@@ -1,169 +1,201 @@
-```.
-├── src/                          # 主應用程式根目錄
-│   ├── routers/              # API 路由群組（模組化 endpoints）
-│   │   ├── __init__.py
-│   │   ├── feedback.py       # 處理使用者意見或 AI 評論回饋
-│   │   ├── ping.py           # 健康檢查與服務連線測試端點
-│   │   ├── recommendation.py # 推薦系統 API（可能呼叫 LLM 或向量查詢）
-│   │   └── resource.py       # 提供資源清單、標籤、分類等 API
-│   ├── auto_metrics.py       # 自動蒐集/上報 API metrics（例如 latency、request count）
-│   ├── template.py           # 統一 API 回傳格式裝飾器或樣板
-│   └── verify_jwt.py         # JWT 驗證與授權邏輯
-│   ├── config.py                 # 全域設定（環境變數、資料庫 URI、快取設定）
-│   ├── limiter.py                # API 限流控制（Rate Limiter）
-│   ├── middleware.py             # 全域中介層（Logging、CORS、Tracing）
-│   │
-│   ├── db/                       # 資料庫連線與 ORM 相關
-│   │   ├── factory.py            # 建立資料庫 session factory
-│   │   ├── interface_db.py       # 資料庫抽象介面（可支援多種後端）
-│   │   └── postgresql.py         # PostgreSQL 具體實作
-│   │
-│   ├── dependencies.py           # FastAPI 依賴注入設定（DB Session、JWT 驗證）
-│   ├── Dockerfile                # 應用 Docker build 定義
-│   ├── expections.py             # 統一例外與錯誤處理
-│   ├── logger.py                 # 日誌系統（Loguru 或 Python logging）
-│   ├── logs/                     # 實際日誌輸出目錄
-│   ├── main.py                   # FastAPI 啟動主程式（src instance、路由註冊）
-│   │
-│   ├── models/                   # SQLAlchemy ORM 模型定義（資料表對應）
-│   │   ├── base.py               # BaseModel (Declarative Base)
-│   │   ├── User.py               # 使用者資料表
-│   │   ├── Project.py            # 專案資料表
-│   │   ├── Review.py             # 使用者評論
-│   │   ├── Resource.py           # 教育資源或課程資料
-│   │   ├── ...                   # 其他 domain 模型 (Idea, Task, Category 等)
-│   │
-│   ├── repositories/             # Repository Pattern：負責資料存取邏輯
-│   │   ├── review.py             # Review 資料存取 CRUD
-│   │   ├── project.py            # Project 資料層
-│   │   ├── milestone.py          # Milestone CRUD
-│   │   ├── user.py               # 使用者 CRUD
-│   │   └── ...                   # 其他資料操作模組
-│   │
-│   ├── pyproject.toml          # Python 依賴清單
-│   │
-│   ├── schemas/                  # Pydantic Schema（資料驗證與回傳格式）
-│   │   ├── api_response.py       # 統一 API 回傳結構（success, data, message）
-│   │   ├── recommendation.py     # 推薦系統輸出格式
-│   │   ├── feedback.py           # 回饋 API 輸入/輸出格式
-│   │   ├── resource.py           # 資源類型 Schema
-│   │   ├── pageInfo.py           # 分頁資訊 Schema
-│   │   └── ...                   # 其他子模組輸出格式
-│   │
-│   ├── services/                 # 商業邏輯層（結合多 Repository 或外部 API）
-│   │   ├── feedback.py           # AI 或使用者回饋邏輯
-│   │   ├── project.py            # 專案商業邏輯（含驗證、任務鏈結）
-│   │   ├── rank_feed.py          # 排名與推薦邏輯（整合多模組）
-│   │   ├── review_service.py     # 專門處理評論與 LLM 評估結果
-│   │   ├── resource_service.py   # 教育資源相關邏輯
-│   │   ├── cache/                # Redis / Cache 工具模組
-│   │   │   ├── client.py
-│   │   │   └── factory.py
-│   │   ├── clickhouse/           # ClickHouse 數據倉儲客戶端
-│   │   │   ├── client.py
-│   │   │   └── factory.py
-│   │   ├── llm/                  # 大語言模型整合層
-│   │   │   ├── client.py         # 實際呼叫 LLM API
-│   │   │   └── factory.py        # 統一 LLM client 建立
-│   │   ├── qdrant/               # 向量資料庫（Qdrant）整合
-│   │   │   ├── client.py
-│   │   │   └── factory.py
-│   │   ├── prompts/              # 提示詞與 RAG 系統文件
-│   │   │   ├── prompts.py
-│   │   │   └── rag_system.txt
-│   │   └── process_feedback.py   # 自動處理 AI 回饋與標註任務
-│   │
-│   ├── tests/                    # 單元與整合測試
-│   │   ├── __init__.py
-│   │
-│   └── utils/                    # 工具與共用邏輯
-│       ├── code_enum.py          # 狀態碼列舉
-│       ├── code.py               # 錯誤碼與描述對照
-│       ├── llm_router.py         # LLM 模型路由邏輯
-│       └── redis_utils.py        # Redis 常用封裝
-│
-├── cache_data/                   # 快取暫存資料目錄
-├── docker-compose.dev.yml        # 開發環境容器編排
-├── docker-compose.prod.yml       # 生產環境容器編排
-├── Dockerfile                    # 根目錄 Docker 構建設定
-├── docs/                         # 文件與筆記
-│   ├── arch.md                   # 系統架構說明
-│   ├── note.md                   # 開發筆記
-│   └── Recommendation.md         # 推薦系統細節
-├── Makefile                      # 自動化指令 (run, build, lint, test)
-├── pytest.ini                    # pytest 設定檔
-└── Readme.md                     # 專案說明文件
+# 系統架構
+
+## 目錄結構
 
 ```
+.
+├── src/
+│   ├── main.py                   # FastAPI 應用入口，lifespan 管理（DB / Scheduler 初始化）
+│   ├── config.py                 # 環境設定（PostgreSQL / Redis / LLM / Insight 排程）
+│   ├── dependencies.py           # FastAPI 依賴注入（SessionDep / UserDep / CacheDep）
+│   ├── middleware.py             # CORS、Prometheus metrics、API Key 驗證
+│   ├── limiter.py                # SlowAPI 速率限制
+│   ├── response_template.py      # 統一 API 回傳格式裝飾器
+│   ├── logger.py                 # Loguru / Python logging 封裝
+│   ├── expections.py             # 統一例外與錯誤處理
+│   │
+│   ├── routers/                  # API 路由層（HTTP endpoints）
+│   │   ├── ping.py               # 健康檢查（/ping, /health）
+│   │   ├── users.py              # 實踐查詢、搜尋建議、精選洞察
+│   │   ├── feed.py               # 統一 Feed（practice + checkin）
+│   │   ├── insight.py            # 精選洞察列表
+│   │   ├── recommendation.py     # 個人化推薦 Feed
+│   │   └── feedback.py           # AI 回饋生成（目前停用）
+│   │
+│   ├── models/                   # SQLAlchemy ORM 模型（對應 daodao-storage schema）
+│   │   ├── base.py               # Declarative Base
+│   │   ├── User.py
+│   │   ├── Practice.py           # status, privacy_status, insight 欄位
+│   │   ├── PracticeCheckIn.py    # checkin_date, mood, note
+│   │   ├── Project.py / Task.py / Milestone.py
+│   │   ├── Review.py / AIReviewFeedback.py
+│   │   └── ...                   # 共約 39 個 model
+│   │
+│   ├── schemas/                  # Pydantic 請求 / 回應 Schema
+│   │   ├── api_response.py       # 統一回傳結構
+│   │   ├── insight.py
+│   │   ├── recommendation.py
+│   │   ├── feedback.py
+│   │   └── pageInfo.py
+│   │
+│   ├── services/                 # 業務邏輯層
+│   │   ├── rank_feed.py          # 推薦 Feed 評分（idea / practice / project UNION）
+│   │   ├── feedback.py           # AI 回饋上下文組裝
+│   │   ├── review_service.py     # Review + LLM 評估
+│   │   ├── resource_service.py   # 教育資源推薦
+│   │   │
+│   │   ├── practice/             # 實踐相關
+│   │   │   ├── practice.py       # 多維查詢 / 搜尋 / 篩選
+│   │   │   └── recommendation.py # 混合推薦評分
+│   │   │
+│   │   ├── feed/                 # 統一 Feed
+│   │   │   ├── feed_service.py   # UNION 查詢 + 批量 N+1 防護
+│   │   │   └── feed_ranking.py   # 社群圖 × 參與度 × 時間衰減
+│   │   │
+│   │   ├── insight/              # 精選洞察
+│   │   │   ├── insight_service.py   # 打卡分析 → Prompt → LLM → 寫入 DB
+│   │   │   └── insight_scheduler.py # APScheduler，每日 01:00 UTC
+│   │   │
+│   │   ├── llm/                  # LLM 多後端
+│   │   │   ├── base.py           # BaseLLMBackend (ABC)
+│   │   │   ├── client.py         # LLMClient 統一介面
+│   │   │   ├── openai_backend.py
+│   │   │   ├── gemini_backend.py
+│   │   │   ├── anthropic_backend.py
+│   │   │   └── ollama_backend.py
+│   │   │
+│   │   ├── prompts/              # Prompt 模板
+│   │   │   ├── prompts.py        # RAGPromptBuilder / ResponseParser
+│   │   │   ├── rag_system.txt    # AI 回饋系統提示
+│   │   │   └── insight_system.txt # 精選洞察系統提示
+│   │   │
+│   │   ├── cache/                # Redis 快取
+│   │   │   ├── client.py
+│   │   │   └── factory.py
+│   │   │
+│   │   ├── qdrant/               # 向量資料庫（選用）
+│   │   │   ├── client.py
+│   │   │   └── factory.py
+│   │   │
+│   │   └── clickhouse/           # 分析資料庫（選用）
+│   │       ├── client.py
+│   │       └── factory.py
+│   │
+│   ├── db/                       # 資料庫連線
+│   │   ├── factory.py            # make_database()
+│   │   ├── interface_db.py       # 抽象介面
+│   │   └── postgresql.py         # PostgreSQL + SQLAlchemy
+│   │
+│   └── utils/                    # 共用工具
+│       ├── code_enum.py
+│       └── code.py
+│
+├── scripts/
+│   └── run_insight_job.py        # 精選洞察手動觸發腳本
+│
+├── docs/                         # 文件
+│   ├── arch.md                   # 本檔，系統架構
+│   ├── pipeline.md               # 功能 Pipeline 與 Service 詳解
+│   ├── Recommendation.md         # 推薦演算法說明
+│   └── note.md                   # 資料庫選型設計筆記
+│
+├── docker-compose.dev.yml
+├── docker-compose.prod.yml
+├── Makefile
+└── Readme.md
+```
 
-## Layer break down
+---
 
-| 層級               | 功能說明                         |
-| ---------------- | ---------------------------- |
-| **API 層**        | 定義 RESTful endpoints，處理請求與回應 |
-| **Service 層**    | 包含商業邏輯與外部整合（LLM、快取、向量搜尋）     |
-| **Repository 層** | 封裝資料庫 CRUD 操作                |
-| **Model 層**      | ORM 模型（SQLAlchemy），定義資料表結構   |
-| **Schemas 層**    | Pydantic 資料模型，用於請求/回應驗證      |
-| **基礎層**          | 設定檔、日誌、中介層、資料庫連線             |
-| **Utils 層**      | 工具與共用邏輯（Redis、錯誤碼、路由輔助）      |
+## 分層架構
 
+| 層級 | 說明 |
+|------|------|
+| **API 層**（routers） | RESTful endpoints，處理 HTTP 請求/回應、快取、依賴注入 |
+| **Service 層** | 業務邏輯，整合 DB / LLM / Redis / Qdrant |
+| **Model 層** | SQLAlchemy ORM，對應 PostgreSQL 資料表 |
+| **Schema 層** | Pydantic，request/response 驗證與序列化 |
+| **Infrastructure 層** | DB 連線、Redis、Qdrant、ClickHouse、LLM backends |
+| **Core 層** | config、middleware、logger、limiter、dependencies |
 
+---
+
+## 架構流程圖
 
 ```mermaid
 flowchart TD
-    %% =====================
-    %% 使用者層
-    %% =====================
-    U[👩‍💻 使用者 / 前端應用] -->|HTTP / JSON| A[🌐 FastAPI Routers<br> ping / feedback / recommendation / resource]
+    U[👩‍💻 使用者 / 前端應用] -->|HTTP / JSON| A[🌐 FastAPI Routers]
 
-    %% =====================
-    %% API 層
-    %% =====================
-    subgraph API層["API 層 (FastAPI)"]
-        A --> S[⚙️ Service 層<br>商業邏輯與整合]
-        A --> M1[🔐 verify_jwt.py]
-        A --> M2[📊 auto_metrics.py]
+    subgraph API層["API 層"]
+        A --> DEP[依賴注入<br>SessionDep / UserDep / CacheDep]
+        A --> MID[Middleware<br>JWT / CORS / Metrics / Rate Limit]
     end
 
-    %% =====================
-    %% Service 層
-    %% =====================
-    subgraph Service層["Service 層 (業務邏輯)"]
-        S --> R[💾 Repository 層]
-        S --> LLM[🧠 LLM 整合 ]
-        S --> Cache[🚀 Cache - Redis]
-        S --> VecDB[📚 Qdrant 向量庫]
-        S --> CH[📈 ClickHouse 分析]
+    subgraph Service層["Service 層"]
+        DEP --> PS[PracticeService]
+        DEP --> FS[FeedService]
+        DEP --> IS[InsightService]
+        DEP --> RS[RankFeedService]
     end
 
-    %% =====================
-    %% Repository 層
-    %% =====================
-    subgraph Repository層["Repository 層 (資料操作)"]
-        R --> DB[(🗄️ PostgreSQL)]
-        R --> Model[🧩 SQLAlchemy Models]
+    subgraph Infra["Infrastructure"]
+        PS & FS & IS & RS --> DB[(PostgreSQL)]
+        PS & FS & IS & RS --> Cache[(Redis)]
+        IS --> LLM[LLMClient<br>OpenAI / Gemini / Anthropic / Ollama]
     end
 
-    %% =====================
-    %% 其他基礎層
-    %% =====================
-    subgraph 基礎層["Core / Utility 層"]
-        CFG[⚙️ config.py]
-        DEP[🧩 dependencies.py]
-        LOG[🪵 logger.py]
-        MID[🧱 middleware.py]
-        LIM[⏱️ limiter.py]
-        UTL[🔧 utils/*]
+    subgraph Scheduler["排程（APScheduler）"]
+        SCH[InsightScheduler<br>每日 01:00 UTC] --> IS
     end
+```
 
-    %% 關聯線
-    A -.->|依賴| CFG
-    S -.->|使用| UTL
-    R -.->|定義 ORM| Model
-    S -.->|記錄| LOG
-    A -.->|中介層| MID
-    A -.->|限流| LIM
+---
 
+## 資料庫選型
+
+| 資料庫 | 用途 |
+|--------|------|
+| **PostgreSQL** | 主資料庫：User / Practice / Checkin / Project 等所有業務資料 |
+| **Redis** | API 快取（60s–600s TTL）、AI 回饋任務狀態追蹤 |
+| **Qdrant** | 向量搜尋（語義相似度搜尋，選用） |
+| **ClickHouse** | 大規模事件分析（選用，目前未完全啟用） |
+
+---
+
+## 快取策略
+
+所有快取邏輯在 Router 層實作，失效時自動降級至 DB 查詢。
+
+| 端點 | TTL | Cache Key |
+|------|-----|-----------|
+| `/users/practices` | 120s | `user_id:filters:sort:cursor` |
+| `/feed` | 120s | `user_id:filters:sort:cursor` |
+| `/users/insights` | 300s | `user_id:limit:offset` |
+| `/users/practices/suggestions` | 600s | `user_id:keyword` |
+| `/users/practices/completions` | 300s | `user_id:prefix` |
+| `/recommendation/rank_feed` | 60s | `user_id:cursor` |
+
+---
+
+## LLM 多後端
+
+`LLMClient` 統一介面，透過 `backend` 參數切換：
 
 ```
+LLMClient.generate(prompt, **kwargs)
+  └─ 依 backend 名稱路由
+      ├─ openai     → AsyncOpenAI（responses.create）
+      ├─ gemini     → google-genai（models.generate_content）
+      ├─ anthropic  → AsyncAnthropic（messages.create）
+      └─ ollama     → httpx（本地，無官方 async SDK）
+```
+
+回傳格式統一：`(output: str, cost: float, usage: dict, backend_name: str)`
+
+---
+
+## 認證機制
+
+- **JWT（HS256）**：解析 `_id` → 查詢 `User.external_id`
+- **生產環境**：需附帶 `x-api-key` header
+- **匿名模式**：支援無 token 瀏覽（`UserDep` optional）
