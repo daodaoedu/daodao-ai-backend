@@ -5,7 +5,7 @@ networks:
 services:
   backend-dev:
     build: .
-    image: daodao-ai-backend:latest
+    image: daodao-ai-backend:dev
     ports:
       - "8002:8000"
     networks:
