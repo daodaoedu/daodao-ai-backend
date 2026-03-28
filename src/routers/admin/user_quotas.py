@@ -18,22 +18,17 @@ router = APIRouter()
 
 def _get_current_month_tokens(db, user_id: int) -> int:
     """計算該 user 當月已使用的 total_tokens。"""
-    # 透過 mongo_id join AIQueryLog（AIQueryLog 存的是 mongo_id）
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user or not user.mongo_id:
-        return 0
-
     row = db.execute(
         text(
             """
             SELECT COALESCE(SUM(total_tokens), 0) AS used
-            FROM admin_ai_query_logs
-            WHERE user_mongo_id = :mongo_id
+            FROM ai_query_logs
+            WHERE user_id = :user_id
               AND DATE_TRUNC('month', created_at AT TIME ZONE 'UTC')
                   = DATE_TRUNC('month', NOW() AT TIME ZONE 'UTC')
             """
         ),
-        {"mongo_id": user.mongo_id},
+        {"user_id": user_id},
     ).fetchone()
     return int(row.used) if row else 0
 
@@ -148,14 +143,12 @@ def upsert_user_quota(
     if quota:
         quota.monthly_token_limit = body.monthly_token_limit
         quota.daily_token_limit = body.daily_token_limit
-        quota.is_enforced = body.is_enforced
     else:
         quota = UserTokenQuota(
             user_id=user_id,
             monthly_token_limit=body.monthly_token_limit,
             daily_token_limit=body.daily_token_limit,
             quota_month=body.quota_month,
-            is_enforced=body.is_enforced,
         )
         db.add(quota)
 

@@ -66,7 +66,7 @@ export const deleteLLMModel = (id: number) =>
 export interface QueryLogFilters {
   backend?: string
   context?: string
-  user_mongo_id?: string
+  user_id?: number
   status?: string
   date_from?: string
   date_to?: string
@@ -106,6 +106,5 @@ export const upsertUserQuota = (
     monthly_token_limit: number
     daily_token_limit?: number | null
     quota_month?: number
-    is_enforced?: boolean
   }
 ) => apiClient.put<ApiResponse<UserQuota>>(`/api/v1/admin/users/${userId}/quota`, data)

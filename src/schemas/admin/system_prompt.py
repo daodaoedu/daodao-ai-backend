@@ -22,8 +22,8 @@ class SystemPromptRead(BaseModel):
     content: str
     is_active: bool
     version: int
-    created_by: Optional[str]
-    updated_by: Optional[str]
+    created_by: Optional[int]
+    updated_by: Optional[int]
     created_at: datetime
     updated_at: Optional[datetime]
 

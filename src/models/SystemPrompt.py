@@ -1,4 +1,12 @@
-from sqlalchemy import Boolean, Column, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    Column,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import TIMESTAMP
 from sqlalchemy.sql import func
 
@@ -20,15 +28,19 @@ class SystemPrompt(Base):
     # 每次更新 content 時 +1
     version = Column(Integer, nullable=False, default=1)
 
-    created_by = Column(String(255), nullable=True)  # User.mongo_id
-    updated_by = Column(String(255), nullable=True)
+    created_by = Column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    updated_by = Column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
 
     created_at = Column(
         TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
     )
     updated_at = Column(TIMESTAMP(timezone=True), onupdate=func.now(), nullable=True)
 
-    __table_args__ = (UniqueConstraint("name", name="uq_admin_system_prompts_name"),)
+    __table_args__ = (UniqueConstraint("name", name="uq_system_prompts_name"),)
 
     def __repr__(self) -> str:
         return f"<SystemPrompt id={self.id} name={self.name} active={self.is_active}>"

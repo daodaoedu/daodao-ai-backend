@@ -26,8 +26,8 @@ class AIQueryLog(Base):
     # 呼叫來源：insight / rag / recommendation 等
     context = Column(String(100), nullable=True)
 
-    # 觸發呼叫的用戶（User.mongo_id），排程 job 為 NULL
-    user_mongo_id = Column(String(255), nullable=True)
+    # 觸發呼叫的用戶（users.id），排程 job 為 NULL（刻意不設 FK，保留用戶刪除後的日誌）
+    user_id = Column(Integer, nullable=True)
 
     # Token 計數（input+output = total，做 SUM 時直接用 total）
     input_tokens = Column(Integer, nullable=True)
@@ -40,7 +40,7 @@ class AIQueryLog(Base):
     # LLM 呼叫耗時（ms）
     latency_ms = Column(Integer, nullable=True)
 
-    # 狀態：success / error
+    # 狀態：success / error / timeout / rate_limited
     status = Column(String(20), nullable=False, default="success")
 
     error_message = Column(Text, nullable=True)
@@ -59,7 +59,7 @@ class AIQueryLog(Base):
     __table_args__ = (
         Index("ix_aql_created_at", "created_at"),
         Index("ix_aql_backend_created_at", "backend", "created_at"),
-        Index("ix_aql_user_created_at", "user_mongo_id", "created_at"),
+        Index("ix_aql_user_created_at", "user_id", "created_at"),
         Index("ix_aql_context_created_at", "context", "created_at"),
         Index("ix_aql_status", "status"),
     )

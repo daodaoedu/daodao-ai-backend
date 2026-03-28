@@ -21,7 +21,7 @@ def list_query_logs(
     db: SessionDep,
     backend: Optional[str] = Query(None),
     context: Optional[str] = Query(None),
-    user_mongo_id: Optional[str] = Query(None),
+    user_id: Optional[int] = Query(None),
     status: Optional[str] = Query(None),
     date_from: Optional[str] = Query(None, description="YYYY-MM-DD"),
     date_to: Optional[str] = Query(None, description="YYYY-MM-DD"),
@@ -35,8 +35,8 @@ def list_query_logs(
         query = query.filter(AIQueryLog.backend == backend)
     if context:
         query = query.filter(AIQueryLog.context == context)
-    if user_mongo_id:
-        query = query.filter(AIQueryLog.user_mongo_id == user_mongo_id)
+    if user_id:
+        query = query.filter(AIQueryLog.user_id == user_id)
     if status:
         query = query.filter(AIQueryLog.status == status)
     if date_from:

@@ -54,7 +54,7 @@ class InsightScheduler:
                 llm_client=self._llm_client,
                 db_session_factory=self._database.get_session,
                 context="insight",
-                user_mongo_id=None,
+                user_id=None,
             )
 
             for practice in practices:

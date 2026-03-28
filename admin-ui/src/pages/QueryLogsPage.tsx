@@ -75,7 +75,7 @@ export function QueryLogsPage() {
                 <td className="px-4 py-2 font-mono text-xs">{log.id}</td>
                 <td className="px-4 py-2"><span className="rounded bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">{log.backend}</span></td>
                 <td className="px-4 py-2 text-muted-foreground">{log.context ?? '-'}</td>
-                <td className="px-4 py-2 font-mono text-xs truncate max-w-[100px]">{log.user_mongo_id ?? '-'}</td>
+                <td className="px-4 py-2 font-mono text-xs truncate max-w-[100px]">{log.user_id ?? '-'}</td>
                 <td className="px-4 py-2">{log.total_tokens?.toLocaleString() ?? '-'}</td>
                 <td className="px-4 py-2">{log.cost_usd ? `$${Number(log.cost_usd).toFixed(5)}` : '-'}</td>
                 <td className="px-4 py-2">{log.latency_ms ? `${log.latency_ms}ms` : '-'}</td>

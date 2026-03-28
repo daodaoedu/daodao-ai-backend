@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, ForeignKey, Index, Integer, UniqueConstraint
+from sqlalchemy import Column, ForeignKey, Index, Integer, UniqueConstraint
 from sqlalchemy.dialects.postgresql import TIMESTAMP
 from sqlalchemy.sql import func
 
@@ -26,20 +26,16 @@ class UserTokenQuota(Base):
     # 適用月份：YYYYMM 整數，如 202603；NULL = 用戶永久預設值
     quota_month = Column(Integer, nullable=True)
 
-    # False = 不強制執行（VIP 用戶）
-    is_enforced = Column(Boolean, nullable=False, default=True)
-
     created_at = Column(
         TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
     )
     updated_at = Column(TIMESTAMP(timezone=True), onupdate=func.now(), nullable=True)
 
     __table_args__ = (
-        # 每個 user 每個月只能有一筆配額（NULL month = 預設值）
         UniqueConstraint(
-            "user_id", "quota_month", name="uq_admin_user_token_quotas_user_month"
+            "user_id", "quota_month", name="uq_user_token_quotas_user_month"
         ),
-        Index("ix_admin_user_token_quotas_user_id", "user_id"),
+        Index("ix_user_token_quotas_user_id", "user_id"),
     )
 
     def __repr__(self) -> str:

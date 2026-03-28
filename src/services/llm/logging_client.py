@@ -6,7 +6,7 @@ LoggingLLMClient — 包裝 LLMClient，在每次 generate() 後同步寫入 AIQ
         llm_client=LLMClient(settings, backend),
         db_session_factory=database.get_session,
         context="insight",
-        user_mongo_id=None,
+        user_id=None,
     )
     output, cost, usage, backend_name = await client.generate(prompt)
 """
@@ -33,12 +33,12 @@ class LoggingLLMClient:
         llm_client: LLMClient,
         db_session_factory: Callable[[], AbstractContextManager],
         context: str = "unknown",
-        user_mongo_id: Optional[str] = None,
+        user_id: Optional[str] = None,
     ):
         self._client = llm_client
         self._session_factory = db_session_factory
         self.context = context
-        self.user_mongo_id = user_mongo_id
+        self.user_id = user_id
         # 透傳 LLMClient 的 backend 名稱，供外部識別
         self.backend = llm_client.backend
 
@@ -110,7 +110,7 @@ class LoggingLLMClient:
             backend=backend_name,
             model_name=model_name,
             context=self.context,
-            user_mongo_id=self.user_mongo_id,
+            user_id=self.user_id,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             total_tokens=input_tokens + output_tokens,

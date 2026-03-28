@@ -48,8 +48,8 @@ export interface SystemPrompt {
   content: string
   is_active: boolean
   version: number
-  created_by: string | null
-  updated_by: string | null
+  created_by: number | null
+  updated_by: number | null
   created_at: string
   updated_at: string | null
 }
@@ -99,7 +99,7 @@ export interface AIQueryLog {
   backend: string
   model_name: string | null
   context: string | null
-  user_mongo_id: string | null
+  user_id: number | null
   input_tokens: number | null
   output_tokens: number | null
   total_tokens: number | null
@@ -119,7 +119,6 @@ export interface UserQuota {
   monthly_token_limit: number
   daily_token_limit: number | null
   quota_month: number | null
-  is_enforced: boolean
   created_at: string
   updated_at: string | null
 }

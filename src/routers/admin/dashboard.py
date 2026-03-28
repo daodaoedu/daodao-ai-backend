@@ -43,9 +43,9 @@ def get_dashboard_stats(
                 COUNT(*)                           AS total_queries,
                 COALESCE(SUM(input_tokens), 0)    AS total_input_tokens,
                 COALESCE(SUM(output_tokens), 0)   AS total_output_tokens
-            FROM admin_ai_query_logs
-            WHERE created_at >= :date_from::date
-              AND created_at <  :date_to::date + INTERVAL '1 day'
+            FROM ai_query_logs
+            WHERE created_at >= CAST(:date_from AS DATE)
+              AND created_at <  CAST(:date_to AS DATE) + INTERVAL '1 day'
             """
         ),
         {"date_from": _date_from, "date_to": _date_to},
@@ -60,9 +60,9 @@ def get_dashboard_stats(
                 COUNT(*)                        AS query_count,
                 COALESCE(SUM(cost_usd), 0)     AS cost_usd,
                 COALESCE(SUM(total_tokens), 0) AS total_tokens
-            FROM admin_ai_query_logs
-            WHERE created_at >= :date_from::date
-              AND created_at <  :date_to::date + INTERVAL '1 day'
+            FROM ai_query_logs
+            WHERE created_at >= CAST(:date_from AS DATE)
+              AND created_at <  CAST(:date_to AS DATE) + INTERVAL '1 day'
             GROUP BY backend
             ORDER BY cost_usd DESC
             """
@@ -79,9 +79,9 @@ def get_dashboard_stats(
                 COUNT(*)                        AS query_count,
                 COALESCE(SUM(cost_usd), 0)     AS cost_usd,
                 COALESCE(SUM(total_tokens), 0) AS total_tokens
-            FROM admin_ai_query_logs
-            WHERE created_at >= :date_from::date
-              AND created_at <  :date_to::date + INTERVAL '1 day'
+            FROM ai_query_logs
+            WHERE created_at >= CAST(:date_from AS DATE)
+              AND created_at <  CAST(:date_to AS DATE) + INTERVAL '1 day'
             GROUP BY day
             ORDER BY day ASC
             """

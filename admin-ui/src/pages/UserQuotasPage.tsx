@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { listUsers, getUserQuota, upsertUserQuota } from '@/api/admin'
+import { listUsers, upsertUserQuota } from '@/api/admin'
 import type { UserWithQuota } from '@/api/types'
 
 const LIMIT = 50
@@ -8,7 +8,6 @@ const LIMIT = 50
 interface QuotaForm {
   monthly_token_limit: string
   daily_token_limit: string
-  is_enforced: boolean
 }
 
 export function UserQuotasPage() {
@@ -16,7 +15,7 @@ export function UserQuotasPage() {
   const [search, setSearch] = useState('')
   const [offset, setOffset] = useState(0)
   const [editing, setEditing] = useState<UserWithQuota | null>(null)
-  const [quotaForm, setQuotaForm] = useState<QuotaForm>({ monthly_token_limit: '1000000', daily_token_limit: '', is_enforced: false })
+  const [quotaForm, setQuotaForm] = useState<QuotaForm>({ monthly_token_limit: '1000000', daily_token_limit: '' })
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin-users', search, offset],
@@ -31,7 +30,6 @@ export function UserQuotasPage() {
       upsertUserQuota(userId, {
         monthly_token_limit: parseInt(form.monthly_token_limit, 10),
         daily_token_limit: form.daily_token_limit ? parseInt(form.daily_token_limit, 10) : null,
-        is_enforced: form.is_enforced,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-users'] })
@@ -43,7 +41,6 @@ export function UserQuotasPage() {
     setQuotaForm({
       monthly_token_limit: u.quota ? String(u.quota.monthly_token_limit) : '1000000',
       daily_token_limit: u.quota?.daily_token_limit ? String(u.quota.daily_token_limit) : '',
-      is_enforced: u.quota?.is_enforced ?? false,
     })
     setEditing(u)
   }
@@ -65,7 +62,7 @@ export function UserQuotasPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted text-muted-foreground">
-              {['ID', 'Nickname', 'Mongo ID', 'Role', '本月使用 Tokens', 'Quota Limit', 'Enforced', '操作'].map((h) => (
+              {['ID', 'Nickname', 'Mongo ID', 'Role', '本月使用 Tokens', 'Monthly Limit', 'Daily Limit', '操作'].map((h) => (
                 <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>
               ))}
             </tr>
@@ -94,11 +91,11 @@ export function UserQuotasPage() {
                   )}
                 </td>
                 <td className="px-4 py-2">
-                  {u.quota ? (
-                    <span className={`rounded px-2 py-0.5 text-xs font-medium ${u.quota.is_enforced ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`}>
-                      {u.quota.is_enforced ? 'enforced' : 'soft'}
-                    </span>
-                  ) : '-'}
+                  {u.quota?.daily_token_limit ? (
+                    <span className="font-mono">{u.quota.daily_token_limit.toLocaleString()}</span>
+                  ) : (
+                    <span className="text-muted-foreground text-xs">不限</span>
+                  )}
                 </td>
                 <td className="px-4 py-2">
                   <button
@@ -164,23 +161,6 @@ export function UserQuotasPage() {
                   value={quotaForm.daily_token_limit}
                   onChange={(e) => setQuotaForm((f) => ({ ...f, daily_token_limit: e.target.value }))}
                 />
-              </div>
-
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="quota_enforced"
-                  checked={quotaForm.is_enforced}
-                  onChange={(e) => setQuotaForm((f) => ({ ...f, is_enforced: e.target.checked }))}
-                  className="h-4 w-4"
-                />
-                <label htmlFor="quota_enforced" className="text-sm font-medium">
-                  Enforced（超限後拒絕請求）
-                </label>
-              </div>
-
-              <div className="mt-1 text-xs text-muted-foreground">
-                soft limit 僅記錄不阻擋，enforced 超限後 API 回傳 429。
               </div>
             </div>
 

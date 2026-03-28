@@ -10,7 +10,6 @@ class UserQuotaRead(BaseModel):
     monthly_token_limit: int
     daily_token_limit: Optional[int]
     quota_month: Optional[int]
-    is_enforced: bool
     created_at: datetime
     updated_at: Optional[datetime]
 
@@ -21,7 +20,6 @@ class UserQuotaUpsert(BaseModel):
     monthly_token_limit: int = Field(..., gt=0)
     daily_token_limit: Optional[int] = Field(None, gt=0)
     quota_month: Optional[int] = None  # YYYYMM，NULL = 永久預設
-    is_enforced: bool = True
 
 
 class UserWithQuotaRead(BaseModel):

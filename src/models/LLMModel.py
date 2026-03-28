@@ -43,11 +43,9 @@ class LLMModel(Base):
     updated_at = Column(TIMESTAMP(timezone=True), onupdate=func.now(), nullable=True)
 
     __table_args__ = (
-        UniqueConstraint(
-            "provider", "model_name", name="uq_admin_llm_models_provider_model"
-        ),
-        Index("ix_admin_llm_models_provider", "provider"),
-        Index("ix_admin_llm_models_is_active", "is_active"),
+        UniqueConstraint("provider", "model_name", name="uq_llm_models_provider_model"),
+        Index("ix_llm_models_provider", "provider"),
+        Index("ix_llm_models_is_active", "is_active"),
     )
 
     def __repr__(self) -> str:

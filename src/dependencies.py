@@ -2,6 +2,7 @@ from typing import Annotated, Generator, Optional
 
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import String
 from sqlalchemy.orm import Session
 
 from src.config import Settings, get_settings
@@ -98,16 +99,23 @@ def get_admin_user(
             status_code=403, detail="Admin access required: not authenticated"
         )
 
+    # JWT _id 可能是 mongo_id 或 external_id（UUID），兩者都嘗試
     user: Optional[User] = (
         db.query(User).filter(User.mongo_id == current_user_mongo_id).first()
     )
+    if user is None:
+        user = (
+            db.query(User)
+            .filter(User.external_id.cast(String) == current_user_mongo_id)
+            .first()
+        )
     if user is None:
         raise HTTPException(
             status_code=403, detail="Admin access required: user not found"
         )
 
     role: Optional[Role] = db.query(Role).filter(Role.id == user.role_id).first()
-    if role is None or role.name != "admin":
+    if role is None or role.name.lower() not in ("admin", "superadmin"):
         raise HTTPException(
             status_code=403, detail="Admin access required: insufficient permissions"
         )

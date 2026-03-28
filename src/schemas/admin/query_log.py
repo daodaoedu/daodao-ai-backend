@@ -12,7 +12,7 @@ class AIQueryLogRead(BaseModel):
     backend: str
     model_name: Optional[str]
     context: Optional[str]
-    user_mongo_id: Optional[str]
+    user_id: Optional[int]
     input_tokens: Optional[int]
     output_tokens: Optional[int]
     total_tokens: Optional[int]

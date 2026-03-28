@@ -84,7 +84,7 @@ def create_system_prompt(
         content=body.content,
         is_active=body.is_active,
         version=1,
-        created_by=admin.mongo_id,
+        created_by=admin.id,
     )
     db.add(prompt)
     db.commit()
@@ -128,7 +128,7 @@ def update_system_prompt(
             deactivate_others(db, exclude_id=prompt_id)
         prompt.is_active = body.is_active
 
-    prompt.updated_by = admin.mongo_id
+    prompt.updated_by = admin.id
     db.commit()
     db.refresh(prompt)
     return {
