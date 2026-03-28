@@ -1,0 +1,77 @@
+[project]
+name = "daodao-ai-app"
+version = "0.1.0"
+description = "A FastAPI web application with database, caching, Celery, and observability support."
+authors = [
+    { name = "Your Name", email = "your@email.com" }
+]
+requires-python = ">=3.10"
+readme = "README.md"
+
+# === 核心依賴 ===
+dependencies = [
+    # Web 基礎
+    "fastapi",
+    "uvicorn",
+    # 數據模型與設定
+    "pydantic>=2.11.3",
+    "pydantic-settings>=2.8.1",
+    # HTTP 請求
+    "requests",
+    # 數據庫
+    "sqlalchemy",
+    "psycopg2-binary",
+    # 緩存與隊列
+    "redis",
+    "celery[redis]==5.3.0",
+    "celery-prometheus",
+    # 監控與 Metrics
+    "prometheus-fastapi-instrumentator",
+    "prometheus_client",
+    # 追蹤 / Observability
+    "opentelemetry-api",
+    "opentelemetry-sdk",
+    "opentelemetry-instrumentation-fastapi",
+    # 公用工具
+    "python-dotenv",
+    "matplotlib",
+    "click",
+    "tqdm",
+    "pyjwt",
+    # FastAPI 中介層與擴充
+    "starlette==0.47.2",
+    "loguru==0.7.2",
+    "fastapi-cache2==0.2.1",
+    "aioredis==2.0.1",
+    "slowapi==0.1.8",
+    # 向量資料庫 / Embeddings
+    "qdrant-client",
+    "fastembed",
+    "sentence-transformers==5.1.0",
+    "clickhouse-connect",
+    "clickhouse_driver",
+    "openai>=2.30.0",
+    "google-genai>=1.68.0",
+    "anthropic>=0.86.0",
+    "apscheduler>=3.10.0",
+]
+
+# === 測試依賴 ===
+[tool.uv]
+dev-dependencies = [
+    "pytest",
+    "pytest-asyncio",
+    "pytest-cov",
+    "httpx",
+    # 程式碼品質工具（從 dependencies 移過來）
+    "ruff>=0.14.1",
+    "isort>=7.0.0",
+    "black>=25.9.0",
+    "pylint>=4.0.1",
+    "bandit>=1.8.6",
+]
+
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"

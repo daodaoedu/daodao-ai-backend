@@ -1,0 +1,404 @@
+name: Continuous Delivery
+
+# ===== 並發控制設定 =====
+# 目的：防止同一分支的多個部署同時執行
+# group: 使用 workflow 名稱和 ref 建立唯一群組識別
+# cancel-in-progress: 當有新的部署時，自動取消進行中的舊部署
+# 這樣可以確保只有最新的代碼被部署到伺服器
+# =======================
+concurrency:
+  group: cd-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# ===== 觸發條件設定 =====
+# 1. push 事件：當代碼推送到 main 或 dev 分支時自動觸發
+#    - main 分支：部署到生產環境
+#    - dev 分支：部署到開發環境
+# 2. workflow_dispatch：提供手動觸發選項
+#    - force_deploy：允許跳過 CI 檢查直接部署（緊急修復時使用）
+# =======================
+on:
+  push:
+    branches:
+      - main
+      - dev
+  # 手動觸發部署
+  workflow_dispatch:
+
+
+
+jobs:
+  # ===== 持續整合 (CI) 階段 =====
+  # 目的：在部署前執行程式碼品質檢查
+  # 執行條件：
+  #   - 只在 push 事件時執行（確保程式碼品質）
+  #   - 手動部署且啟用 force_deploy 時跳過（緊急部署）
+  # 內容：呼叫 continuous-integration.yml 執行測試、linting 等
+  # secrets: inherit 確保子工作流程可以存取相同的 secrets
+  # ==============================
+  continuous_integration:
+    if: ${{ github.event_name == 'push' && !inputs.force_deploy }}
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
+
+  # ===== Docker 映像構建階段 =====
+  # 目的：構建應用程式的 Docker 映像並推送到 Docker Hub
+  # 執行條件：
+  #   - CI 成功完成
+  #   - 或手動觸發且啟用 force_deploy
+  #   - 或 CI 被跳過（例如直接手動部署）
+  # 輸出：
+  #   - image-tag：環境標籤（prod/dev）供後續步驟使用
+
+  # ===============================
+  build:
+    runs-on: ubuntu-latest
+    needs: [continuous_integration]
+    # 當 CI 成功、手動強制部署、或沒有執行 CI 時執行
+    if: ${{ always() && (needs.continuous_integration.result == 'success' || inputs.force_deploy || needs.continuous_integration.result == 'skipped') }}
+    outputs:
+      image-tag: ${{ steps.meta.outputs.image-tag }}
+    steps:
+      - name: Set Environment Variables
+        id: meta
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "IMAGE_TAG=prod" >> $GITHUB_ENV
+            echo "APP_ENV=prod" >> $GITHUB_ENV
+            echo "CACHE_TAG=prod" >> $GITHUB_ENV
+            echo "image-tag=prod" >> $GITHUB_OUTPUT
+          else
+            echo "IMAGE_TAG=dev" >> $GITHUB_ENV
+            echo "APP_ENV=dev" >> $GITHUB_ENV
+            echo "CACHE_TAG=dev" >> $GITHUB_ENV
+            echo "image-tag=dev" >> $GITHUB_OUTPUT
+          fi
+      - name: Dummy Build Step
+        run: |
+          echo "執行 build 任務"
+          echo "Build completed successfully"
+  deploy:
+    env:
+      APP_DIR: /root/daodao-ai-backend
+
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: ${{ always() && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
+    environment: ${{ needs.build.outputs.image-tag == 'prod' && 'production' || 'development' }}
+    timeout-minutes: 15
+    steps:
+      - name: Show build result
+        run: |
+          echo "Build job result: ${{ needs.build.result }}"
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.LINODE_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.LINODE_INSTANCE_IP }} >> ~/.ssh/known_hosts
+      - name: Set COMPOSE_FILE
+        run: |
+          if [ "${GITHUB_REF_NAME}" = "main" ]; then
+            echo "COMPOSE_FILE=docker-compose.prod.yml" >> $GITHUB_ENV
+          else
+            echo "COMPOSE_FILE=docker-compose.dev.yml" >> $GITHUB_ENV
+          fi
+
+      - name: Deploy to Linode
+        env:
+          LINODE_INSTANCE_IP: ${{ secrets.LINODE_INSTANCE_IP }}
+          BRANCH_NAME: ${{ github.ref_name }}
+          IMAGE_TAG: ${{ needs.build.outputs.image-tag }}
+          src_ENV: ${{ needs.build.outputs.image-tag }}
+          src_SERVICE: ${{ needs.build.outputs.image-tag == 'prod' && 'prod_src' || 'dev_src' }}
+          COMMIT_SHA: ${{ github.sha }}
+          COMPOSE_FILE: ${{ env.COMPOSE_FILE }}
+        run: |
+          ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ConnectTimeout=10 root@$LINODE_INSTANCE_IP << 'ENDSSH'
+            set -e
+            export src_DIR=${{ env.APP_DIR }}
+            export COMPOSE_FILE=${{ env.COMPOSE_FILE }}
+            export src_ENV=${{ env.src_ENV }}
+            export src_SERVICE=${{ env.src_SERVICE }}
+            export DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}
+            export IMAGE_TAG=${{ env.IMAGE_TAG }}
+            export COMMIT_SHA=${{ env.COMMIT_SHA }}
+            export BRANCH_NAME=${{ env.BRANCH_NAME }}
+
+            echo "=== Starting deployment for $src_ENV environment ==="
+
+            # 快速更新代碼（淺層克隆或增量更新）
+            if [ -d $src_DIR/.git ]; then
+              cd $src_DIR
+              echo "Updating existing repository..."
+              # 只獲取最新的變更
+              git fetch --depth 1 origin ${{ env.BRANCH_NAME }}
+              git reset --hard FETCH_HEAD
+              git clean -fd
+            else
+              echo "Cloning repository..."
+              # 淺層克隆
+              git clone --depth 1 --branch ${{ env.BRANCH_NAME }} \
+                https://${{ secrets.GIT_HUB_USERNAME }}:${{ secrets.GIT_HUB_ACCESS_TOKEN }}@github.com/${{ github.repository }}.git \
+                $src_DIR
+              cd $src_DIR
+            fi
+
+            # 檢查環境文件
+            ENV_FILE=".env.${src_ENV}"
+
+            if [ ! -f .env.${src_ENV} ] && [ -f .env.${src_ENV}.sample ]; then
+              cp ".env.${src_ENV}.sample" "$ENV_FILE"
+              echo "Created $ENV_FILE from .sample"
+            fi
+
+            # 載入環境變數，替換敏感環境變數 (來自 GitHub Secrets)
+            # 替換敏感環境變數 (來自 GitHub Secrets)
+            declare -A SECRETS_MAP=(
+              ["JWT_SECURITY"]="${{ secrets.JWT_SECURITY }}"
+              ["COLLECTION_NAME"]="${{ secrets.COLLECTION_NAME }}"
+              ["POSTGRES_DB_USER"]="${{ secrets.POSTGRES_DB_USER }}"
+              ["POSTGRES_DB_PASSWORD"]="${{ secrets.POSTGRES_DB_PASSWORD }}"
+              ["POSTGRES_DB_NAME"]="${{ secrets.POSTGRES_DB_NAME }}"
+              ["CLICKHOUSE_USER"]="${{ secrets.CLICKHOUSE_USER }}"
+              ["CLICKHOUSE_DATABASE"]="${{ secrets.CLICKHOUSE_DATABASE }}"
+              ["API_SECRET_KEY"]="${{ secrets.API_SECRET_KEY }}"
+            )
+
+            for key in "${!SECRETS_MAP[@]}"; do
+              value="${SECRETS_MAP[$key]}"
+              if [ -n "$value" ]; then
+                # 用 sed 安全替換，處理特殊字元
+                sed -i "s|^$key=.*|$key=$value|" "$ENV_FILE"
+              fi
+            done
+
+            echo "Generated .env.${src_ENV} with updated values"
+
+            # ===== 清理舊容器 =====
+            echo "=== Cleaning up old containers for $src_ENV ==="
+            # 停止並移除所有相關舊容器
+            if make down-${src_ENV}; then
+                echo "✅ Old containers cleaned up"
+            else
+                echo "⚠️ No old containers found or cleanup failed, continuing..."
+            fi
+
+            # 檢查 image 是否存在再刪除
+            if docker image inspect daodao-ai-backend:latest > /dev/null 2>&1; then
+                docker rmi daodao-ai-backend:latest
+                echo "✅ Removed old daodao-ai-backend:latest image"
+            else
+                echo "⚠️ No existing daodao-ai-backend:latest image found, skipping removal"
+            fi
+
+            sleep 3
+
+            # 啟動新容器
+            if make up-${src_ENV}; then
+                echo "✅ New image build and container started, verifying health..."
+            else
+                echo "❌ Failed to start new container"
+                echo "=== Checking container logs ==="
+                docker compose --env-file .env.${src_ENV} -f $COMPOSE_FILE logs --tail=100 ${src_SERVICE} || true
+                echo "Container status:"
+                docker ps -a --filter "name=${src_SERVICE}" || true
+                exit 1
+            fi
+
+
+            # ===== 健康檢查 =====
+            # 使用 docker compose exec 以 service 名稱操作，不依賴 container_name
+            service_name="backend-${src_ENV}"
+            MAX_ATTEMPTS=10
+            SLEEP_SECONDS=5
+
+            for i in $(seq 1 $MAX_ATTEMPTS); do
+                echo "Waiting ${SLEEP_SECONDS}s before attempt $i/$MAX_ATTEMPTS..."
+                sleep $SLEEP_SECONDS
+
+                status=$(docker compose --env-file .env.${src_ENV} -f $COMPOSE_FILE exec -T $service_name python3 -c "import sys, json, urllib.request as u; print(json.load(u.urlopen('http://localhost:8000/api/v1/health'))['status'])")
+
+                if [ "$status" = "ok" ]; then
+                    echo "✅ $service_name status OK"
+                    break
+                else
+                    echo "⚠ Attempt $i/$MAX_ATTEMPTS: $service_name status NOT OK (status: $status)"
+                    if [ $i -eq $MAX_ATTEMPTS ]; then
+                        echo "❌ $service_name failed health check after $MAX_ATTEMPTS attempts"
+                        echo "=== Container Logs ==="
+                        docker compose --env-file .env.${src_ENV} -f $COMPOSE_FILE logs --tail=100 $service_name || true
+                        exit 1
+                    fi
+                fi
+            done
+
+            echo "=== Checking Docker Containers ==="
+            docker ps -a --format "table {{.ID}}\t{{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"
+
+            echo "=== Checking Docker Images ==="
+            docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.Size}}\t{{.CreatedAt}}"
+
+            echo "=== Checking System Resources ==="
+            echo "CPU Load:" && uptime
+            echo "Memory Usage:" && free -h
+            echo "Disk Usage:" && df -h /
+            
+          ENDSSH
+      - name: Verify Deployment
+        env:
+          LINODE_INSTANCE_IP: ${{ secrets.LINODE_INSTANCE_IP }}
+
+        run: |
+          ssh root@$LINODE_INSTANCE_IP /bin/bash << EOF
+            echo '=== Checking Docker Containers ==='
+            docker ps
+
+            echo '=== Checking System Resources ==='
+            echo 'CPU Load:' && uptime
+            echo 'Memory Usage:' && free -h
+            echo 'Disk Usage:' && df -h /
+
+            echo '=== Checking Docker Networks ==='
+            docker network ls
+
+            echo '=== Checking Application Logs ==='
+            cd $APP_DIR && docker-compose -f docker-compose.${APP_ENV}.yml logs --tail=20  | tail -n 100
+          EOF
+
+  # ===== Discord 通知系統 =====
+  # 目的：向團隊報告部署結果
+  # 執行條件：always() - 無論成功或失敗都執行
+  # 通知類型：
+  #   1. 部署失敗：紅色警告，包含錯誤資訊
+  #   2. 部署取消：灰色通知
+  #   3. 驗證失敗：黃色警告，部署成功但驗證失敗
+  #   4. 完全成功：綠色通知，包含完整狀態
+  # ============================
+  # notify:
+  #   runs-on: ubuntu-latest
+  #   needs: [build, deploy, verify]
+  #   if: always()
+  #   steps:
+  #     - name: Send Discord Notification
+  #       run: |
+  #         # 獲取部署資訊
+  #         AUTHOR="${{ github.actor }}"
+  #         REPO="${{ github.repository }}"
+  #         BRANCH="${{ github.ref_name }}"
+  #         COMMIT_SHA="${{ github.sha }}"
+  #         SHORT_SHA="${COMMIT_SHA:0:7}"
+  #         IMAGE_TAG="${{ needs.build.outputs.image-tag }}"
+  #         CURRENT_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+  #         # 判斷各階段狀態
+  #         CI_STATUS="${{ needs.continuous_integration.result }}"
+  #         BUILD_STATUS="${{ needs.build.result }}"
+  #         DEPLOY_STATUS="${{ needs.deploy.result }}"
+  #         VERIFY_STATUS="${{ needs.verify.result || 'skipped' }}"
+
+  #         if [ "$CI_STATUS" == "failure" ]; then
+  #           # CI 失敗
+  #           curl -X POST -H "Content-Type: srclication/json" -d "{
+  #             \"embeds\": [{
+  #               \"color\": 16711680,
+  #               \"thumbnail\": {
+  #                 \"url\": \"https://img.shields.io/badge/CI-Failed-red.png?style=for-the-badge&logo=github&logoColor=white\"
+  #               },
+  #               \"fields\": [
+  #                 {\"name\": \"Commit\", \"value\": \"[\`$SHORT_SHA\`](https://github.com/$REPO/commit/$COMMIT_SHA)\", \"inline\": false}
+  #               ],
+  #               \"timestamp\": \"$CURRENT_TIME\"
+  #             }]
+  #           }" ${{ secrets.DISCORD_WEBHOOK_URL }}
+
+  #         elif [ "$BUILD_STATUS" == "failure" ]; then
+  #           # Build 失敗
+  #           curl -X POST -H "Content-Type: srclication/json" -d "{
+  #             \"embeds\": [{
+  #               \"color\": 16711680,
+  #               \"thumbnail\": {
+  #                 \"url\": \"https://img.shields.io/badge/Build-Failed-red.png?style=for-the-badge&logo=docker&logoColor=white\"
+  #               },
+  #               \"fields\": [
+  #                 {\"name\": \"Commit\", \"value\": \"[\`$SHORT_SHA\`](https://github.com/$REPO/commit/$COMMIT_SHA)\", \"inline\": false}
+  #               ],
+  #               \"timestamp\": \"$CURRENT_TIME\"
+  #             }]
+  #           }" ${{ secrets.DISCORD_WEBHOOK_URL }}
+
+  #         elif [ "$DEPLOY_STATUS" == "failure" ]; then
+  #           # 部署失敗
+  #           curl -X POST -H "Content-Type: srclication/json" -d "{
+  #             \"embeds\": [{
+  #               \"color\": 16711680,
+  #               \"thumbnail\": {
+  #                 \"url\": \"https://img.shields.io/badge/Deploy-Failed-red.png?style=for-the-badge&logo=rocket&logoColor=white\"
+  #               },
+  #               \"fields\": [
+  #                 {\"name\": \"Commit\", \"value\": \"[\`$SHORT_SHA\`](https://github.com/$REPO/commit/$COMMIT_SHA)\", \"inline\": false}
+  #               ],
+  #               \"timestamp\": \"$CURRENT_TIME\"
+  #             }]
+  #           }" ${{ secrets.DISCORD_WEBHOOK_URL }}
+
+  #         elif [ "$DEPLOY_STATUS" == "cancelled" ]; then
+  #           # 取消通知
+  #           curl -X POST -H "Content-Type: srclication/json" -d "{
+  #             \"embeds\": [{
+  #               \"color\": 8421504,
+  #               \"thumbnail\": {
+  #                 \"url\": \"https://img.shields.io/badge/Deploy-Cancelled-lightgrey.png?style=for-the-badge&logo=pause&logoColor=white\"
+  #               },
+  #               \"fields\": [
+  #                 {\"name\": \"Commit\", \"value\": \"[\`$SHORT_SHA\`](https://github.com/$REPO/commit/$COMMIT_SHA)\", \"inline\": false}
+  #               ],
+  #               \"timestamp\": \"$CURRENT_TIME\"
+  #             }]
+  #           }" ${{ secrets.DISCORD_WEBHOOK_URL }}
+
+  #         elif [ "$VERIFY_STATUS" == "failure" ]; then
+  #           # 驗證失敗
+  #           curl -X POST -H "Content-Type: srclication/json" -d "{
+  #             \"embeds\": [{
+  #               \"color\": 16776960,
+  #               \"thumbnail\": {
+  #                 \"url\": \"https://img.shields.io/badge/Verify-Failed-orange.png?style=for-the-badge&logo=search&logoColor=white\"
+  #               },
+  #               \"fields\": [
+  #                 {\"name\": \"Commit\", \"value\": \"[\`$SHORT_SHA\`](https://github.com/$REPO/commit/$COMMIT_SHA)\", \"inline\": false}
+  #               ],
+  #               \"timestamp\": \"$CURRENT_TIME\"
+  #             }]
+  #           }" ${{ secrets.DISCORD_WEBHOOK_URL }}
+
+  #         elif [ "$BUILD_STATUS" == "success" ] && [ "$DEPLOY_STATUS" == "success" ] && ([ "$VERIFY_STATUS" == "success" ] || [ "$VERIFY_STATUS" == "skipped" ]); then
+  #           # 成功部署
+  #           curl -X POST -H "Content-Type: srclication/json" -d "{
+  #             \"embeds\": [{
+  #               \"color\": 3066993,
+  #               \"thumbnail\": {
+  #                 \"url\": \"https://img.shields.io/badge/Deploy-Success-brightgreen.png?style=for-the-badge&logo=check-circle&logoColor=white\"
+  #               },
+  #               \"fields\": [
+  #                 {\"name\": \"Commit\", \"value\": \"[\`$SHORT_SHA\`](https://github.com/$REPO/commit/$COMMIT_SHA)\", \"inline\": false}
+  #               ],
+  #               \"timestamp\": \"$CURRENT_TIME\"
+  #             }]
+  #           }" ${{ secrets.DISCORD_WEBHOOK_URL }}
+
+  #         else
+  #           # 未知狀態或部分失敗
+  #           curl -X POST -H "Content-Type: srclication/json" -d "{
+  #             \"embeds\": [{
+  #               \"color\": 16776960,
+  #               \"thumbnail\": {
+  #                 \"url\": \"https://img.shields.io/badge/Status-Unknown-yellow.png?style=for-the-badge&logo=question&logoColor=white\"
+  #               },
+  #               \"fields\": [
+  #                 {\"name\": \"Commit\", \"value\": \"[\`$SHORT_SHA\`](https://github.com/$REPO/commit/$COMMIT_SHA)\", \"inline\": false}
+  #               ],
+  #               \"timestamp\": \"$CURRENT_TIME\"
+  #             }]
+  #           }" ${{ secrets.DISCORD_WEBHOOK_URL }}
+  #         fi

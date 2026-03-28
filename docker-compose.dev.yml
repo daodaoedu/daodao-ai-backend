@@ -4,13 +4,14 @@ networks:
 
 services:
   backend-dev:
-    build: ./app
-    container_name: daodao-ai-backend-dev
+    build: .
     image: daodao-ai-backend:latest
-    # ports:
-    #   - "8002:8000"
+    ports:
+      - "8002:8000"
     networks:
-      - dev-daodao-network
+      dev-daodao-network:
+        aliases:
+          - backend-dev
     healthcheck:
       test:
         [
@@ -24,7 +25,17 @@ services:
     env_file:
       - .env.dev
     volumes:
-      - ./app:/app
+      - ./src:/app/src
+      - ./scripts:/app/scripts
+    command: >
+      uvicorn src.main:app
+      --host 0.0.0.0
+      --port 8000
+      --reload
+      --reload-dir src
+      --reload-include "*.py"
+      --workers 1
+      --timeout-keep-alive 75
 
   redis-dev:
     image: redis:alpine
@@ -39,12 +50,15 @@ services:
     profiles:
       - dev
 
-  # ollama-dev:
-  #   image: ollama/ollama
-  #   container_name: daodao-ai-backend-ollama
-  #   ports:
-  #     - "11434:11434"
-  #   volumes:
-  #     - ./ollama_models:/root/.ollama
-  #   networks:
-  #     - dev-daodao-network
+  ollama-dev:
+    image: ollama/ollama
+    container_name: daodao-ai-backend-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ./ollama_models:/root/.ollama
+    networks:
+      - dev-daodao-network
+    restart: unless-stopped
+    profiles:
+      - ollama
