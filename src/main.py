@@ -74,7 +74,7 @@ async def lifespan(app: FastAPI):
         insight_scheduler = InsightScheduler(settings, app.state.database)
         insight_scheduler.start()
         app.state.insight_scheduler = insight_scheduler
-    except (ValueError, Exception) as exc:
+    except ValueError as exc:
         logger.warning(f"InsightScheduler 啟動失敗，已跳過: {exc}")
         app.state.insight_scheduler = None
 
