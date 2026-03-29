@@ -1,4 +1,4 @@
-from sqlalchemy import or_, select, func, literal
+from sqlalchemy import or_, select, func, literal, tuple_
 from sqlalchemy.orm import joinedload
 
 from src.models.Practice import Practice, PracticeStatus, PracticePrivacyStatus
@@ -31,7 +31,7 @@ class PracticeService:
         status=None,
         sort_by="newest_updated",
         limit=20,
-        offset=0,
+        after_id=None,
     ):
         """
         Main Entry of Practice Query Service
@@ -63,7 +63,7 @@ class PracticeService:
 
         else:
             practices = PracticeService._apply_sort_and_pagination(
-                query, sort_by, limit, offset
+                query, sort_by, limit, after_id=after_id, db=db
             )
 
         return practices
@@ -478,17 +478,43 @@ class PracticeService:
     # =========================================================
 
     @staticmethod
-    def _apply_sort_and_pagination(query, sort_by, limit, offset):
-        if sort_by == "newest_updated":
-            query = query.order_by(Practice.updated_at.desc().nullslast())
+    def _apply_sort_and_pagination(query, sort_by, limit, after_id=None, db=None):
+        sort_configs = {
+            "newest_updated": (Practice.updated_at, "desc"),
+            "oldest_updated": (Practice.updated_at, "asc"),
+            "newest_created": (Practice.created_at, "desc"),
+            "oldest_created": (Practice.created_at, "asc"),
+        }
+        sort_col, direction = sort_configs.get(sort_by, (Practice.updated_at, "desc"))
 
-        elif sort_by == "oldest_updated":
-            query = query.order_by(Practice.updated_at.asc().nullsfirst())
+        # Keyset pagination: use (sort_col, id) as composite cursor
+        if after_id and db:
+            cursor_row = (
+                db.query(sort_col, Practice.id).filter(Practice.id == after_id).first()
+            )
+            if cursor_row:
+                cursor_ts, cursor_id = cursor_row
+                if cursor_ts is None:
+                    if direction == "desc":
+                        query = query.filter(
+                            sort_col.is_(None), Practice.id < cursor_id
+                        )
+                    else:
+                        query = query.filter(
+                            sort_col.is_(None), Practice.id > cursor_id
+                        )
+                elif direction == "desc":
+                    query = query.filter(
+                        tuple_(sort_col, Practice.id) < tuple_(cursor_ts, cursor_id)
+                    )
+                else:
+                    query = query.filter(
+                        tuple_(sort_col, Practice.id) > tuple_(cursor_ts, cursor_id)
+                    )
 
-        elif sort_by == "newest_created":
-            query = query.order_by(Practice.created_at.desc().nullslast())
+        if direction == "desc":
+            query = query.order_by(sort_col.desc().nullslast(), Practice.id.desc())
+        else:
+            query = query.order_by(sort_col.asc().nullsfirst(), Practice.id.asc())
 
-        elif sort_by == "oldest_created":
-            query = query.order_by(Practice.created_at.asc().nullsfirst())
-
-        return query.offset(offset).limit(limit).all()
+        return query.limit(limit).all()
