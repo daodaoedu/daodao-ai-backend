@@ -517,8 +517,4 @@ class PracticeService:
         else:
             query = query.order_by(sort_col.asc().nullsfirst(), Practice.id.asc())
 
-        # Use offset only when not using keyset pagination
-        if not after_id and offset:
-            query = query.offset(offset)
-
         return query.limit(limit).all()
