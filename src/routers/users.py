@@ -176,6 +176,7 @@ def get_my_practices(
         sort_by=sort_by,
         limit=limit,
         offset=offset,
+        after_id=after_id,
     )
 
     results = [orm_to_dict(p) for p in practices]
