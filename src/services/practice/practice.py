@@ -31,7 +31,6 @@ class PracticeService:
         status=None,
         sort_by="newest_updated",
         limit=20,
-        offset=0,
         after_id=None,
     ):
         """
@@ -64,7 +63,7 @@ class PracticeService:
 
         else:
             practices = PracticeService._apply_sort_and_pagination(
-                query, sort_by, limit, offset, after_id=after_id, db=db
+                query, sort_by, limit, after_id=after_id, db=db
             )
 
         return practices
@@ -479,9 +478,7 @@ class PracticeService:
     # =========================================================
 
     @staticmethod
-    def _apply_sort_and_pagination(
-        query, sort_by, limit, offset, after_id=None, db=None
-    ):
+    def _apply_sort_and_pagination(query, sort_by, limit, after_id=None, db=None):
         sort_configs = {
             "newest_updated": (Practice.updated_at, "desc"),
             "oldest_updated": (Practice.updated_at, "asc"),
@@ -498,8 +495,14 @@ class PracticeService:
             if cursor_row:
                 cursor_ts, cursor_id = cursor_row
                 if cursor_ts is None:
-                    # sort column is NULL — fallback to offset-based pagination
-                    pass
+                    if direction == "desc":
+                        query = query.filter(
+                            sort_col.is_(None), Practice.id < cursor_id
+                        )
+                    else:
+                        query = query.filter(
+                            sort_col.is_(None), Practice.id > cursor_id
+                        )
                 elif direction == "desc":
                     query = query.filter(
                         tuple_(sort_col, Practice.id) < tuple_(cursor_ts, cursor_id)
@@ -513,9 +516,5 @@ class PracticeService:
             query = query.order_by(sort_col.desc().nullslast(), Practice.id.desc())
         else:
             query = query.order_by(sort_col.asc().nullsfirst(), Practice.id.asc())
-
-        # Use offset only when not using keyset pagination
-        if not after_id and offset:
-            query = query.offset(offset)
 
         return query.limit(limit).all()

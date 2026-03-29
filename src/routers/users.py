@@ -121,7 +121,6 @@ def get_my_practices(
     after_id: Optional[int] = Query(
         None, description="上一次最後一筆的 id，作為 cursor"
     ),
-    offset: int = Query(0, ge=0),
     # search
     keyword: Optional[str] = Query(
         None, description="多維度關鍵字搜尋（標題、行動、標籤、資源、打卡內容）"
@@ -152,7 +151,7 @@ def get_my_practices(
             f":dur:{duration_min if duration_min is not None else ''}-{duration_max if duration_max is not None else ''}"
             f":status:{status if status is not None else '__none__'}"
             f":sort:{sort_by}"
-            f":limit:{limit}:after:{after_id or 0}:offset:{offset}"
+            f":limit:{limit}:after:{after_id or 0}"
         )
         cached = cache.client.get(cache_key)
         if cached:
@@ -175,7 +174,6 @@ def get_my_practices(
         status=status,
         sort_by=sort_by,
         limit=limit,
-        offset=offset,
         after_id=after_id,
     )
 
