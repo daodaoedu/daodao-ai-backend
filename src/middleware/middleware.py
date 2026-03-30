@@ -78,7 +78,6 @@ def setup_middlewares(app: FastAPI):
                 "/api/v1/ping",
                 "/api/v1/health",
                 "/api/v1/admin",  # JWT 驗證已足夠，瀏覽器不送 x-api-key
-                "/admin",  # React UI 靜態資源
                 "/metrics",
                 "/docs",
                 "/redoc",
