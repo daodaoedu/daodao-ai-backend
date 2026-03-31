@@ -25,7 +25,7 @@ def setup_middlewares(app: FastAPI):
             "https://app-feat.daodao.so",
             "http://localhost:8002",
             "http://localhost:3001",
-            "http://localhost:5173",  # Vite dev server (admin UI)
+            "http://localhost:3002",
         ]
     else:
         origins = ["https://app.daodao.so"]
@@ -48,6 +48,9 @@ def setup_middlewares(app: FastAPI):
             "dao-server-ai.daodao.so",
             "ai-dev.daodao.so",
             "ai.daodao.so",
+            "admin.daodao.so",
+            "admin-dev.daodao.so",
+            "backend-dev"
         ],
     )
 
