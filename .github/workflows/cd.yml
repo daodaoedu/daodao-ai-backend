@@ -224,13 +224,13 @@ jobs:
                 sleep $SLEEP_SECONDS
 
                 status=$(docker compose --env-file .env.${src_ENV} -f $COMPOSE_FILE exec -T $service_name python3 -c "
-import json
-try:
-    import urllib.request as u
-    print(json.load(u.urlopen('http://localhost:8000/api/v1/health'))['status'])
-except Exception:
-    print('error')
-" 2>/dev/null) || status="error"
+                import json
+                try:
+                    import urllib.request as u
+                    print(json.load(u.urlopen('http://localhost:8000/api/v1/health'))['status'])
+                except Exception:
+                    print('error')
+                " 2>/dev/null) || status="error"
 
                 if [ "$status" = "ok" ]; then
                     echo "✅ $service_name status OK"
