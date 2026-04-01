@@ -212,7 +212,7 @@ jobs:
             # ===== 健康檢查 =====
             # 使用 docker compose exec 以 service 名稱操作，不依賴 container_name
             service_name="backend-${src_ENV}"
-            MAX_ATTEMPTS=10
+            MAX_ATTEMPTS=24
             SLEEP_SECONDS=5
 
             for i in $(seq 1 $MAX_ATTEMPTS); do

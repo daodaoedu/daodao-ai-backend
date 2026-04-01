@@ -6,6 +6,10 @@ services:
   backend-dev:
     build: .
     image: daodao-ai-backend:dev
+    restart: unless-stopped
+    depends_on:
+      redis-dev:
+        condition: service_healthy
     ports:
       - "8002:8000"
     networks:
@@ -49,6 +53,12 @@ services:
       - dev-daodao-network
     profiles:
       - dev
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
 
   ollama-dev:
     image: ollama/ollama
