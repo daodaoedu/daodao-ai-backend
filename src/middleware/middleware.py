@@ -25,6 +25,7 @@ def setup_middlewares(app: FastAPI):
             "https://app-feat.daodao.so",
             "http://localhost:8002",
             "http://localhost:3001",
+            "http://localhost:3002",
         ]
     else:
         origins = ["https://app.daodao.so"]
@@ -47,6 +48,9 @@ def setup_middlewares(app: FastAPI):
             "dao-server-ai.daodao.so",
             "ai-dev.daodao.so",
             "ai.daodao.so",
+            "admin.daodao.so",
+            "admin-dev.daodao.so",
+            "backend-dev",
         ],
     )
 
@@ -76,6 +80,7 @@ def setup_middlewares(app: FastAPI):
             self.exempt_paths = (
                 "/api/v1/ping",
                 "/api/v1/health",
+                "/api/v1/admin",  # JWT 驗證已足夠，瀏覽器不送 x-api-key
                 "/metrics",
                 "/docs",
                 "/redoc",

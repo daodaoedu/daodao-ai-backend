@@ -6,6 +6,7 @@ from src.db.interface_db import BaseDatabase
 from src.logger import AppLogger
 from src.services.insight import insight_service
 from src.services.llm.client import LLMClient
+from src.services.llm.logging_client import LoggingLLMClient
 
 logger = AppLogger(__name__).get_logger()
 
@@ -49,10 +50,17 @@ class InsightScheduler:
             practices = insight_service.get_pending_practices(db)
             logger.info(f"[InsightScheduler] 待處理 Practice 數量: {len(practices)}")
 
+            logging_client = LoggingLLMClient(
+                llm_client=self._llm_client,
+                db_session_factory=self._database.get_session,
+                context="insight",
+                user_id=None,
+            )
+
             for practice in practices:
                 try:
                     result = await insight_service.generate_for_practice(
-                        db, self._llm_client, practice
+                        db, logging_client, practice
                     )
                     if result:
                         total += 1

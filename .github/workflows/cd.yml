@@ -163,6 +163,12 @@ jobs:
               ["CLICKHOUSE_USER"]="${{ secrets.CLICKHOUSE_USER }}"
               ["CLICKHOUSE_DATABASE"]="${{ secrets.CLICKHOUSE_DATABASE }}"
               ["API_SECRET_KEY"]="${{ secrets.API_SECRET_KEY }}"
+              ["LLM_BACKEND__OPENAI__API_KEY"]="${{ secrets.LLM_BACKEND__OPENAI__API_KEY }}"
+              ["LLM_BACKEND__GEMINI__API_KEY"]="${{ secrets.LLM_BACKEND__GEMINI__API_KEY }}"
+              ["LLM_BACKEND__ANTHROPIC__API_KEY"]="${{ secrets.LLM_BACKEND__ANTHROPIC__API_KEY }}"
+              ["LLM_BACKEND__GROQ__API_KEY"]="${{ secrets.LLM_BACKEND__GROQ__API_KEY }}"
+              ["INSIGHT__LLM_BACKEND"]="${{ secrets.INSIGHT__LLM_BACKEND }}"
+              ["INSIGHT__SCHEDULE_CRON"]="${{ secrets.INSIGHT__SCHEDULE_CRON }}"
             )
 
             for key in "${!SECRETS_MAP[@]}"; do
@@ -206,14 +212,21 @@ jobs:
             # ===== 健康檢查 =====
             # 使用 docker compose exec 以 service 名稱操作，不依賴 container_name
             service_name="backend-${src_ENV}"
-            MAX_ATTEMPTS=10
+            MAX_ATTEMPTS=24
             SLEEP_SECONDS=5
 
             for i in $(seq 1 $MAX_ATTEMPTS); do
                 echo "Waiting ${SLEEP_SECONDS}s before attempt $i/$MAX_ATTEMPTS..."
                 sleep $SLEEP_SECONDS
 
-                status=$(docker compose --env-file .env.${src_ENV} -f $COMPOSE_FILE exec -T $service_name python3 -c "import sys, json, urllib.request as u; print(json.load(u.urlopen('http://localhost:8000/api/v1/health'))['status'])")
+                status=$(docker compose --env-file .env.${src_ENV} -f $COMPOSE_FILE exec -T $service_name python3 -c "
+                import json
+                try:
+                    import urllib.request as u
+                    print(json.load(u.urlopen('http://localhost:8000/api/v1/health'))['status'])
+                except Exception:
+                    print('error')
+                " 2>/dev/null) || status="error"
 
                 if [ "$status" = "ok" ]; then
                     echo "✅ $service_name status OK"

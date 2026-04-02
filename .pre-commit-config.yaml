@@ -45,6 +45,13 @@
         language: system
         types: [python]
         pass_filenames: false
+        
+      - id: format-with-make
+        name: Format with Makefile (black)
+        entry: make format
+        language: system
+        types: [python]
+        pass_filenames: false
 
 
   # - repo: local

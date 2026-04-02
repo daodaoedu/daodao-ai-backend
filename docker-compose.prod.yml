@@ -6,6 +6,10 @@ services:
   backend-prod:
     build: .
     image: daodao-ai-backend:prod
+    restart: unless-stopped
+    depends_on:
+      redis-prod:
+        condition: service_healthy
     # ports:
     #   - "8001:8000"
     networks:
@@ -41,3 +45,9 @@ services:
       - prod-daodao-network
     profiles:
       - prod
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
