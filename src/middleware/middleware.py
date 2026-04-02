@@ -50,7 +50,7 @@ def setup_middlewares(app: FastAPI):
             "ai.daodao.so",
             "admin.daodao.so",
             "admin-dev.daodao.so",
-            "backend-dev"
+            "backend-dev",
         ],
     )
 
