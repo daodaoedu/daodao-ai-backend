@@ -202,6 +202,7 @@ def get_topic_cards(
         cards.append(
             TopicCardItem(
                 practiceId=str(practice.external_id),
+                targetId=practice.id,
                 title=practice.title,
                 description=practice.other_context,
                 creator=CreatorInfo(
