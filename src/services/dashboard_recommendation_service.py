@@ -21,11 +21,11 @@ logger = AppLogger(__name__).get_logger()
 
 RECOMMENDATION_SOURCE = "dashboard_topic_recommendation"
 
-MATCH_REASON_TEXT = {
-    "professional_field": "符合你的專業領域",
-    "explore_interest": "符合你想探索的方向",
-    "ongoing_practice": "與你正在進行的主題相關",
-    "popular_content": "社群熱門內容",
+REASON_BONUS = {
+    "ongoing_practice": 1.0,
+    "tag_match": 0.9,
+    "professional_field": 0.8,
+    "popular_content": 0.2,
 }
 
 
@@ -64,9 +64,7 @@ def _get_hidden_target_ids(session: Session, user_id: int) -> List[int]:
     return [r.target_id for r in rows]
 
 
-def _get_feedback_state(
-    session: Session, user_id: int, target_id: int
-) -> FeedbackState:
+def _get_feedback_state(session: Session, user_id: int, target_id: int) -> FeedbackState:
     record = (
         session.query(RecommendationFeedback)
         .filter(
@@ -84,30 +82,55 @@ def _get_feedback_state(
     return FeedbackState.DISLIKED
 
 
-def _extract_practice_keywords(practice: Practice) -> List[str]:
-    keywords = []
-    if practice.practice_action:
-        keywords.extend(practice.practice_action.lower().split())
+def _practice_text(practice: Practice) -> str:
+    parts = []
     if practice.title:
-        keywords.extend(practice.title.lower().split())
-    return keywords
+        parts.append(practice.title.lower())
+    if practice.practice_action:
+        parts.append(practice.practice_action.lower())
+    return " ".join(parts)
 
 
-def _resolve_match_reason(practice: Practice, user: User) -> str:
-    keywords = _extract_practice_keywords(practice)
-    user_tags = [t.lower() for t in (user.tag_list or [])]
-    prof_field = (user.professional_field or "").lower()
+def _resolve_match_reason(
+    candidate: Practice,
+    user: User,
+    user_active_practices: List[Practice],
+) -> tuple[str, str]:
+    """Returns (reason_code, context_string_for_display)."""
+    candidate_text = _practice_text(candidate)
 
-    if prof_field and any(prof_field in kw or kw in prof_field for kw in keywords):
-        return "professional_field"
-    if user_tags and any(tag in " ".join(keywords) for tag in user_tags):
-        return "explore_interest"
-    return "popular_content"
+    # 1. ongoing_practice：與 user 正在進行的主題相關
+    for active_p in user_active_practices:
+        title_words = [w for w in active_p.title.lower().split() if len(w) > 1]
+        if any(w in candidate_text for w in title_words):
+            return "ongoing_practice", active_p.title
+
+    # 2. tag_match：符合 user 的標籤
+    for tag in (user.tag_list or []):
+        if tag.lower() in candidate_text:
+            return "tag_match", tag
+
+    # 3. professional_field：符合 user 的專業領域
+    prof = (user.professional_field or "").strip()
+    if prof and prof.lower() in candidate_text:
+        return "professional_field", prof
+
+    # 4. cold-start
+    return "popular_content", ""
 
 
-def _score_practice(practice: Practice, user: User, match_reason: str) -> float:
+def _build_match_reason_text(reason_code: str, context: str) -> str:
+    templates = {
+        "ongoing_practice": f"因為您正在「{context}」",
+        "tag_match": f"基於您的標籤「{context}」",
+        "professional_field": f"符合您的專業領域「{context}」",
+        "popular_content": "看看其他人都在實踐什麼",
+    }
+    return templates.get(reason_code, "看看其他人都在實踐什麼")
+
+
+def _score_practice(practice: Practice, reason_code: str) -> float:
     now = datetime.now(timezone.utc)
-
     ref_time = practice.updated_at or practice.created_at
     if ref_time:
         if ref_time.tzinfo is None:
@@ -117,14 +140,7 @@ def _score_practice(practice: Practice, user: User, match_reason: str) -> float:
         days = 30
 
     freshness = 1 / (1 + math.log(1 + days))
-
-    reason_bonus = {
-        "professional_field": 1.0,
-        "explore_interest": 0.8,
-        "ongoing_practice": 0.6,
-        "popular_content": 0.2,
-    }
-    return freshness + reason_bonus.get(match_reason, 0.2)
+    return freshness + REASON_BONUS.get(reason_code, 0.2)
 
 
 def get_topic_cards(
@@ -135,44 +151,47 @@ def get_topic_cards(
 ) -> List[TopicCardItem]:
     user = _get_user_by_mongo_id(session, mongo_id)
 
+    user_active_practices = (
+        session.query(Practice)
+        .filter(
+            Practice.user_id == user.id,
+            Practice.status == PracticeStatus.ACTIVE.value,
+            Practice.deleted_at.is_(None),
+        )
+        .all()
+    )
+
     hidden_ids = _get_hidden_target_ids(session, user.id)
     all_exclude = set(hidden_ids) | set(exclude_ids or [])
 
-    query = (
-        session.query(Practice)
-        .filter(
-            Practice.privacy_status == PracticePrivacyStatus.PUBLIC.value,
-            Practice.status == PracticeStatus.ACTIVE.value,
-            Practice.user_id != user.id,
-            Practice.deleted_at.is_(None),
-        )
+    query = session.query(Practice).filter(
+        Practice.privacy_status == PracticePrivacyStatus.PUBLIC.value,
+        Practice.status == PracticeStatus.ACTIVE.value,
+        Practice.user_id != user.id,
+        Practice.deleted_at.is_(None),
     )
     if all_exclude:
         query = query.filter(Practice.id.notin_(all_exclude))
 
-    practices = query.limit(limit * 10).all()
+    candidates = query.limit(limit * 10).all()
 
-    if not practices:
+    if not candidates:
         logger.info(f"No candidate practices for user {user.id}")
         return []
 
     scored = []
-    for p in practices:
-        reason = _resolve_match_reason(p, user)
-        score = _score_practice(p, user, reason)
-        scored.append((p, reason, score))
+    for p in candidates:
+        reason_code, reason_context = _resolve_match_reason(p, user, user_active_practices)
+        score = _score_practice(p, reason_code)
+        scored.append((p, reason_code, reason_context, score))
 
-    scored.sort(key=lambda x: x[2], reverse=True)
-    top = scored[:limit]
+    scored.sort(key=lambda x: x[3], reverse=True)
 
     cards = []
-    for practice, reason, _ in top:
+    for practice, reason_code, reason_context, _ in scored[:limit]:
         creator = practice.user or session.query(User).filter(User.id == practice.user_id).first()
         feedback_state = _get_feedback_state(session, user.id, practice.id)
-
-        tags = []
-        if practice.practice_action:
-            tags = [t.strip() for t in practice.practice_action.split(",") if t.strip()]
+        tags = [t.strip() for t in (practice.practice_action or "").split(",") if t.strip()]
 
         cards.append(
             TopicCardItem(
@@ -187,8 +206,8 @@ def get_topic_cards(
                     photo_url=None,
                 ),
                 tags=tags,
-                matchReasonCode=reason,
-                matchReasonText=MATCH_REASON_TEXT[reason],
+                matchReasonCode=reason_code,
+                matchReasonText=_build_match_reason_text(reason_code, reason_context),
                 feedbackState=feedback_state,
                 isAiGenerated=False,
             )
@@ -222,7 +241,7 @@ def submit_feedback(
 
     if record:
         if record.feedback_type == feedback_type.value:
-            # 同一 feedback 再按一次 → 切換回 neutral（刪除記錄）
+            # 同一 feedback 再按一次 → 切換回 neutral
             session.delete(record)
             session.commit()
             return RecommendationFeedbackResponse(
