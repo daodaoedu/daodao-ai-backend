@@ -1,13 +1,19 @@
 import json
-from typing import Optional
+from typing import List, Optional
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 
-from src.dependencies import CacheDep, SessionDep
+from src.dependencies import CacheDep, SessionDep, UserDep
 from src.logger import AppLogger
 from src.middleware.limiter import limiter
 from src.response_template import api_response_decorator
+from src.schemas.api_response import build_success_response
+from src.schemas.dashboard_recommendation import RecommendationFeedbackRequest
 from src.schemas.pageInfo import APIResponse
+from src.services.dashboard_recommendation_service import (
+    get_topic_cards,
+    submit_feedback,
+)
 from src.services.recommendation_service import get_recommendation_feed
 
 logger = AppLogger(__name__).get_logger()
@@ -64,3 +70,47 @@ def recommendation_feed(
         logger.warning(f"cache write error for key={cache_key}, skipping cache")
 
     return {**payload, "cache_hit": False}
+
+
+@router.get("/topic_cards")
+@limiter.limit("30/minute")
+async def topic_cards(
+    request: Request,
+    session: SessionDep,
+    user_id: UserDep,
+    limit: int = Query(3, ge=1, le=10, description="回傳卡片數量"),
+    exclude_ids: List[int] = Query([], description="排除的 practice id 清單"),
+):
+    """
+    首頁個人化推薦主題卡片
+
+    回傳與使用者興趣、專業領域或進行中主題相關的推薦卡片。
+    已 hidden / dislike 的目標會自動排除。
+    """
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    cards = get_topic_cards(session, user_id, limit=limit, exclude_ids=exclude_ids)
+    return build_success_response(data=[c.model_dump() for c in cards])
+
+
+@router.post("/topic_cards/{recommendation_id}/feedback")
+@limiter.limit("60/minute")
+async def topic_card_feedback(
+    request: Request,
+    recommendation_id: str,
+    body: RecommendationFeedbackRequest,
+    session: SessionDep,
+    user_id: UserDep,
+):
+    """
+    對推薦卡片送出 like / dislike 回饋
+
+    - like 再按一次 → 切換回 neutral
+    - dislike 會同時標記 hidden，下次推薦自動排除
+    """
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    result = submit_feedback(session, user_id, recommendation_id, body.feedbackType)
+    return build_success_response(data=result.model_dump())
