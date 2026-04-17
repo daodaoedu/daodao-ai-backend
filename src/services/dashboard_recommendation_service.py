@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import HTTPException
+from sqlalchemy import String
 from sqlalchemy.orm import Session
 
 from src.logger import AppLogger
@@ -20,6 +21,7 @@ from src.schemas.dashboard_recommendation import (
 logger = AppLogger(__name__).get_logger()
 
 RECOMMENDATION_SOURCE = "dashboard_topic_recommendation"
+TARGET_TYPE = "practice"
 
 REASON_BONUS = {
     "ongoing_practice": 1.0,
@@ -29,22 +31,26 @@ REASON_BONUS = {
 }
 
 
-def _build_recommendation_id(target_type: str, target_id: int) -> str:
-    return f"{target_type}:{target_id}"
+def _get_practice_by_external_id(session: Session, practice_id: str) -> Practice:
+    practice = (
+        session.query(Practice)
+        .filter(Practice.external_id == practice_id)
+        .first()
+    )
+    if not practice:
+        raise HTTPException(status_code=404, detail="Practice not found")
+    return practice
 
 
-def _parse_recommendation_id(recommendation_id: str) -> tuple[str, int]:
-    parts = recommendation_id.split(":", 1)
-    if len(parts) != 2:
-        raise HTTPException(status_code=400, detail="Invalid recommendationId format")
-    try:
-        return parts[0], int(parts[1])
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid recommendationId format")
-
-
-def _get_user_by_mongo_id(session: Session, mongo_id: str) -> User:
-    user = session.query(User).filter(User.mongo_id == mongo_id).first()
+def _get_user_by_jwt_id(session: Session, jwt_id: str) -> User:
+    """查找 user：依序嘗試 mongo_id → external_id（UUID 格式）。"""
+    user = session.query(User).filter(User.mongo_id == jwt_id).first()
+    if not user:
+        user = (
+            session.query(User)
+            .filter(User.external_id.cast(String) == jwt_id)
+            .first()
+        )
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return user
@@ -55,7 +61,7 @@ def _get_hidden_target_ids(session: Session, user_id: int) -> List[int]:
         session.query(RecommendationFeedback.target_id)
         .filter(
             RecommendationFeedback.user_id == user_id,
-            RecommendationFeedback.target_type == "practice",
+            RecommendationFeedback.target_type == TARGET_TYPE,
             RecommendationFeedback.source == RECOMMENDATION_SOURCE,
             RecommendationFeedback.is_hidden.is_(True),
         )
@@ -69,7 +75,7 @@ def _get_feedback_state(session: Session, user_id: int, target_id: int) -> Feedb
         session.query(RecommendationFeedback)
         .filter(
             RecommendationFeedback.user_id == user_id,
-            RecommendationFeedback.target_type == "practice",
+            RecommendationFeedback.target_type == TARGET_TYPE,
             RecommendationFeedback.target_id == target_id,
             RecommendationFeedback.source == RECOMMENDATION_SOURCE,
         )
@@ -149,7 +155,7 @@ def get_topic_cards(
     limit: int = 3,
     exclude_ids: Optional[List[int]] = None,
 ) -> List[TopicCardItem]:
-    user = _get_user_by_mongo_id(session, mongo_id)
+    user = _get_user_by_jwt_id(session, mongo_id)
 
     user_active_practices = (
         session.query(Practice)
@@ -195,9 +201,7 @@ def get_topic_cards(
 
         cards.append(
             TopicCardItem(
-                recommendationId=_build_recommendation_id("practice", practice.id),
-                targetType="practice",
-                targetId=practice.id,
+                practiceId=str(practice.external_id),
                 title=practice.title,
                 description=practice.other_context,
                 creator=CreatorInfo(
@@ -219,21 +223,18 @@ def get_topic_cards(
 def submit_feedback(
     session: Session,
     mongo_id: str,
-    recommendation_id: str,
+    practice_id: str,
     feedback_type: FeedbackType,
 ) -> RecommendationFeedbackResponse:
-    target_type, target_id = _parse_recommendation_id(recommendation_id)
-    if target_type != "practice":
-        raise HTTPException(status_code=400, detail=f"Unsupported target type: {target_type}")
-
-    user = _get_user_by_mongo_id(session, mongo_id)
+    user = _get_user_by_jwt_id(session, mongo_id)
+    practice = _get_practice_by_external_id(session, practice_id)
 
     record = (
         session.query(RecommendationFeedback)
         .filter(
             RecommendationFeedback.user_id == user.id,
-            RecommendationFeedback.target_type == target_type,
-            RecommendationFeedback.target_id == target_id,
+            RecommendationFeedback.target_type == TARGET_TYPE,
+            RecommendationFeedback.target_id == practice.id,
             RecommendationFeedback.source == RECOMMENDATION_SOURCE,
         )
         .first()
@@ -241,11 +242,10 @@ def submit_feedback(
 
     if record:
         if record.feedback_type == feedback_type.value:
-            # 同一 feedback 再按一次 → 切換回 neutral
             session.delete(record)
             session.commit()
             return RecommendationFeedbackResponse(
-                recommendationId=recommendation_id,
+                practiceId=practice_id,
                 feedbackState=FeedbackState.NEUTRAL,
             )
         record.feedback_type = feedback_type.value
@@ -254,8 +254,8 @@ def submit_feedback(
     else:
         record = RecommendationFeedback(
             user_id=user.id,
-            target_type=target_type,
-            target_id=target_id,
+            target_type=TARGET_TYPE,
+            target_id=practice.id,
             feedback_type=feedback_type.value,
             is_hidden=feedback_type == FeedbackType.DISLIKE,
             source=RECOMMENDATION_SOURCE,
@@ -266,6 +266,6 @@ def submit_feedback(
 
     new_state = FeedbackState.LIKED if feedback_type == FeedbackType.LIKE else FeedbackState.DISLIKED
     return RecommendationFeedbackResponse(
-        recommendationId=recommendation_id,
+        practiceId=practice_id,
         feedbackState=new_state,
     )

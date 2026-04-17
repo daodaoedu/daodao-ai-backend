@@ -22,9 +22,7 @@ class CreatorInfo(BaseModel):
 
 
 class TopicCardItem(BaseModel):
-    recommendationId: str
-    targetType: str
-    targetId: int
+    practiceId: str  # practice.external_id (UUID)
     title: str
     description: Optional[str] = None
     creator: CreatorInfo
@@ -40,5 +38,5 @@ class RecommendationFeedbackRequest(BaseModel):
 
 
 class RecommendationFeedbackResponse(BaseModel):
-    recommendationId: str
+    practiceId: str
     feedbackState: FeedbackState

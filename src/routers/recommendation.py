@@ -94,11 +94,11 @@ async def topic_cards(
     return build_success_response(data=[c.model_dump() for c in cards])
 
 
-@router.post("/topic_cards/{recommendation_id}/feedback")
+@router.post("/topic_cards/{practice_id}/feedback")
 @limiter.limit("60/minute")
 async def topic_card_feedback(
     request: Request,
-    recommendation_id: str,
+    practice_id: str,
     body: RecommendationFeedbackRequest,
     session: SessionDep,
     user_id: UserDep,
@@ -112,5 +112,5 @@ async def topic_card_feedback(
     if not user_id:
         raise HTTPException(status_code=401, detail="Authentication required")
 
-    result = submit_feedback(session, user_id, recommendation_id, body.feedbackType)
+    result = submit_feedback(session, user_id, practice_id, body.feedbackType)
     return build_success_response(data=result.model_dump())
