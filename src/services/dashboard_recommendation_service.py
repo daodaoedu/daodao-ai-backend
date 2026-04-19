@@ -216,7 +216,7 @@ def get_topic_cards(
                 description=practice.practice_action or None,
                 creator=CreatorInfo(
                     id=creator.id if creator else 0,
-                    name=creator.nickname if creator else "",
+                    name=(creator.nickname or "") if creator else "",
                     photo_url=None,
                 ),
                 tags=tags,

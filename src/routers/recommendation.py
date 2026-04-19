@@ -74,7 +74,7 @@ def recommendation_feed(
 
 @router.get("/topic_cards")
 @limiter.limit("30/minute")
-async def topic_cards(
+def topic_cards(
     request: Request,
     session: SessionDep,
     user_id: UserDep,
@@ -96,7 +96,7 @@ async def topic_cards(
 
 @router.post("/topic_cards/{practice_id}/feedback")
 @limiter.limit("60/minute")
-async def topic_card_feedback(
+def topic_card_feedback(
     request: Request,
     practice_id: str,
     body: RecommendationFeedbackRequest,
