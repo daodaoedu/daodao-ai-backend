@@ -88,7 +88,7 @@ async def topic_cards(
     已 hidden / dislike 的目標會自動排除。
     """
     if not user_id:
-        raise HTTPException(status_code=401, detail="Authentication required")
+        return build_success_response(data=[])
 
     cards = get_topic_cards(session, user_id, limit=limit, exclude_ids=exclude_ids)
     return build_success_response(data=[c.model_dump() for c in cards])
@@ -110,7 +110,7 @@ async def topic_card_feedback(
     - dislike 會同時標記 hidden，下次推薦自動排除
     """
     if not user_id:
-        raise HTTPException(status_code=401, detail="Authentication required")
+        raise HTTPException(status_code=401, detail="Authentication required")  # feedback 需要登入
 
     result = submit_feedback(session, user_id, practice_id, body.feedbackType)
     return build_success_response(data=result.model_dump())

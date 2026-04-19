@@ -20,28 +20,30 @@ security = HTTPBearer(auto_error=False)
 
 
 def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
 ) -> Optional[str]:
-    # def get_current_user(authorization: Optional[str] = Header(None)):
-
     """
     FastAPI Dependency: 驗證 JWT 並回傳 payload
+    優先讀 Authorization Bearer header，fallback 讀 auth_token cookie
     """
 
-    # ⭐ 無 token → 無痕模式
-    if credentials is None:
-        return None
+    token: Optional[str] = None
 
-    token = credentials.credentials
+    if credentials is not None:
+        token = credentials.credentials
+    else:
+        # Fallback: 從 cookie 讀取（與 daodao-server 共用 auth_token）
+        token = request.cookies.get("auth_token")
+
+    if not token:
+        return None
 
     try:
         decoded = verify(token)
-
         if not decoded:
             return None
-
         return decoded.get("_id")
-
     except Exception:
         return None
 
