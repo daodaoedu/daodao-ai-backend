@@ -23,7 +23,7 @@ class CreatorInfo(BaseModel):
 
 class TopicCardItem(BaseModel):
     practiceId: str  # practice.external_id (UUID)，用於 feedback API
-    targetId: int    # practice.id，用於 exclude_ids 參數
+    targetId: int  # practice.id，用於 exclude_ids 參數
     title: str
     description: Optional[str] = None
     creator: CreatorInfo

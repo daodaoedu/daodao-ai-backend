@@ -7,8 +7,10 @@ from sqlalchemy import String
 from sqlalchemy.orm import Session
 
 from src.logger import AppLogger
+from src.models.EntityTag import EntityTag, EntityTagType
 from src.models.Practice import Practice, PracticePrivacyStatus, PracticeStatus
 from src.models.RecommendationFeedback import RecommendationFeedback
+from src.models.Tag import Tag
 from src.models.User import User
 from src.schemas.dashboard_recommendation import (
     CreatorInfo,
@@ -33,9 +35,7 @@ REASON_BONUS = {
 
 def _get_practice_by_external_id(session: Session, practice_id: str) -> Practice:
     practice = (
-        session.query(Practice)
-        .filter(Practice.external_id == practice_id)
-        .first()
+        session.query(Practice).filter(Practice.external_id == practice_id).first()
     )
     if not practice:
         raise HTTPException(status_code=404, detail="Practice not found")
@@ -43,14 +43,7 @@ def _get_practice_by_external_id(session: Session, practice_id: str) -> Practice
 
 
 def _get_user_by_jwt_id(session: Session, jwt_id: str) -> User:
-    """查找 user：依序嘗試 mongo_id → external_id（UUID 格式）。"""
-    user = session.query(User).filter(User.mongo_id == jwt_id).first()
-    if not user:
-        user = (
-            session.query(User)
-            .filter(User.external_id.cast(String) == jwt_id)
-            .first()
-        )
+    user = session.query(User).filter(User.external_id.cast(String) == jwt_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return user
@@ -70,7 +63,9 @@ def _get_hidden_target_ids(session: Session, user_id: int) -> List[int]:
     return [r.target_id for r in rows]
 
 
-def _get_feedback_state(session: Session, user_id: int, target_id: int) -> FeedbackState:
+def _get_feedback_state(
+    session: Session, user_id: int, target_id: int
+) -> FeedbackState:
     record = (
         session.query(RecommendationFeedback)
         .filter(
@@ -112,7 +107,7 @@ def _resolve_match_reason(
             return "ongoing_practice", active_p.title
 
     # 2. tag_match：符合 user 的標籤
-    for tag in (user.tag_list or []):
+    for tag in user.tag_list or []:
         if tag.lower() in candidate_text:
             return "tag_match", tag
 
@@ -187,7 +182,9 @@ def get_topic_cards(
 
     scored = []
     for p in candidates:
-        reason_code, reason_context = _resolve_match_reason(p, user, user_active_practices)
+        reason_code, reason_context = _resolve_match_reason(
+            p, user, user_active_practices
+        )
         score = _score_practice(p, reason_code)
         scored.append((p, reason_code, reason_context, score))
 
@@ -195,16 +192,28 @@ def get_topic_cards(
 
     cards = []
     for practice, reason_code, reason_context, _ in scored[:limit]:
-        creator = practice.user or session.query(User).filter(User.id == practice.user_id).first()
+        creator = (
+            practice.user
+            or session.query(User).filter(User.id == practice.user_id).first()
+        )
         feedback_state = _get_feedback_state(session, user.id, practice.id)
-        tags = [t.strip() for t in (practice.practice_action or "").split(",") if t.strip()]
+        tag_rows = (
+            session.query(Tag.name)
+            .join(EntityTag, EntityTag.tag_id == Tag.id)
+            .filter(
+                EntityTag.entity_type == EntityTagType.PRACTICE,
+                EntityTag.entity_id == practice.id,
+            )
+            .all()
+        )
+        tags = [row.name for row in tag_rows]
 
         cards.append(
             TopicCardItem(
                 practiceId=str(practice.external_id),
                 targetId=practice.id,
                 title=practice.title,
-                description=practice.other_context,
+                description=practice.practice_action or None,
                 creator=CreatorInfo(
                     id=creator.id if creator else 0,
                     name=creator.nickname if creator else "",
@@ -265,7 +274,11 @@ def submit_feedback(
 
     session.commit()
 
-    new_state = FeedbackState.LIKED if feedback_type == FeedbackType.LIKE else FeedbackState.DISLIKED
+    new_state = (
+        FeedbackState.LIKED
+        if feedback_type == FeedbackType.LIKE
+        else FeedbackState.DISLIKED
+    )
     return RecommendationFeedbackResponse(
         practiceId=practice_id,
         feedbackState=new_state,
