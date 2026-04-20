@@ -91,8 +91,8 @@ def _build_servers(environment: str) -> list:
     server_config = {
         "production": [{"url": "https://ai.daodao.so", "description": "Production"}],
         "development": [
-            {"url": "https://ai-dev.daodao.so", "description": "Development"},
             {"url": "http://127.0.0.1:8002", "description": "Local Development"},
+            {"url": "https://ai-dev.daodao.so", "description": "Development"},
         ],
     }
     # 若找不到對應的環境設定，預設回傳 development 的設定
