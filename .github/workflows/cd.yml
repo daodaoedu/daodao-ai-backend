@@ -319,6 +319,12 @@ jobs:
             TITLE="❓ Unknown Status"
           fi
 
+          WEBHOOK_URL="${{ secrets.DISCORD_WEBHOOK_URL }}"
+          if [ -z "$WEBHOOK_URL" ]; then
+            echo "⚠ DISCORD_WEBHOOK_URL not set, skipping notification"
+            exit 0
+          fi
+
           HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
             -X POST -H "Content-Type: application/json" \
             -d "{
@@ -333,7 +339,7 @@ jobs:
                 ],
                 \"timestamp\": \"$CURRENT_TIME\"
               }]
-            }" "${{ secrets.DISCORD_WEBHOOK_URL }}")
+            }" "$WEBHOOK_URL")
 
           if [ "$HTTP_STATUS" != "204" ]; then
             echo "⚠ Discord notification failed (HTTP $HTTP_STATUS)"
