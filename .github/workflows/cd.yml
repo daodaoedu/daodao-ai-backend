@@ -213,6 +213,7 @@ jobs:
             # 用 docker compose ps -q 取 container ID，再用 docker exec 直接呼叫
             # 避免 docker compose exec 因 --profile 未指定導致找不到 service 的問題
             service_name="backend-${src_ENV}"
+            HEALTH_URL="http://localhost:${BACKEND_PORT:-8000}/api/v1/health"
             MAX_ATTEMPTS=24
             SLEEP_SECONDS=5
 
@@ -227,7 +228,7 @@ jobs:
                     echo "⚠ Attempt $i/$MAX_ATTEMPTS: container not running"
                     status="error"
                 else
-                    status=$(docker exec "$container_id" python3 -c "import json,urllib.request; print(json.load(urllib.request.urlopen('http://localhost:8000/api/v1/health')).get('status','error'))" 2>&1) || status="error"
+                    status=$(docker exec "$container_id" python3 -c "import json,urllib.request; print(json.load(urllib.request.urlopen('$HEALTH_URL')).get('status','error'))" 2>&1) || status="error"
                 fi
 
                 if [ "$status" = "ok" ]; then
@@ -318,7 +319,8 @@ jobs:
             TITLE="❓ Unknown Status"
           fi
 
-          curl -s -X POST -H "Content-Type: application/json" \
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST -H "Content-Type: application/json" \
             -d "{
               \"embeds\": [{
                 \"title\": \"$TITLE\",
@@ -331,4 +333,10 @@ jobs:
                 ],
                 \"timestamp\": \"$CURRENT_TIME\"
               }]
-            }" "${{ secrets.DISCORD_WEBHOOK_URL }}"
+            }" "${{ secrets.DISCORD_WEBHOOK_URL }}")
+
+          if [ "$HTTP_STATUS" != "204" ]; then
+            echo "⚠ Discord notification failed (HTTP $HTTP_STATUS)"
+          else
+            echo "✅ Discord notification sent"
+          fi
