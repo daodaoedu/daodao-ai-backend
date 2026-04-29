@@ -16,6 +16,8 @@ services:
       dev-daodao-network:
         aliases:
           - backend-dev
+    profiles:
+      - dev
     healthcheck:
       test:
         [

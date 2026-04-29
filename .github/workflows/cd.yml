@@ -202,16 +202,18 @@ jobs:
             else
                 echo "❌ Failed to start new container"
                 echo "=== Checking container logs ==="
-                docker compose --env-file .env.${src_ENV} -f $COMPOSE_FILE logs --tail=100 ${src_SERVICE} || true
+                docker compose -f $COMPOSE_FILE --profile ${src_ENV} logs --tail=100 backend-${src_ENV} || true
                 echo "Container status:"
-                docker ps -a --filter "name=${src_SERVICE}" || true
+                docker ps -a --filter "name=backend-${src_ENV}" || true
                 exit 1
             fi
 
 
             # ===== 健康檢查 =====
-            # 使用 docker compose exec 以 service 名稱操作，不依賴 container_name
+            # 用 docker compose ps -q 取 container ID，再用 docker exec 直接呼叫
+            # 避免 docker compose exec 因 --profile 未指定導致找不到 service 的問題
             service_name="backend-${src_ENV}"
+            HEALTH_URL="http://localhost:${BACKEND_PORT:-8000}/api/v1/health"
             MAX_ATTEMPTS=24
             SLEEP_SECONDS=5
 
@@ -219,14 +221,15 @@ jobs:
                 echo "Waiting ${SLEEP_SECONDS}s before attempt $i/$MAX_ATTEMPTS..."
                 sleep $SLEEP_SECONDS
 
-                status=$(docker compose --env-file .env.${src_ENV} -f $COMPOSE_FILE exec -T $service_name python3 -c "
-                import json
-                try:
-                    import urllib.request as u
-                    print(json.load(u.urlopen('http://localhost:8000/api/v1/health'))['status'])
-                except Exception:
-                    print('error')
-                " 2>/dev/null) || status="error"
+                # 取得 container ID（若容器未啟動則為空）
+                container_id=$(docker compose -f $COMPOSE_FILE --profile ${src_ENV} ps -q $service_name 2>/dev/null)
+
+                if [ -z "$container_id" ]; then
+                    echo "⚠ Attempt $i/$MAX_ATTEMPTS: container not running"
+                    status="error"
+                else
+                    status=$(docker exec "$container_id" python3 -c "import json,urllib.request; print(json.load(urllib.request.urlopen('$HEALTH_URL')).get('status','error'))" 2>&1) || status="error"
+                fi
 
                 if [ "$status" = "ok" ]; then
                     echo "✅ $service_name status OK"
@@ -236,7 +239,7 @@ jobs:
                     if [ $i -eq $MAX_ATTEMPTS ]; then
                         echo "❌ $service_name failed health check after $MAX_ATTEMPTS attempts"
                         echo "=== Container Logs ==="
-                        docker compose --env-file .env.${src_ENV} -f $COMPOSE_FILE logs --tail=100 $service_name || true
+                        docker compose -f $COMPOSE_FILE --profile ${src_ENV} logs --tail=100 $service_name || true
                         exit 1
                     fi
                 fi
@@ -257,9 +260,10 @@ jobs:
       - name: Verify Deployment
         env:
           LINODE_INSTANCE_IP: ${{ secrets.LINODE_INSTANCE_IP }}
+          IMAGE_TAG: ${{ needs.build.outputs.image-tag }}
 
         run: |
-          ssh root@$LINODE_INSTANCE_IP /bin/bash << EOF
+          ssh root@$LINODE_INSTANCE_IP /bin/bash << 'EOF'
             echo '=== Checking Docker Containers ==='
             docker ps
 
@@ -270,144 +274,69 @@ jobs:
 
             echo '=== Checking Docker Networks ==='
             docker network ls
-
-            echo '=== Checking Application Logs ==='
-            cd $APP_DIR && docker-compose -f docker-compose.${APP_ENV}.yml logs --tail=20  | tail -n 100
           EOF
 
   # ===== Discord 通知系統 =====
   # 目的：向團隊報告部署結果
   # 執行條件：always() - 無論成功或失敗都執行
-  # 通知類型：
-  #   1. 部署失敗：紅色警告，包含錯誤資訊
-  #   2. 部署取消：灰色通知
-  #   3. 驗證失敗：黃色警告，部署成功但驗證失敗
-  #   4. 完全成功：綠色通知，包含完整狀態
   # ============================
-  # notify:
-  #   runs-on: ubuntu-latest
-  #   needs: [build, deploy, verify]
-  #   if: always()
-  #   steps:
-  #     - name: Send Discord Notification
-  #       run: |
-  #         # 獲取部署資訊
-  #         AUTHOR="${{ github.actor }}"
-  #         REPO="${{ github.repository }}"
-  #         BRANCH="${{ github.ref_name }}"
-  #         COMMIT_SHA="${{ github.sha }}"
-  #         SHORT_SHA="${COMMIT_SHA:0:7}"
-  #         IMAGE_TAG="${{ needs.build.outputs.image-tag }}"
-  #         CURRENT_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  notify:
+    runs-on: ubuntu-latest
+    needs: [continuous_integration, build, deploy]
+    if: always()
+    steps:
+      - name: Send Discord Notification
+        run: |
+          AUTHOR="${{ github.actor }}"
+          REPO="${{ github.repository }}"
+          BRANCH="${{ github.ref_name }}"
+          COMMIT_SHA="${{ github.sha }}"
+          SHORT_SHA="${COMMIT_SHA:0:7}"
+          IMAGE_TAG="${{ needs.build.outputs.image-tag }}"
+          CURRENT_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-  #         # 判斷各階段狀態
-  #         CI_STATUS="${{ needs.continuous_integration.result }}"
-  #         BUILD_STATUS="${{ needs.build.result }}"
-  #         DEPLOY_STATUS="${{ needs.deploy.result }}"
-  #         VERIFY_STATUS="${{ needs.verify.result || 'skipped' }}"
+          CI_STATUS="${{ needs.continuous_integration.result }}"
+          BUILD_STATUS="${{ needs.build.result }}"
+          DEPLOY_STATUS="${{ needs.deploy.result }}"
 
-  #         if [ "$CI_STATUS" == "failure" ]; then
-  #           # CI 失敗
-  #           curl -X POST -H "Content-Type: srclication/json" -d "{
-  #             \"embeds\": [{
-  #               \"color\": 16711680,
-  #               \"thumbnail\": {
-  #                 \"url\": \"https://img.shields.io/badge/CI-Failed-red.png?style=for-the-badge&logo=github&logoColor=white\"
-  #               },
-  #               \"fields\": [
-  #                 {\"name\": \"Commit\", \"value\": \"[\`$SHORT_SHA\`](https://github.com/$REPO/commit/$COMMIT_SHA)\", \"inline\": false}
-  #               ],
-  #               \"timestamp\": \"$CURRENT_TIME\"
-  #             }]
-  #           }" ${{ secrets.DISCORD_WEBHOOK_URL }}
+          if [ "$CI_STATUS" = "failure" ]; then
+            COLOR=16711680
+            TITLE="❌ CI Failed"
+          elif [ "$BUILD_STATUS" = "failure" ]; then
+            COLOR=16711680
+            TITLE="❌ Build Failed"
+          elif [ "$DEPLOY_STATUS" = "failure" ]; then
+            COLOR=16711680
+            TITLE="❌ Deploy Failed"
+          elif [ "$DEPLOY_STATUS" = "cancelled" ]; then
+            COLOR=8421504
+            TITLE="⚠️ Deploy Cancelled"
+          elif [ "$DEPLOY_STATUS" = "success" ]; then
+            COLOR=3066993
+            TITLE="✅ Deploy Success ($IMAGE_TAG)"
+          else
+            COLOR=16776960
+            TITLE="❓ Unknown Status"
+          fi
 
-  #         elif [ "$BUILD_STATUS" == "failure" ]; then
-  #           # Build 失敗
-  #           curl -X POST -H "Content-Type: srclication/json" -d "{
-  #             \"embeds\": [{
-  #               \"color\": 16711680,
-  #               \"thumbnail\": {
-  #                 \"url\": \"https://img.shields.io/badge/Build-Failed-red.png?style=for-the-badge&logo=docker&logoColor=white\"
-  #               },
-  #               \"fields\": [
-  #                 {\"name\": \"Commit\", \"value\": \"[\`$SHORT_SHA\`](https://github.com/$REPO/commit/$COMMIT_SHA)\", \"inline\": false}
-  #               ],
-  #               \"timestamp\": \"$CURRENT_TIME\"
-  #             }]
-  #           }" ${{ secrets.DISCORD_WEBHOOK_URL }}
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST -H "Content-Type: application/json" \
+            -d "{
+              \"embeds\": [{
+                \"title\": \"$TITLE\",
+                \"color\": $COLOR,
+                \"fields\": [
+                  {\"name\": \"Repo\", \"value\": \"$REPO\", \"inline\": true},
+                  {\"name\": \"Branch\", \"value\": \"$BRANCH\", \"inline\": true},
+                  {\"name\": \"Author\", \"value\": \"$AUTHOR\", \"inline\": true},
+                  {\"name\": \"Commit\", \"value\": \"[\`$SHORT_SHA\`](https://github.com/$REPO/commit/$COMMIT_SHA)\", \"inline\": false}
+                ],
+                \"timestamp\": \"$CURRENT_TIME\"
+              }]
+            }" "${{ secrets.DISCORD_WEBHOOK_URL }}")
 
-  #         elif [ "$DEPLOY_STATUS" == "failure" ]; then
-  #           # 部署失敗
-  #           curl -X POST -H "Content-Type: srclication/json" -d "{
-  #             \"embeds\": [{
-  #               \"color\": 16711680,
-  #               \"thumbnail\": {
-  #                 \"url\": \"https://img.shields.io/badge/Deploy-Failed-red.png?style=for-the-badge&logo=rocket&logoColor=white\"
-  #               },
-  #               \"fields\": [
-  #                 {\"name\": \"Commit\", \"value\": \"[\`$SHORT_SHA\`](https://github.com/$REPO/commit/$COMMIT_SHA)\", \"inline\": false}
-  #               ],
-  #               \"timestamp\": \"$CURRENT_TIME\"
-  #             }]
-  #           }" ${{ secrets.DISCORD_WEBHOOK_URL }}
-
-  #         elif [ "$DEPLOY_STATUS" == "cancelled" ]; then
-  #           # 取消通知
-  #           curl -X POST -H "Content-Type: srclication/json" -d "{
-  #             \"embeds\": [{
-  #               \"color\": 8421504,
-  #               \"thumbnail\": {
-  #                 \"url\": \"https://img.shields.io/badge/Deploy-Cancelled-lightgrey.png?style=for-the-badge&logo=pause&logoColor=white\"
-  #               },
-  #               \"fields\": [
-  #                 {\"name\": \"Commit\", \"value\": \"[\`$SHORT_SHA\`](https://github.com/$REPO/commit/$COMMIT_SHA)\", \"inline\": false}
-  #               ],
-  #               \"timestamp\": \"$CURRENT_TIME\"
-  #             }]
-  #           }" ${{ secrets.DISCORD_WEBHOOK_URL }}
-
-  #         elif [ "$VERIFY_STATUS" == "failure" ]; then
-  #           # 驗證失敗
-  #           curl -X POST -H "Content-Type: srclication/json" -d "{
-  #             \"embeds\": [{
-  #               \"color\": 16776960,
-  #               \"thumbnail\": {
-  #                 \"url\": \"https://img.shields.io/badge/Verify-Failed-orange.png?style=for-the-badge&logo=search&logoColor=white\"
-  #               },
-  #               \"fields\": [
-  #                 {\"name\": \"Commit\", \"value\": \"[\`$SHORT_SHA\`](https://github.com/$REPO/commit/$COMMIT_SHA)\", \"inline\": false}
-  #               ],
-  #               \"timestamp\": \"$CURRENT_TIME\"
-  #             }]
-  #           }" ${{ secrets.DISCORD_WEBHOOK_URL }}
-
-  #         elif [ "$BUILD_STATUS" == "success" ] && [ "$DEPLOY_STATUS" == "success" ] && ([ "$VERIFY_STATUS" == "success" ] || [ "$VERIFY_STATUS" == "skipped" ]); then
-  #           # 成功部署
-  #           curl -X POST -H "Content-Type: srclication/json" -d "{
-  #             \"embeds\": [{
-  #               \"color\": 3066993,
-  #               \"thumbnail\": {
-  #                 \"url\": \"https://img.shields.io/badge/Deploy-Success-brightgreen.png?style=for-the-badge&logo=check-circle&logoColor=white\"
-  #               },
-  #               \"fields\": [
-  #                 {\"name\": \"Commit\", \"value\": \"[\`$SHORT_SHA\`](https://github.com/$REPO/commit/$COMMIT_SHA)\", \"inline\": false}
-  #               ],
-  #               \"timestamp\": \"$CURRENT_TIME\"
-  #             }]
-  #           }" ${{ secrets.DISCORD_WEBHOOK_URL }}
-
-  #         else
-  #           # 未知狀態或部分失敗
-  #           curl -X POST -H "Content-Type: srclication/json" -d "{
-  #             \"embeds\": [{
-  #               \"color\": 16776960,
-  #               \"thumbnail\": {
-  #                 \"url\": \"https://img.shields.io/badge/Status-Unknown-yellow.png?style=for-the-badge&logo=question&logoColor=white\"
-  #               },
-  #               \"fields\": [
-  #                 {\"name\": \"Commit\", \"value\": \"[\`$SHORT_SHA\`](https://github.com/$REPO/commit/$COMMIT_SHA)\", \"inline\": false}
-  #               ],
-  #               \"timestamp\": \"$CURRENT_TIME\"
-  #             }]
-  #           }" ${{ secrets.DISCORD_WEBHOOK_URL }}
-  #         fi
+          if [ "$HTTP_STATUS" != "204" ]; then
+            echo "⚠ Discord notification failed (HTTP $HTTP_STATUS)"
+          else
+            echo "✅ Discord notification sent"
+          fi
