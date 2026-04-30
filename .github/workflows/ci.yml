@@ -9,52 +9,67 @@ on:
     branches:
       - main
       - dev
-  # 被其他 workflow 調用時執行
   workflow_call:
-    outputs:
-      generated-files-artifact:
-        description: "Name of the generated files artifact"
-        value: ${{ jobs.test.outputs.artifact-name }}
   workflow_dispatch:
 
 jobs:
-  ci:
-    name: Continuous Integration
+  format:
+    name: Format Check
     runs-on: ubuntu-latest
     steps:
-      # 1️⃣ 取得原始碼
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2️⃣ 設定 Python 3.12
       - name: Set up Python 3.12
         uses: actions/setup-python@v4
         with:
-          python-version: 3.12
+          python-version: "3.12"
+          cache: pip
 
-      # 3️⃣ 建立虛擬環境並安裝依賴
-      - name: Setup virtualenv
+      - name: Install format tools
+        run: pip install black==25.9 ruff==0.14.1
+
+      - name: Run format check
+        run: make check
+
+  lint:
+    name: Static Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install lint tools and deps
         run: |
-          python -m venv .venv
-          . .venv/bin/activate
-          pip install --upgrade pip
-          pip install black==25.9 ruff==0.14.1 pylint==4.0.1 bandit==1.8.6
+          pip install pylint==4.0.1 bandit==1.8.6
           pip install -r requirements.txt 2>/dev/null || pip install -e ".[dev]" 2>/dev/null || true
 
-      # 4️⃣ 格式化檢查
-      - name: Run format check
-        run: |
-          . .venv/bin/activate
-          make check
-
-      # 5️⃣ 靜態分析
       - name: Run static analysis
-        run: |
-          . .venv/bin/activate
-          make lint
+        run: make lint
 
-      # 6️⃣ 測試
-      - name: Run tests
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install deps
         run: |
-          . .venv/bin/activate
-          python -m pytest tests/ -v || true
+          pip install pytest
+          pip install -r requirements.txt 2>/dev/null || pip install -e ".[dev]" 2>/dev/null || true
+
+      - name: Run tests
+        run: python -m pytest tests/ -v

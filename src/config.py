@@ -104,9 +104,18 @@ class InsightSettings(BaseConfigSettings):
 _LLM_BACKEND_DEFAULTS: Dict[str, Dict[str, str]] = {
     "ollama": {"url": "http://ollama-dev:11434/api/generate", "model": "qwen2.5:1.5b"},
     "openai": {"url": "https://api.openai.com/v1/responses", "model": "gpt-4o"},
-    "gemini": {"url": "https://generativelanguage.googleapis.com", "model": "gemini-2.0-flash"},
-    "anthropic": {"url": "https://api.anthropic.com/v1/messages", "model": "claude-3-5-sonnet-20241022"},
-    "groq": {"url": "https://api.groq.com/openai/v1", "model": "llama-3.3-70b-versatile"},
+    "gemini": {
+        "url": "https://generativelanguage.googleapis.com",
+        "model": "gemini-2.0-flash",
+    },
+    "anthropic": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "model": "claude-3-5-sonnet-20241022",
+    },
+    "groq": {
+        "url": "https://api.groq.com/openai/v1",
+        "model": "llama-3.3-70b-versatile",
+    },
 }
 
 
@@ -139,7 +148,9 @@ class Settings(BaseConfigSettings):
         for provider, cfg in llm_data.items():
             if isinstance(cfg, dict):
                 merged.setdefault(provider, {})
-                merged[provider].update({k: v for k, v in cfg.items() if v is not None and v != ""})
+                merged[provider].update(
+                    {k: v for k, v in cfg.items() if v is not None and v != ""}
+                )
         data["llm_backend"] = merged
         return data
 
