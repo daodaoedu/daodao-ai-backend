@@ -16,7 +16,7 @@ class AnthropicBackend(BaseLLMBackend):
         # SDK 會自動處理 /v1/messages，所以這裡只給 base_url
         self._client = AsyncAnthropic(
             api_key=config.get("api_key"),
-            base_url=config.get("url", "https://api.anthropic.com")
+            base_url=config.get("url", "https://api.anthropic.com"),
         )
 
     async def generate(
@@ -60,9 +60,7 @@ class AnthropicBackend(BaseLLMBackend):
         else:
             input_price = 3.00
             output_price = 15.00
-            
+
         input_cost = usage.get("input_tokens", 0) / 1_000_000 * input_price
-        output_cost = (
-            usage.get("output_tokens", 0) / 1_000_000 * output_price
-        )
+        output_cost = usage.get("output_tokens", 0) / 1_000_000 * output_price
         return round(input_cost + output_cost, 6)

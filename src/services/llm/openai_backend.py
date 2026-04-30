@@ -15,7 +15,7 @@ class OpenAIBackend(BaseLLMBackend):
         super().__init__(config)
         self._client = AsyncOpenAI(
             api_key=config.get("api_key"),
-            base_url=config.get("url", "https://api.openai.com/v1")
+            base_url=config.get("url", "https://api.openai.com/v1"),
         )
 
     async def generate(
@@ -54,7 +54,7 @@ class OpenAIBackend(BaseLLMBackend):
     def _calc_cost(self, usage: dict) -> float:
         input_tokens = usage.get("input_tokens", 0)
         output_tokens = usage.get("output_tokens", 0)
-        
+
         # 根據模型決定費率
         model = self.config.get("model", "")
         if "gpt-4o-mini" in model:
@@ -63,7 +63,7 @@ class OpenAIBackend(BaseLLMBackend):
         else:
             input_rate = 2.50
             output_rate = 10.00
-            
+
         input_cost = input_tokens / 1_000_000 * input_rate
         output_cost = output_tokens / 1_000_000 * output_rate
         return round(input_cost + output_cost, 6)

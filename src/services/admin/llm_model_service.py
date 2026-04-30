@@ -46,7 +46,9 @@ _KNOWN_COSTS: dict[tuple[str, str], dict[str, Decimal]] = {
 }
 
 
-async def seed_llm_models(db: Session, settings: Settings, cache: Optional[Any] = None) -> None:
+async def seed_llm_models(
+    db: Session, settings: Settings, cache: Optional[Any] = None
+) -> None:
     """
     Lifespan 啟動時呼叫：
     - 不存在 → insert
@@ -59,7 +61,7 @@ async def seed_llm_models(db: Session, settings: Settings, cache: Optional[Any] 
         model_name = config.model
         active_configs.append((provider, model_name))
         costs = _KNOWN_COSTS.get((provider, model_name))
-        
+
         # ── 執行健康檢查 ──
         logger.info(f"[LLMHealth] 正在檢查 {provider} ({model_name})...")
         is_healthy = False
@@ -110,8 +112,10 @@ async def seed_llm_models(db: Session, settings: Settings, cache: Optional[Any] 
                 existing.output_cost_per_1m = costs["output"]
                 existing.cached_input_cost_per_1m = costs["cached_input"]
                 logger.info(f"[LLMModelSeed] 費率已補全 {provider}/{model_name}")
-            
-            logger.debug(f"[LLMModelSeed] {provider}/{model_name} 狀態已更新為 {is_healthy}")
+
+            logger.debug(
+                f"[LLMModelSeed] {provider}/{model_name} 狀態已更新為 {is_healthy}"
+            )
 
     # ── 新增：清理邏輯 ──
     # 將資料庫中「不在設定檔內」的模型全部設為停用
@@ -119,7 +123,9 @@ async def seed_llm_models(db: Session, settings: Settings, cache: Optional[Any] 
     for db_m in db_models:
         if (db_m.provider, db_m.model_name) not in active_configs:
             db_m.is_active = False
-            logger.info(f"[LLMModelSeed] 已停用未使用的模型: {db_m.provider}/{db_m.model_name}")
+            logger.info(
+                f"[LLMModelSeed] 已停用未使用的模型: {db_m.provider}/{db_m.model_name}"
+            )
 
     db.commit()
 
@@ -127,6 +133,7 @@ async def seed_llm_models(db: Session, settings: Settings, cache: Optional[Any] 
     if cache:
         try:
             from src.routers.admin.llm_models import _MODELS_CACHE_KEY
+
             cache.client.delete(_MODELS_CACHE_KEY)
             logger.info(f"[LLMModelSeed] 已清除快取: {_MODELS_CACHE_KEY}")
         except Exception as e:

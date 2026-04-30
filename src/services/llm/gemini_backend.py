@@ -43,7 +43,7 @@ class GeminiBackend(BaseLLMBackend):
             await self._client.aio.models.generate_content(
                 model=self.config["model"],
                 contents="ping",
-                config={"max_output_tokens": 1}
+                config={"max_output_tokens": 1},
             )
             return True
         except Exception as e:

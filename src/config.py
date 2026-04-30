@@ -13,6 +13,7 @@ ENV_FILE_PATH = PROJECT_ROOT / ".env"
 _ENV = os.getenv("ENVIRONMENT", "development")
 _ENV_FILE = ".env.prod" if _ENV == "production" else ".env.dev"
 
+
 class BaseConfigSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=[_ENV_FILE, ".env", str(ENV_FILE_PATH)],

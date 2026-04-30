@@ -60,7 +60,7 @@ class OllamaBackend(BaseLLMBackend):
                 resp = await client.get(f"{base}/api/tags")
                 if resp.status_code != 200:
                     return False
-                
+
                 # 2. 檢查特定模型 (Optional but recommended)
                 # data = resp.json()
                 # models = [m['name'] for m in data.get('models', [])]
