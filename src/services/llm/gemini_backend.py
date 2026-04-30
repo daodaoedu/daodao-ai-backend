@@ -19,6 +19,7 @@ class GeminiBackend(BaseLLMBackend):
         self, prompt: str, **kwargs
     ) -> Tuple[str, float, Dict[str, Any], str]:
         try:
+            # 修正：google-genai SDK 的異步調用方式
             response = await self._client.aio.models.generate_content(
                 model=self.config["model"],
                 contents=prompt,
@@ -36,3 +37,15 @@ class GeminiBackend(BaseLLMBackend):
         except Exception as e:
             logger.error(f"Gemini 呼叫失敗: {e}")
             return f"錯誤：{e}", 0.0, {}, "gemini"
+
+    async def check_health(self) -> bool:
+        try:
+            await self._client.aio.models.generate_content(
+                model=self.config["model"],
+                contents="ping",
+                config={"max_output_tokens": 1}
+            )
+            return True
+        except Exception as e:
+            logger.warning(f"Gemini 健康檢查失敗: {e}")
+            return False

@@ -7,17 +7,17 @@ from src.services.llm.base import BaseLLMBackend
 
 logger = AppLogger(__name__).get_logger()
 
-# claude-3-5-sonnet-20241022 定價（USD/1M tokens）
-_ANTHROPIC_INPUT_PRICE = 3.00
-_ANTHROPIC_OUTPUT_PRICE = 15.00
-
 
 class AnthropicBackend(BaseLLMBackend):
     """Anthropic Claude backend（anthropic SDK）"""
 
     def __init__(self, config: dict):
         super().__init__(config)
-        self._client = AsyncAnthropic(api_key=config.get("api_key"))
+        # SDK 會自動處理 /v1/messages，所以這裡只給 base_url
+        self._client = AsyncAnthropic(
+            api_key=config.get("api_key"),
+            base_url=config.get("url", "https://api.anthropic.com")
+        )
 
     async def generate(
         self, prompt: str, **kwargs
@@ -40,9 +40,29 @@ class AnthropicBackend(BaseLLMBackend):
             logger.error(f"Anthropic 呼叫失敗: {e}")
             return f"錯誤：{e}", 0.0, {}, "anthropic"
 
+    async def check_health(self) -> bool:
+        try:
+            await self._client.messages.create(
+                model=self.config["model"],
+                max_tokens=1,
+                messages=[{"role": "user", "content": "ping"}],
+            )
+            return True
+        except Exception as e:
+            logger.warning(f"Anthropic 健康檢查失敗: {e}")
+            return False
+
     def _calc_cost(self, usage: dict) -> float:
-        input_cost = usage.get("input_tokens", 0) / 1_000_000 * _ANTHROPIC_INPUT_PRICE
+        model = self.config.get("model", "")
+        if "haiku" in model:
+            input_price = 0.25
+            output_price = 1.25
+        else:
+            input_price = 3.00
+            output_price = 15.00
+            
+        input_cost = usage.get("input_tokens", 0) / 1_000_000 * input_price
         output_cost = (
-            usage.get("output_tokens", 0) / 1_000_000 * _ANTHROPIC_OUTPUT_PRICE
+            usage.get("output_tokens", 0) / 1_000_000 * output_price
         )
         return round(input_cost + output_cost, 6)

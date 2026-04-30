@@ -38,3 +38,15 @@ class GroqBackend(BaseLLMBackend):
         except Exception as e:
             logger.error(f"Groq 呼叫失敗: {e}")
             return f"錯誤：{e}", 0.0, {}, "groq"
+
+    async def check_health(self) -> bool:
+        try:
+            await self._client.chat.completions.create(
+                model=self.config["model"],
+                messages=[{"role": "user", "content": "ping"}],
+                max_tokens=1,
+            )
+            return True
+        except Exception as e:
+            logger.warning(f"Groq 健康檢查失敗: {e}")
+            return False

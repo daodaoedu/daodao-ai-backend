@@ -9,9 +9,13 @@ PROJECT_ROOT = Path(__file__).parent.parent
 ENV_FILE_PATH = PROJECT_ROOT / ".env"
 
 
+# 根據環境變數決定讀取的 env 檔案
+_ENV = os.getenv("ENVIRONMENT", "development")
+_ENV_FILE = ".env.prod" if _ENV == "production" else ".env.dev"
+
 class BaseConfigSettings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=[".env", str(ENV_FILE_PATH)],
+        env_file=[_ENV_FILE, ".env", str(ENV_FILE_PATH)],
         extra="ignore",
         frozen=True,
         env_nested_delimiter="__",
