@@ -1,8 +1,8 @@
 import os
 from pathlib import Path
-from typing import Dict, Literal, Optional
+from typing import Any, Dict, Literal, Optional
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -101,6 +101,15 @@ class InsightSettings(BaseConfigSettings):
     llm_backend: str = "groq"  # 預設使用 Groq
 
 
+_LLM_BACKEND_DEFAULTS: Dict[str, Dict[str, str]] = {
+    "ollama": {"url": "http://ollama-dev:11434/api/generate", "model": "qwen2.5:1.5b"},
+    "openai": {"url": "https://api.openai.com/v1/responses", "model": "gpt-4o"},
+    "gemini": {"url": "https://generativelanguage.googleapis.com", "model": "gemini-2.0-flash"},
+    "anthropic": {"url": "https://api.anthropic.com/v1/messages", "model": "claude-3-5-sonnet-20241022"},
+    "groq": {"url": "https://api.groq.com/openai/v1", "model": "llama-3.3-70b-versatile"},
+}
+
+
 class Settings(BaseConfigSettings):
     app_version: str = "0.1.0"
     debug: bool = True
@@ -114,32 +123,25 @@ class Settings(BaseConfigSettings):
 
     llm_backend: Dict[str, LLMBackendConfig] = Field(
         default_factory=lambda: {
-            "ollama": LLMBackendConfig(
-                url="http://ollama-dev:11434/api/generate",
-                model="qwen2.5:1.5b",
-            ),
-            "openai": LLMBackendConfig(
-                url="https://api.openai.com/v1/responses",
-                model="gpt-4o",
-                api_key=os.getenv("OPENAI_API_KEY"),
-            ),
-            "gemini": LLMBackendConfig(
-                url="https://generativelanguage.googleapis.com",
-                model="gemini-2.0-flash",
-                api_key=os.getenv("GEMINI_API_KEY"),
-            ),
-            "anthropic": LLMBackendConfig(
-                url="https://api.anthropic.com/v1/messages",
-                model="claude-3-5-sonnet-20241022",
-                api_key=os.getenv("ANTHROPIC_API_KEY"),
-            ),
-            "groq": LLMBackendConfig(
-                url="https://api.groq.com/openai/v1",
-                model="llama-3.3-70b-versatile",
-                api_key=os.getenv("GROQ_API_KEY"),
-            ),
+            k: LLMBackendConfig(**v) for k, v in _LLM_BACKEND_DEFAULTS.items()
         }
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _merge_llm_backend_defaults(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        llm_data = data.get("llm_backend")
+        if not llm_data or not isinstance(llm_data, dict):
+            return data
+        merged: Dict[str, Dict] = {k: dict(v) for k, v in _LLM_BACKEND_DEFAULTS.items()}
+        for provider, cfg in llm_data.items():
+            if isinstance(cfg, dict):
+                merged.setdefault(provider, {})
+                merged[provider].update({k: v for k, v in cfg.items() if v is not None and v != ""})
+        data["llm_backend"] = merged
+        return data
 
     jwt_security: str = "xxxxxxxxxxxxxxxx"
     jwt_expiration: str = "1h"
