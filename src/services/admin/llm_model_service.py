@@ -119,7 +119,7 @@ async def seed_llm_models(
 
     # ── 新增：清理邏輯 ──
     # 將資料庫中「不在設定檔內」的模型全部設為停用
-    db_models = db.query(LLMModel).filter(LLMModel.is_active == True).all()
+    db_models = db.query(LLMModel).filter(LLMModel.is_active).all()
     for db_m in db_models:
         if (db_m.provider, db_m.model_name) not in active_configs:
             db_m.is_active = False
