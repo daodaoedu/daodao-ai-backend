@@ -66,7 +66,7 @@ async def lifespan(app: FastAPI):
     # 啟動時 seed system prompts + llm models + admin quotas（冪等）
     with app.state.database.get_session() as db:
         seed_default_prompts(db)
-        seed_llm_models(db, settings)
+        await seed_llm_models(db, settings, cache=app.state.cache_client)
         seed_admin_quotas(db)
 
     # 啟動精選洞察排程（LLM backend 未設定時跳過，不影響主服務）

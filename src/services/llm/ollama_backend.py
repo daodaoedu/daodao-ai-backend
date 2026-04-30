@@ -50,3 +50,22 @@ class OllamaBackend(BaseLLMBackend):
             }
             cost = self._estimate_token_cost(input_tokens + output_tokens, 0.0)
             return output, cost, usage_dict, "ollama"
+
+    async def check_health(self) -> bool:
+        base = self.config["url"].rstrip("/")
+        # Ollama 健康檢查：先檢查 tags 確保服務在線，再檢查模型是否存在
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            try:
+                # 1. 檢查服務
+                resp = await client.get(f"{base}/api/tags")
+                if resp.status_code != 200:
+                    return False
+
+                # 2. 檢查特定模型 (Optional but recommended)
+                # data = resp.json()
+                # models = [m['name'] for m in data.get('models', [])]
+                # return self.config["model"] in models
+                return True
+            except Exception as e:
+                logger.warning(f"Ollama 健康檢查失敗: {e}")
+                return False
