@@ -152,34 +152,26 @@ jobs:
               echo "Created $ENV_FILE from .sample"
             fi
 
-            # 載入環境變數，替換敏感環境變數 (來自 GitHub Secrets)
-            # 替換敏感環境變數 (來自 GitHub Secrets)
-            declare -A SECRETS_MAP=(
-              ["JWT_SECURITY"]="${{ secrets.JWT_SECURITY }}"
-              ["COLLECTION_NAME"]="${{ secrets.COLLECTION_NAME }}"
-              ["POSTGRES_DB_USER"]="${{ secrets.POSTGRES_DB_USER }}"
-              ["POSTGRES_DB_PASSWORD"]="${{ secrets.POSTGRES_DB_PASSWORD }}"
-              ["POSTGRES_DB_NAME"]="${{ secrets.POSTGRES_DB_NAME }}"
-              ["CLICKHOUSE_USER"]="${{ secrets.CLICKHOUSE_USER }}"
-              ["CLICKHOUSE_DATABASE"]="${{ secrets.CLICKHOUSE_DATABASE }}"
-              ["API_SECRET_KEY"]="${{ secrets.API_SECRET_KEY }}"
-              ["LLM_BACKEND__OPENAI__API_KEY"]="${{ secrets.LLM_BACKEND__OPENAI__API_KEY }}"
-              ["LLM_BACKEND__GEMINI__API_KEY"]="${{ secrets.LLM_BACKEND__GEMINI__API_KEY }}"
-              ["LLM_BACKEND__ANTHROPIC__API_KEY"]="${{ secrets.LLM_BACKEND__ANTHROPIC__API_KEY }}"
-              ["LLM_BACKEND__GROQ__API_KEY"]="${{ secrets.LLM_BACKEND__GROQ__API_KEY }}"
-              ["INSIGHT__LLM_BACKEND"]="${{ secrets.INSIGHT__LLM_BACKEND }}"
-              ["INSIGHT__SCHEDULE_CRON"]="${{ secrets.INSIGHT__SCHEDULE_CRON }}"
-            )
+            # ── 強制刷新 Secrets ──
+            # 使用 cat << 'EOF' 是處理包含特殊字元（如 | & $）的 API Key 最安全的方法
+            echo "" >> "$ENV_FILE"
+            echo "# --- Updated by GitHub Actions CD ---" >> "$ENV_FILE"
+            cat << 'EOF' >> "$ENV_FILE"
+          JWT_SECURITY=${{ secrets.JWT_SECURITY }}
+          COLLECTION_NAME=${{ secrets.COLLECTION_NAME }}
+          POSTGRES_DB_USER=${{ secrets.POSTGRES_DB_USER }}
+          POSTGRES_DB_PASSWORD=${{ secrets.POSTGRES_DB_PASSWORD }}
+          POSTGRES_DB_NAME=${{ secrets.POSTGRES_DB_NAME }}
+          API_SECRET_KEY=${{ secrets.API_SECRET_KEY }}
+          LLM_BACKEND__OPENAI__API_KEY=${{ secrets.LLM_BACKEND__OPENAI__API_KEY }}
+          LLM_BACKEND__GEMINI__API_KEY=${{ secrets.LLM_BACKEND__GEMINI__API_KEY }}
+          LLM_BACKEND__ANTHROPIC__API_KEY=${{ secrets.LLM_BACKEND__ANTHROPIC__API_KEY }}
+          LLM_BACKEND__GROQ__API_KEY=${{ secrets.LLM_BACKEND__GROQ__API_KEY }}
+          INSIGHT__LLM_BACKEND=${{ secrets.INSIGHT__LLM_BACKEND }}
+          INSIGHT__SCHEDULE_CRON=${{ secrets.INSIGHT__SCHEDULE_CRON }}
+          EOF
 
-            for key in "${!SECRETS_MAP[@]}"; do
-              value="${SECRETS_MAP[$key]}"
-              if [ -n "$value" ]; then
-                # 用 sed 安全替換，處理特殊字元
-                sed -i "s|^$key=.*|$key=$value|" "$ENV_FILE"
-              fi
-            done
-
-            echo "Generated .env.${src_ENV} with updated values"
+            echo "✅ Generated $ENV_FILE with latest GitHub Secrets"
 
             # ===== 清理舊容器 =====
             echo "=== Cleaning up old containers for $src_ENV ==="
