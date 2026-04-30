@@ -14,7 +14,7 @@ on:
 
 jobs:
   format:
-    name: Format Check
+    name: Format & Lint
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -26,34 +26,13 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: Install format tools
-        run: pip install black==25.9 ruff==0.14.1
+      - name: Install tools
+        run: pip install black==25.9 ruff==0.14.1 bandit==1.8.6
 
-      - name: Run format check
+      - name: Format check
         run: |
           python -m black --check src
           python -m ruff check src
 
-  lint:
-    name: Static Analysis
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.12"
-          cache: pip
-
-      - name: Install lint tools and deps
-        run: |
-          pip install pylint==4.0.1 bandit==1.8.6
-          pip install -r requirements.txt 2>/dev/null || pip install -e ".[dev]" 2>/dev/null || true
-
-      - name: Run static analysis
-        run: |
-          python -m pylint --rcfile=.pylintrc src || true
-          python -m bandit -r src || true
-
+      - name: Security scan
+        run: python -m bandit -r src || true
