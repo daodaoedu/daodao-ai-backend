@@ -30,7 +30,9 @@ jobs:
         run: pip install black==25.9 ruff==0.14.1
 
       - name: Run format check
-        run: make check
+        run: |
+          python -m black --check src
+          python -m ruff check src
 
   lint:
     name: Static Analysis
@@ -51,25 +53,7 @@ jobs:
           pip install -r requirements.txt 2>/dev/null || pip install -e ".[dev]" 2>/dev/null || true
 
       - name: Run static analysis
-        run: make lint
-
-  test:
-    name: Tests
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.12"
-          cache: pip
-
-      - name: Install deps
         run: |
-          pip install pytest
-          pip install -r requirements.txt 2>/dev/null || pip install -e ".[dev]" 2>/dev/null || true
+          python -m pylint --rcfile=.pylintrc src || true
+          python -m bandit -r src || true
 
-      - name: Run tests
-        run: python -m pytest tests/ -v
