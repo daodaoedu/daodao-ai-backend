@@ -393,6 +393,89 @@ class TestSlotCycleOrder:
         assert slot_types[1] == SlotType.B
         assert slot_types[2:] == [SlotType.C, SlotType.C, SlotType.C]
 
+    def test_slot_b_appears_in_every_cycle(self):
+        """每個循環都應包含一個 Slot B。"""
+        checkin_rows = [
+            _CheckinRow(
+                item_id=101,
+                sort_time=None,
+                user_id=10,
+                reactions_count=1,
+                comments_count=0,
+            ),
+            _CheckinRow(
+                item_id=102,
+                sort_time=None,
+                user_id=11,
+                reactions_count=1,
+                comments_count=0,
+            ),
+        ]
+        practice_rows = [
+            _PracticeRow(item_id=i, sort_time=None) for i in range(201, 207)
+        ]
+        cheered_rows = []
+
+        slots, _, _ = FeedService._assemble_slot_cycles(
+            practice_rows, checkin_rows, cheered_rows, num_cycles=2
+        )
+
+        slot_types = [slot["slot_type"] for slot in slots]
+        assert slot_types == [
+            SlotType.A,
+            SlotType.B,
+            SlotType.C,
+            SlotType.C,
+            SlotType.C,
+            SlotType.A,
+            SlotType.B,
+            SlotType.C,
+            SlotType.C,
+            SlotType.C,
+        ]
+
+    def test_limit_budget_keeps_complete_cycles_without_exceeding_limit(self):
+        """完整循環不可被截斷，且不應超過 limit 預算。"""
+        checkin_rows = [
+            _CheckinRow(
+                item_id=101,
+                sort_time=None,
+                user_id=10,
+                reactions_count=1,
+                comments_count=0,
+            ),
+            _CheckinRow(
+                item_id=102,
+                sort_time=None,
+                user_id=11,
+                reactions_count=1,
+                comments_count=0,
+            ),
+        ]
+        practice_rows = [
+            _PracticeRow(item_id=i, sort_time=None) for i in range(201, 207)
+        ]
+        cheered_rows = []
+
+        slots, p_idx, c_idx = FeedService._assemble_slot_cycles(
+            practice_rows,
+            checkin_rows,
+            cheered_rows,
+            num_cycles=2,
+            max_items=6,
+        )
+
+        assert len(slots) == 5
+        assert [slot["slot_type"] for slot in slots] == [
+            SlotType.A,
+            SlotType.B,
+            SlotType.C,
+            SlotType.C,
+            SlotType.C,
+        ]
+        assert p_idx == 3
+        assert c_idx == 1
+
 
 # ─────────────────────────────────────────────────────────────
 # Task 6.3: Slot B ActivityCard 欄位驗證

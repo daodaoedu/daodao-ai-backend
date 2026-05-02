@@ -1,7 +1,7 @@
 import json
+from typing import Optional
 
 from fastapi import APIRouter, Query
-from typing import Optional
 
 from src.dependencies import SessionDep, UserDep, CacheDep
 from src.logger import AppLogger
@@ -31,10 +31,15 @@ def get_feed(
     current_user: UserDep,
     cache: CacheDep,
     cursor: Optional[str] = Query(None, description="分頁游標"),
-    limit: int = Query(20, ge=1, le=100, description="每頁數量"),
+    limit: int = Query(
+        20,
+        ge=1,
+        le=100,
+        description="每頁最多回傳幾張卡片；type=all 時會以完整循環單位（5～6 格）回傳",
+    ),
     keyword: Optional[str] = Query(None, description="搜尋關鍵字"),
     tags: Optional[list[str]] = Query(None, description="標籤篩選"),
-    type: FeedTypeFilter = Query(
+    type_filter: FeedTypeFilter = Query(
         FeedTypeFilter.ALL, description="篩選類型: all | practice | checkin"
     ),
 ):
@@ -51,7 +56,7 @@ def get_feed(
             f"feed:user:{user_id}"
             f":kw:{keyword if keyword is not None else '__none__'}"
             f":tags:{tags_str}"
-            f":type:{type.value}"
+            f":type:{type_filter.value}"
             f":limit:{limit}:cursor:{cursor or '0'}"
         )
         cached = cache.client.get(cache_key)
@@ -75,7 +80,7 @@ def get_feed(
         limit=limit,
         keyword=keyword,
         tags=tags,
-        type_filter=type,
+        type_filter=type_filter,
         sort_by=sort_by,
     )
 

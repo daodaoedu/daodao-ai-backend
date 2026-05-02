@@ -56,10 +56,9 @@ class FeedService:
             return FeedService._get_feed_slot_pattern(
                 db, user_id, cursor, limit, keyword, tags
             )
-        else:
-            return FeedService._get_feed_single_type(
-                db, user_id, cursor, limit, keyword, tags, type_filter
-            )
+        return FeedService._get_feed_single_type(
+            db, user_id, cursor, limit, keyword, tags, type_filter
+        )
 
     # =========================================================================
     # Slot Pattern Feed (type_filter=ALL)
@@ -79,23 +78,25 @@ class FeedService:
             FeedService._parse_dual_cursor(cursor)
         )
 
-        num_cycles = max(1, limit // 4)
+        max_cycles = max(1, limit // 5)
 
-        # Fetch +1 extra in each pool to detect has_next
+        # Fetch one extra cycle to determine whether another完整循環 still exists.
         practice_rows = FeedService._fetch_practice_pool(
-            db, p_cursor_time, p_cursor_id, num_cycles * 3 + 1, keyword, tags
+            db, p_cursor_time, p_cursor_id, max_cycles * 3 + 3, keyword, tags
         )
         checkin_rows = FeedService._fetch_checkin_pool_with_counts(
-            db, c_cursor_time, c_cursor_id, num_cycles * 2 + 1, keyword, tags
+            db, c_cursor_time, c_cursor_id, max_cycles * 2 + 2, keyword, tags
         )
 
         # Fetch cheered pool for Slot B (one per cycle)
-        cheered_rows = FeedService._fetch_cheered_pool(
-            db, num_cycles + 1, keyword, tags
-        )
+        cheered_rows = FeedService._fetch_cheered_pool(db, max_cycles, keyword, tags)
 
         slot_assignments, p_idx, c_idx = FeedService._assemble_slot_cycles(
-            practice_rows, checkin_rows, cheered_rows, num_cycles
+            practice_rows,
+            checkin_rows,
+            cheered_rows,
+            max_cycles,
+            max_items=limit,
         )
 
         if not slot_assignments:
@@ -180,7 +181,7 @@ class FeedService:
                     feed_item["latest_actor_name"] = latest_actor_name
                 items.append(feed_item)
 
-        has_next = len(practice_rows) > p_idx or len(checkin_rows) > c_idx
+        has_next = len(practice_rows) >= p_idx + 3
         next_cursor = None
         if has_next:
             p_last = ""
@@ -362,7 +363,8 @@ class FeedService:
         if tags:
             where_clauses.append(
                 "EXISTS (SELECT 1 FROM entity_tags et JOIN tags t ON t.id = et.tag_id"
-                " WHERE et.entity_type = 'practice' AND et.entity_id = p.id AND t.name = ANY(:tags))"
+                " WHERE et.entity_type = 'practice'"
+                " AND et.entity_id = p.id AND t.name = ANY(:tags))"
             )
             bind_params["tags"] = tags
 
@@ -574,6 +576,7 @@ class FeedService:
         checkin_rows: list,
         cheered_rows: list,
         num_cycles: int,
+        max_items: Optional[int] = None,
     ) -> tuple[list[dict], int, int]:
         """
         Assemble A→B→C→C→C cycles.
@@ -589,17 +592,21 @@ class FeedService:
         c_idx = 0
         ch_idx = 0
 
-        for cycle_num in range(num_cycles):
+        for _ in range(num_cycles):
             # Slot C requires 3 practices; stop if not enough
             if p_idx + 3 > len(practice_rows):
                 break
 
+            cycle_slots: list[dict] = []
+            consumed_checkins = 0
+
             # Slot A: checkins (skip if pool empty)
             if c_idx < len(checkin_rows):
-                a_rows, consumed = FeedService._select_slot_a(checkin_rows[c_idx:])
-                c_idx += consumed
+                a_rows, consumed_checkins = FeedService._select_slot_a(
+                    checkin_rows[c_idx:]
+                )
                 for row in a_rows:
-                    slots.append(
+                    cycle_slots.append(
                         {
                             "slot_type": SlotType.A,
                             "item_type": "checkin",
@@ -608,36 +615,33 @@ class FeedService:
                         }
                     )
 
-            # Slot B: cheered item (first cycle only) or ActivityCard
-            if cycle_num == 0:
-                if ch_idx < len(cheered_rows):
-                    ch_row = cheered_rows[ch_idx]
-                    ch_idx += 1
-                    slots.append(
+            # Slot B: one item per cycle, falling back to ActivityCard
+            if ch_idx < len(cheered_rows):
+                ch_row = cheered_rows[ch_idx]
+                cycle_slots.append(
+                    {
+                        "slot_type": SlotType.B,
+                        "item_type": ch_row.item_type,
+                        "item_id": ch_row.item_id,
+                        "feed_source": "cheered",
+                    }
+                )
+            else:
+                activity_card = FeedService._build_activity_card_slot()
+                if activity_card:
+                    cycle_slots.append(
                         {
                             "slot_type": SlotType.B,
-                            "item_type": ch_row.item_type,
-                            "item_id": ch_row.item_id,
-                            "feed_source": "cheered",
+                            "item_type": "activity",
+                            "item_id": 0,
+                            "feed_source": "activity",
+                            "card": activity_card,
                         }
                     )
-                else:
-                    # Fallback: community stats ActivityCard
-                    activity_card = FeedService._build_activity_card_slot()
-                    if activity_card:
-                        slots.append(
-                            {
-                                "slot_type": SlotType.B,
-                                "item_type": "activity",
-                                "item_id": 0,
-                                "feed_source": "activity",
-                                "card": activity_card,
-                            }
-                        )
 
             # Slot C: 3 practices
             for i in range(3):
-                slots.append(
+                cycle_slots.append(
                     {
                         "slot_type": SlotType.C,
                         "item_type": "practice",
@@ -645,6 +649,18 @@ class FeedService:
                         "feed_source": "original",
                     }
                 )
+
+            if (
+                max_items is not None
+                and len(slots) + len(cycle_slots) > max_items
+                and slots
+            ):
+                break
+
+            slots.extend(cycle_slots)
+            c_idx += consumed_checkins
+            if ch_idx < len(cheered_rows):
+                ch_idx += 1
             p_idx += 3
 
         return slots, p_idx, c_idx
