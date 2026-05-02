@@ -308,6 +308,29 @@ _CheeredRow = namedtuple("_CheeredRow", ["item_type", "item_id", "sort_time"])
 
 class TestSlotASelection:
 
+    def test_cold_first_hot_second_returns_one(self):
+        """第一則冷啟動，但第二則有 reactions → 兩則不都是冷啟動，只取 1 則。"""
+        rows = [
+            _CheckinRow(
+                item_id=1,
+                sort_time=None,
+                user_id=10,
+                reactions_count=0,
+                comments_count=0,
+            ),
+            _CheckinRow(
+                item_id=2,
+                sort_time=None,
+                user_id=20,
+                reactions_count=2,
+                comments_count=0,
+            ),
+        ]
+        selected, consumed = FeedService._select_slot_a(rows)
+        assert len(selected) == 1
+        assert consumed == 1
+        assert selected[0].item_id == 1
+
     def test_hot_checkin_returns_one(self):
         """熱門打卡（reactions >= 1）→ Slot A 只放 1 則打卡。"""
         rows = [
@@ -397,11 +420,9 @@ class TestSlotCycleOrder:
         practice_rows = [
             _PracticeRow(item_id=i, sort_time=None) for i in [201, 202, 203]
         ]
-        # 無 cheered → fallback ActivityCard for Slot B
-        cheered_rows: list = []
 
-        slots, p_idx, c_idx, _ = FeedService._assemble_slot_cycles(
-            practice_rows, checkin_rows, cheered_rows, num_cycles=1
+        slots, p_idx, c_idx = FeedService._assemble_slot_cycles(
+            practice_rows, checkin_rows, [], num_cycles=1
         )
 
         slot_types = [s["slot_type"] for s in slots]
@@ -430,10 +451,9 @@ class TestSlotCycleOrder:
         practice_rows = [
             _PracticeRow(item_id=i, sort_time=None) for i in range(201, 207)
         ]
-        cheered_rows = []
 
-        slots, _, _, _ = FeedService._assemble_slot_cycles(
-            practice_rows, checkin_rows, cheered_rows, num_cycles=2
+        slots, _, _ = FeedService._assemble_slot_cycles(
+            practice_rows, checkin_rows, [], num_cycles=2
         )
 
         slot_types = [slot["slot_type"] for slot in slots]
@@ -471,12 +491,11 @@ class TestSlotCycleOrder:
         practice_rows = [
             _PracticeRow(item_id=i, sort_time=None) for i in range(201, 207)
         ]
-        cheered_rows = []
 
-        slots, p_idx, c_idx, _ = FeedService._assemble_slot_cycles(
+        slots, p_idx, c_idx = FeedService._assemble_slot_cycles(
             practice_rows,
             checkin_rows,
-            cheered_rows,
+            [],
             num_cycles=2,
             max_items=6,
         )
@@ -491,6 +510,125 @@ class TestSlotCycleOrder:
         ]
         assert p_idx == 3
         assert c_idx == 1
+
+    def test_slot_b_uses_activity_event_text_when_provided(self):
+        """activity_events 有內容時，Slot B 的 ActivityCard event_text 應取用。"""
+        checkin_rows = [
+            _CheckinRow(
+                item_id=101,
+                sort_time=None,
+                user_id=10,
+                reactions_count=0,
+                comments_count=0,
+            ),
+        ]
+        practice_rows = [
+            _PracticeRow(item_id=i, sort_time=None) for i in [201, 202, 203]
+        ]
+        activity_events = ["Anna 對 Bob 的《學英文》打卡說了加油"]
+
+        slots, _, _ = FeedService._assemble_slot_cycles(
+            practice_rows, checkin_rows, activity_events, num_cycles=1
+        )
+
+        slot_b = next((s for s in slots if s["slot_type"] == SlotType.B), None)
+        assert slot_b is not None
+        assert slot_b["item_type"] == "activity"
+        assert slot_b["card"]["event_text"] == "Anna 對 Bob 的《學英文》打卡說了加油"
+
+    def test_slot_b_fallback_text_when_no_events(self):
+        """activity_events 為空時，Slot B 使用預設 fallback event_text。"""
+        checkin_rows = [
+            _CheckinRow(
+                item_id=101,
+                sort_time=None,
+                user_id=10,
+                reactions_count=0,
+                comments_count=0,
+            ),
+        ]
+        practice_rows = [
+            _PracticeRow(item_id=i, sort_time=None) for i in [201, 202, 203]
+        ]
+
+        slots, _, _ = FeedService._assemble_slot_cycles(
+            practice_rows, checkin_rows, [], num_cycles=1
+        )
+
+        slot_b = next((s for s in slots if s["slot_type"] == SlotType.B), None)
+        assert slot_b is not None
+        assert slot_b["item_type"] == "activity"
+        assert isinstance(slot_b["card"]["event_text"], str)
+        assert slot_b["card"]["event_text"] != ""
+
+    def test_slot_b_is_activity_card_regardless_of_input(self):
+        """Slot B 永遠是 ActivityCard，不論輸入為何。"""
+        checkin_rows = [
+            _CheckinRow(
+                item_id=101,
+                sort_time=None,
+                user_id=10,
+                reactions_count=0,
+                comments_count=0,
+            ),
+        ]
+        practice_rows = [
+            _PracticeRow(item_id=i, sort_time=None) for i in [201, 202, 203]
+        ]
+
+        for events in [[], ["任意事件文字"]]:
+            slots, _, _ = FeedService._assemble_slot_cycles(
+                practice_rows, checkin_rows, events, num_cycles=1
+            )
+            slot_b = next((s for s in slots if s["slot_type"] == SlotType.B), None)
+            assert slot_b is not None, f"Slot B missing with events={events}"
+            assert (
+                slot_b["item_type"] == "activity"
+            ), f"Slot B not activity with events={events}"
+
+
+# ─────────────────────────────────────────────────────────────
+# ActivityCard 優先序邏輯
+# ─────────────────────────────────────────────────────────────
+
+
+class TestActivityEventPriority:
+
+    def test_connection_events_win_when_available(self):
+        """Connection 動態優先於 Follow 和社群事件。"""
+        result = FeedService._select_activity_events_with_priority(
+            connection_events=["夥伴 Anna 打了卡"],
+            follow_events=["關注的 Bob 打了卡"],
+            community_events=["Carol 對 Dave 的打卡加油了"],
+        )
+        assert result == ["夥伴 Anna 打了卡"]
+
+    def test_follow_events_win_when_no_connections(self):
+        """沒有 Connection 動態時，Follow 動態優先於社群事件。"""
+        result = FeedService._select_activity_events_with_priority(
+            connection_events=[],
+            follow_events=["關注的 Bob 打了卡"],
+            community_events=["Carol 對 Dave 的打卡加油了"],
+        )
+        assert result == ["關注的 Bob 打了卡"]
+
+    def test_community_events_fallback_when_no_social(self):
+        """沒有 Connection 也沒有 Follow 動態時，使用社群事件。"""
+        result = FeedService._select_activity_events_with_priority(
+            connection_events=[],
+            follow_events=[],
+            community_events=["Carol 對 Dave 的打卡加油了"],
+        )
+        assert result == ["Carol 對 Dave 的打卡加油了"]
+
+    def test_empty_all_returns_empty(self):
+        """三者皆空時回傳空清單（由 _build_activity_card_slot fallback 處理）。"""
+        result = FeedService._select_activity_events_with_priority(
+            connection_events=[],
+            follow_events=[],
+            community_events=[],
+        )
+        assert result == []
 
 
 # ─────────────────────────────────────────────────────────────

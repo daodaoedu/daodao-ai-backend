@@ -7,7 +7,8 @@ disable=
     import-error,
     no-name-in-module,
     unused-argument,
-    not-callable  # SQLAlchemy func.now()/func.count() 等為已知誤判
+    not-callable,  # SQLAlchemy func.now()/func.count() 等為已知誤判
+    C0302  # too-many-lines: service 模組行數限制放寬
 
 [TYPECHECK]
 # SQLAlchemy func proxy (func.now, func.count, ...) 是動態屬性，pylint 無法靜態分析
