@@ -2,6 +2,7 @@
 Router-level tests for GET /api/v1/feed
 """
 
+from collections import namedtuple
 from unittest.mock import patch
 
 import pytest
@@ -11,6 +12,8 @@ from unittest.mock import MagicMock
 
 from src.dependencies import get_cache_client, get_current_user, get_db_session
 from src.routers.feed import router
+from src.schemas.feed import SlotType
+from src.services.feed.feed_service import FeedService
 
 # ── minimal app wiring ────────────────────────────────────────
 
@@ -211,3 +214,163 @@ class TestGetFeed:
         item = resp.json()["data"][0]
         assert item["type"] == "checkin"
         assert item["feed_reason"] == "checked_in"
+
+
+# ─────────────────────────────────────────────────────────────
+# Helper namedtuples for service-level unit tests
+# ─────────────────────────────────────────────────────────────
+
+_CheckinRow = namedtuple(
+    "_CheckinRow",
+    ["item_id", "sort_time", "user_id", "reactions_count", "comments_count"],
+)
+_PracticeRow = namedtuple("_PracticeRow", ["item_id", "sort_time"])
+_CheeredRow = namedtuple("_CheeredRow", ["item_type", "item_id", "sort_time"])
+
+
+# ─────────────────────────────────────────────────────────────
+# Task 5.4: Slot A 打卡則數判斷
+# ─────────────────────────────────────────────────────────────
+
+
+class TestSlotASelection:
+
+    def test_hot_checkin_returns_one(self):
+        """熱門打卡（reactions >= 1）→ Slot A 只放 1 則打卡。"""
+        rows = [
+            _CheckinRow(
+                item_id=1,
+                sort_time=None,
+                user_id=10,
+                reactions_count=1,
+                comments_count=0,
+            ),
+            _CheckinRow(
+                item_id=2,
+                sort_time=None,
+                user_id=20,
+                reactions_count=0,
+                comments_count=0,
+            ),
+        ]
+        selected, consumed = FeedService._select_slot_a(rows)
+        assert len(selected) == 1
+        assert consumed == 1
+        assert selected[0].item_id == 1
+
+    def test_cold_start_two_different_users_returns_two(self):
+        """冷啟動（reactions=0, comments=0, 候選池有 2 個不同 userId）→ Slot A 放 2 則打卡。"""
+        rows = [
+            _CheckinRow(
+                item_id=1,
+                sort_time=None,
+                user_id=10,
+                reactions_count=0,
+                comments_count=0,
+            ),
+            _CheckinRow(
+                item_id=2,
+                sort_time=None,
+                user_id=20,
+                reactions_count=0,
+                comments_count=0,
+            ),
+        ]
+        selected, consumed = FeedService._select_slot_a(rows)
+        assert len(selected) == 2
+        assert consumed == 2
+        assert {r.item_id for r in selected} == {1, 2}
+
+    def test_pool_less_than_two_degrades_to_one(self):
+        """候選池 < 2（只有 1 則）→ 降級為 1 則。"""
+        rows = [
+            _CheckinRow(
+                item_id=1,
+                sort_time=None,
+                user_id=10,
+                reactions_count=0,
+                comments_count=0,
+            ),
+        ]
+        selected, consumed = FeedService._select_slot_a(rows)
+        assert len(selected) == 1
+        assert consumed == 1
+
+    def test_empty_pool_slot_a_skipped(self):
+        """候選池為空 → Slot A 跳過（回傳 0 則）。"""
+        selected, consumed = FeedService._select_slot_a([])
+        assert len(selected) == 0
+        assert consumed == 0
+
+
+# ─────────────────────────────────────────────────────────────
+# Task 5.4: Slot Pattern 循環順序驗證
+# ─────────────────────────────────────────────────────────────
+
+
+class TestSlotCycleOrder:
+
+    def test_cycle_order_is_a_b_c_c_c(self):
+        """API 回傳 items 順序符合 A→B→C→C→C 循環。"""
+        checkin_rows = [
+            _CheckinRow(
+                item_id=101,
+                sort_time=None,
+                user_id=10,
+                reactions_count=0,
+                comments_count=0,
+            ),
+        ]
+        practice_rows = [
+            _PracticeRow(item_id=i, sort_time=None) for i in [201, 202, 203]
+        ]
+        # 無 cheered → fallback ActivityCard for Slot B
+        cheered_rows: list = []
+
+        slots, p_idx, c_idx = FeedService._assemble_slot_cycles(
+            practice_rows, checkin_rows, cheered_rows, num_cycles=1
+        )
+
+        slot_types = [s["slot_type"] for s in slots]
+        assert slot_types[0] == SlotType.A
+        assert slot_types[1] == SlotType.B
+        assert slot_types[2:] == [SlotType.C, SlotType.C, SlotType.C]
+
+
+# ─────────────────────────────────────────────────────────────
+# Task 6.3: Slot B ActivityCard 欄位驗證
+# ─────────────────────────────────────────────────────────────
+
+ACTIVITY_ITEM = {
+    "type": "activity",
+    "activity_type": "community_event",
+    "event_text": "社群最近很活躍，快來看看大家在練什麼！",
+    "label": "學習動態",
+    "slot_type": "B",
+}
+
+
+class TestActivityCardSlotB:
+
+    def test_slot_b_activity_card_fields(self, client):
+        """Slot B 位置的 item 含 type='activity'、event_text 非空字串、label='學習動態'。"""
+        mock_return = {
+            "data": [
+                {**CHECKIN_ITEM, "slot_type": "A"},
+                ACTIVITY_ITEM,
+                {**PRACTICE_ITEM, "slot_type": "C"},
+                {**PRACTICE_ITEM, "slot_type": "C"},
+                {**PRACTICE_ITEM, "slot_type": "C"},
+            ],
+            "next_cursor": None,
+        }
+        with patch(SERVICE_PATH, return_value=mock_return):
+            resp = client.get("/api/v1/feed")
+
+        assert resp.status_code == 200
+        items = resp.json()["data"]
+        slot_b = next((item for item in items if item.get("slot_type") == "B"), None)
+        assert slot_b is not None, "Slot B item missing from response"
+        assert slot_b["type"] == "activity"
+        assert isinstance(slot_b.get("event_text"), str) and slot_b["event_text"] != ""
+        assert slot_b["label"] == "學習動態"
