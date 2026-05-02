@@ -216,6 +216,7 @@ async def generate_for_practice(
     # 使用 Core-level UPDATE 只寫入 insight，避免觸發 ORM 的 onupdate 自動更新 updated_at
     db.execute(update(Practice).where(Practice.id == pid).values(insight=output))
     db.commit()
+    practice.insight = output  # sync in-memory object post-commit
     db.refresh(practice)
     logger.info(f"[InsightService] 洞察已寫入 practice_id={pid} backend={backend_name}")
     return practice

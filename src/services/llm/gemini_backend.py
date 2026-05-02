@@ -26,11 +26,17 @@ class GeminiBackend(BaseLLMBackend):
             )
             output = response.text or "未提供回應"
             meta = response.usage_metadata
-            input_tokens = getattr(meta, "prompt_token_count", 0) or 0
-            output_tokens = getattr(meta, "candidates_token_count", 0) or 0
+            try:
+                input_tokens = int(meta.prompt_token_count or 0)
+                output_tokens = int(meta.candidates_token_count or 0)
+            except (TypeError, AttributeError, ValueError):
+                input_tokens = 0
+                output_tokens = 0
+            estimated = self._estimate_tokens(prompt) + (output_tokens or 1)
             usage_dict = {
                 "input_tokens": input_tokens,
                 "output_tokens": output_tokens,
+                "estimated_tokens": estimated,
             }
             cost = self._estimate_token_cost(input_tokens + output_tokens, 0.01)
             return output, cost, usage_dict, "gemini"
