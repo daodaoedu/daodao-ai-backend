@@ -21,7 +21,7 @@ class InsightScheduler:
         self._settings = settings
         self._database = database
         self._scheduler = AsyncIOScheduler()
-        self._llm_client = LLMClient(settings, settings.insight.llm_backend)
+        self._llm_client: LLMClient | None = None
 
     def start(self) -> None:
         cron = self._settings.insight.schedule_cron
@@ -41,17 +41,32 @@ class InsightScheduler:
             self._scheduler.shutdown(wait=False)
             logger.info("[InsightScheduler] 已停止")
 
+    def _get_llm_client(self) -> LLMClient:
+        if self._llm_client is None:
+            self._llm_client = LLMClient(
+                self._settings, self._settings.insight.llm_backend
+            )
+        return self._llm_client
+
     async def _run_job(self) -> None:
         logger.info("[InsightScheduler] 開始執行洞察生成任務")
         total = 0
         failed = 0
+
+        try:
+            llm_client = self._get_llm_client()
+        except Exception as exc:
+            logger.warning(
+                f"[InsightScheduler] LLM client 初始化失敗，本次任務跳過: {exc}"
+            )
+            return
 
         with self._database.get_session() as db:
             practices = insight_service.get_pending_practices(db)
             logger.info(f"[InsightScheduler] 待處理 Practice 數量: {len(practices)}")
 
             logging_client = LoggingLLMClient(
-                llm_client=self._llm_client,
+                llm_client=llm_client,
                 db_session_factory=self._database.get_session,
                 context="insight",
                 user_id=None,
