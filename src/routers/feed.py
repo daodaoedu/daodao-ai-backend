@@ -80,25 +80,24 @@ def get_feed(
     )
 
     next_cursor = result.get("next_cursor")
+    pagination = CursorPaginationInfo(
+        cursors={
+            "start": cursor,
+            "end": next_cursor,
+        },
+        hasPrev=cursor is not None,
+        hasNext=next_cursor is not None,
+        count=len(result["data"]),
+    )
     payload = {
         "data": result["data"],
-        "pagination": CursorPaginationInfo(
-            cursors={
-                "start": cursor,
-                "end": next_cursor,
-            },
-            hasPrev=cursor is not None,
-            hasNext=next_cursor is not None,
-            count=len(result["data"]),
-        ),
+        "pagination": pagination.model_dump(),
     }
 
     # ── 寫入 cache ──
     if user_id:
         try:
-            cache.client.set(
-                cache_key, json.dumps(payload, default=str), ex=FEED_CACHE_TTL
-            )
+            cache.client.set(cache_key, json.dumps(payload), ex=FEED_CACHE_TTL)
         except Exception:
             logger.warning(f"cache write error for key={cache_key}, skipping cache")
 

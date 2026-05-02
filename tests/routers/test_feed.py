@@ -2,6 +2,7 @@
 Router-level tests for GET /api/v1/feed
 """
 
+import json
 from collections import namedtuple
 from unittest.mock import patch
 
@@ -179,6 +180,62 @@ class TestGetFeed:
         assert body["data"] == []
         assert body["pagination"]["hasNext"] is False
         assert body["pagination"]["count"] == 0
+
+    def test_cache_hit_keeps_pagination_as_object(self, client):
+        """Cache hit should preserve dict-shaped pagination and not fail validation."""
+        cached_payload = {
+            "data": [PRACTICE_ITEM],
+            "pagination": {
+                "cursors": {"start": None, "end": "2025-06-01T08:00:00_1"},
+                "hasPrev": False,
+                "hasNext": True,
+                "count": 1,
+            },
+        }
+        cache = _make_cache()
+        cache.client.get.return_value = json.dumps(cached_payload)
+        db = _make_db()
+        db.query.return_value.filter.return_value.first.return_value = MagicMock(id=123)
+        app.dependency_overrides[get_cache_client] = lambda: cache
+        app.dependency_overrides[get_db_session] = lambda: db
+
+        try:
+            resp = client.get("/api/v1/feed")
+        finally:
+            app.dependency_overrides[get_cache_client] = lambda: _make_cache()
+            app.dependency_overrides[get_db_session] = lambda: _make_db()
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["success"] is True
+        assert body["cacheHit"] is True
+        assert body["pagination"]["hasNext"] is True
+        assert body["pagination"]["count"] == 1
+
+    def test_cache_hit_with_legacy_string_pagination_falls_back_to_none(self, client):
+        """Legacy cached string pagination should not crash the response wrapper."""
+        cached_payload = {
+            "data": [PRACTICE_ITEM],
+            "pagination": "cursors=CursorInfo(start=None, end='2025-06-01T08:00:00_1') hasPrev=False hasNext=True count=1",
+        }
+        cache = _make_cache()
+        cache.client.get.return_value = json.dumps(cached_payload)
+        db = _make_db()
+        db.query.return_value.filter.return_value.first.return_value = MagicMock(id=123)
+        app.dependency_overrides[get_cache_client] = lambda: cache
+        app.dependency_overrides[get_db_session] = lambda: db
+
+        try:
+            resp = client.get("/api/v1/feed")
+        finally:
+            app.dependency_overrides[get_cache_client] = lambda: _make_cache()
+            app.dependency_overrides[get_db_session] = lambda: _make_db()
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["success"] is True
+        assert body["cacheHit"] is True
+        assert body["pagination"] is None
 
     def test_feed_reason_new_practice(self, client):
         """practice with is_brewing=False has feed_reason=new_practice."""
