@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from src.logger import AppLogger
 from src.models.User import User
-from src.schemas.feed import FeedSortBy, FeedTypeFilter
+from src.schemas.feed import FeedReasonType, FeedSortBy, FeedTypeFilter
 
 logger = AppLogger(__name__).get_logger()
 
@@ -189,10 +189,16 @@ class FeedService:
                 item["reactions"] = reactions_map.get(("practice", row.item_id), [])
                 comment_data = comments_map.get(("practice", row.item_id), {})
                 item["comment_count"] = comment_data.get("count", 0)
+                feed_reason = (
+                    FeedReasonType.new_release
+                    if item.get("is_brewing")
+                    else FeedReasonType.new_practice
+                )
                 items.append(
                     {
                         "type": "practice",
                         "data": item,
+                        "feed_reason": feed_reason,
                         "_row": row,
                     }
                 )
@@ -207,6 +213,7 @@ class FeedService:
                     {
                         "type": "checkin",
                         "data": item,
+                        "feed_reason": FeedReasonType.checked_in,
                         "_row": row,
                     }
                 )
