@@ -382,7 +382,7 @@ class FeedService:
                 keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
             )
             where_clauses.append(
-                "(p.title ILIKE :keyword OR p.practice_action ILIKE :keyword)"
+                "(p.title ILIKE :keyword ESCAPE '\\' OR p.practice_action ILIKE :keyword ESCAPE '\\')"
             )
             bind_params["keyword"] = f"%{escaped}%"
 
@@ -444,7 +444,7 @@ class FeedService:
             escaped = (
                 keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
             )
-            where_clauses.append("c.note ILIKE :keyword")
+            where_clauses.append("c.note ILIKE :keyword ESCAPE '\\'")
             bind_params["keyword"] = f"%{escaped}%"
 
         if tags:
@@ -736,7 +736,7 @@ class FeedService:
             escaped = (
                 keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
             )
-            where_clauses.append("p.title ILIKE :keyword")
+            where_clauses.append("p.title ILIKE :keyword ESCAPE '\\'")
             bind_params["keyword"] = f"%{escaped}%"
 
         if tags:
@@ -830,9 +830,11 @@ class FeedService:
         ev_idx = 0
 
         for _ in range(num_cycles):
-            # Slot C requires 3 practices; stop if not enough
-            if p_idx + 3 > len(practice_rows):
+            if p_idx >= len(practice_rows):
                 break
+            # Slot C prefers 3 practices, but accepts fewer on the final cycle
+            remaining_practices = len(practice_rows) - p_idx
+            cycle_size = min(3, remaining_practices)
 
             cycle_slots: list[dict] = []
             consumed_checkins = 0
@@ -868,8 +870,8 @@ class FeedService:
                 }
             )
 
-            # Slot C: 3 practices
-            for i in range(3):
+            # Slot C: up to 3 practices (partial cycle allowed on last page)
+            for i in range(cycle_size):
                 row = practice_rows[p_idx + i]
                 cycle_slots.append(
                     {
@@ -885,7 +887,7 @@ class FeedService:
 
             slots.extend(cycle_slots)
             c_idx += consumed_checkins
-            p_idx += 3
+            p_idx += cycle_size
 
         return slots, p_idx, c_idx
 
