@@ -173,7 +173,7 @@ async def generate_for_practice_by_id(
     db: Session,
     llm_client: LLMClient,
     practice_id: int,
-) -> Optional[int]:
+) -> Optional[Practice]:
     """
     根據 practice_id 重新 load Practice，再生成洞察。
     避免跨 session 傳遞 ORM 物件造成 detached instance 錯誤。
@@ -189,7 +189,7 @@ async def generate_for_practice(
     db: Session,
     llm_client: LLMClient,
     practice: Practice,
-) -> Optional[int]:
+) -> Optional[Practice]:
     """
     為單一 Practice 生成洞察並寫入 practices.insight 欄位。
     是否重複生成由呼叫端（get_pending_practices force 參數）控制。
@@ -216,5 +216,7 @@ async def generate_for_practice(
     # 使用 Core-level UPDATE 只寫入 insight，避免觸發 ORM 的 onupdate 自動更新 updated_at
     db.execute(update(Practice).where(Practice.id == pid).values(insight=output))
     db.commit()
+    practice.insight = output  # sync in-memory object post-commit
+    db.refresh(practice)
     logger.info(f"[InsightService] 洞察已寫入 practice_id={pid} backend={backend_name}")
-    return pid
+    return practice

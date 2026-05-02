@@ -2,6 +2,8 @@
 Router-level tests for GET /api/v1/feed
 """
 
+import json
+from collections import namedtuple
 from unittest.mock import patch
 
 import pytest
@@ -11,6 +13,8 @@ from unittest.mock import MagicMock
 
 from src.dependencies import get_cache_client, get_current_user, get_db_session
 from src.routers.feed import router
+from src.schemas.feed import SlotType
+from src.services.feed.feed_service import FeedService
 
 # ── minimal app wiring ────────────────────────────────────────
 
@@ -21,9 +25,15 @@ def _make_cache():
     return cache
 
 
+def _make_db():
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = None
+    return db
+
+
 app = FastAPI()
 app.include_router(router, prefix="/api")
-app.dependency_overrides[get_db_session] = lambda: None
+app.dependency_overrides[get_db_session] = lambda: _make_db()
 app.dependency_overrides[get_current_user] = lambda: "test-user-ext-id"
 app.dependency_overrides[get_cache_client] = lambda: _make_cache()
 
@@ -37,6 +47,7 @@ def client():
 
 PRACTICE_ITEM = {
     "type": "practice",
+    "feed_reason": "new_practice",
     "data": {
         "id": "ext-p-1",
         "title": "Morning Yoga",
@@ -56,8 +67,31 @@ PRACTICE_ITEM = {
     },
 }
 
+BREWING_PRACTICE_ITEM = {
+    "type": "practice",
+    "feed_reason": "new_release",
+    "data": {
+        "id": "ext-p-2",
+        "title": "Brewing Practice",
+        "status": "active",
+        "privacy_status": "delayed",
+        "is_brewing": True,
+        "practice_action": "brew",
+        "start_date": "2025-01-01",
+        "end_date": None,
+        "frequency_min_days": 1,
+        "frequency_max_days": 1,
+        "session_duration_minutes": 30,
+        "created_at": "2025-06-01T08:00:00",
+        "user": {"id": "u1", "name": "Alice", "photo_url": None},
+        "reactions": [],
+        "comment_count": 0,
+    },
+}
+
 CHECKIN_ITEM = {
     "type": "checkin",
+    "feed_reason": "checked_in",
     "data": {
         "id": "101",
         "checkin_date": "2025-06-01",
@@ -146,3 +180,491 @@ class TestGetFeed:
         assert body["data"] == []
         assert body["pagination"]["hasNext"] is False
         assert body["pagination"]["count"] == 0
+
+    def test_cache_hit_keeps_pagination_as_object(self, client):
+        """Cache hit should preserve dict-shaped pagination and not fail validation."""
+        cached_payload = {
+            "data": [PRACTICE_ITEM],
+            "pagination": {
+                "cursors": {"start": None, "end": "2025-06-01T08:00:00_1"},
+                "hasPrev": False,
+                "hasNext": True,
+                "count": 1,
+            },
+        }
+        cache = _make_cache()
+        cache.client.get.return_value = json.dumps(cached_payload)
+        db = _make_db()
+        db.query.return_value.filter.return_value.first.return_value = MagicMock(id=123)
+        orig_cache = app.dependency_overrides.get(get_cache_client)
+        orig_db = app.dependency_overrides.get(get_db_session)
+        app.dependency_overrides[get_cache_client] = lambda: cache
+        app.dependency_overrides[get_db_session] = lambda: db
+
+        try:
+            resp = client.get("/api/v1/feed")
+        finally:
+            if orig_cache is not None:
+                app.dependency_overrides[get_cache_client] = orig_cache
+            else:
+                app.dependency_overrides.pop(get_cache_client, None)
+            if orig_db is not None:
+                app.dependency_overrides[get_db_session] = orig_db
+            else:
+                app.dependency_overrides.pop(get_db_session, None)
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["success"] is True
+        assert body["cacheHit"] is True
+        assert body["pagination"]["hasNext"] is True
+        assert body["pagination"]["count"] == 1
+
+    def test_cache_hit_with_legacy_string_pagination_falls_back_to_none(self, client):
+        """Legacy cached string pagination should not crash the response wrapper."""
+        cached_payload = {
+            "data": [PRACTICE_ITEM],
+            "pagination": "cursors=CursorInfo(start=None, end='2025-06-01T08:00:00_1') hasPrev=False hasNext=True count=1",
+        }
+        cache = _make_cache()
+        cache.client.get.return_value = json.dumps(cached_payload)
+        db = _make_db()
+        db.query.return_value.filter.return_value.first.return_value = MagicMock(id=123)
+        orig_cache = app.dependency_overrides.get(get_cache_client)
+        orig_db = app.dependency_overrides.get(get_db_session)
+        app.dependency_overrides[get_cache_client] = lambda: cache
+        app.dependency_overrides[get_db_session] = lambda: db
+
+        try:
+            resp = client.get("/api/v1/feed")
+        finally:
+            if orig_cache is not None:
+                app.dependency_overrides[get_cache_client] = orig_cache
+            else:
+                app.dependency_overrides.pop(get_cache_client, None)
+            if orig_db is not None:
+                app.dependency_overrides[get_db_session] = orig_db
+            else:
+                app.dependency_overrides.pop(get_db_session, None)
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["success"] is True
+        assert body["cacheHit"] is True
+        assert body["pagination"] is None
+
+    def test_feed_reason_new_practice(self, client):
+        """practice with is_brewing=False has feed_reason=new_practice."""
+        mock_return = {"data": [PRACTICE_ITEM], "next_cursor": None}
+        with patch(SERVICE_PATH, return_value=mock_return):
+            resp = client.get("/api/v1/feed")
+
+        assert resp.status_code == 200
+        item = resp.json()["data"][0]
+        assert item["type"] == "practice"
+        assert item["data"]["is_brewing"] is False
+        assert item["feed_reason"] == "new_practice"
+
+    def test_feed_reason_new_release(self, client):
+        """practice with is_brewing=True has feed_reason=new_release."""
+        mock_return = {"data": [BREWING_PRACTICE_ITEM], "next_cursor": None}
+        with patch(SERVICE_PATH, return_value=mock_return):
+            resp = client.get("/api/v1/feed")
+
+        assert resp.status_code == 200
+        item = resp.json()["data"][0]
+        assert item["type"] == "practice"
+        assert item["data"]["is_brewing"] is True
+        assert item["feed_reason"] == "new_release"
+
+    def test_feed_reason_checked_in(self, client):
+        """checkin item has feed_reason=checked_in."""
+        mock_return = {"data": [CHECKIN_ITEM], "next_cursor": None}
+        with patch(SERVICE_PATH, return_value=mock_return):
+            resp = client.get("/api/v1/feed")
+
+        assert resp.status_code == 200
+        item = resp.json()["data"][0]
+        assert item["type"] == "checkin"
+        assert item["feed_reason"] == "checked_in"
+
+
+# ─────────────────────────────────────────────────────────────
+# Helper namedtuples for service-level unit tests
+# ─────────────────────────────────────────────────────────────
+
+_CheckinRow = namedtuple(
+    "_CheckinRow",
+    ["item_id", "sort_time", "user_id", "reactions_count", "comments_count"],
+)
+_PracticeRow = namedtuple("_PracticeRow", ["item_id", "sort_time"])
+_CheeredRow = namedtuple("_CheeredRow", ["item_type", "item_id", "sort_time"])
+
+
+# ─────────────────────────────────────────────────────────────
+# Task 5.4: Slot A 打卡則數判斷
+# ─────────────────────────────────────────────────────────────
+
+
+class TestSlotASelection:
+
+    def test_cold_first_hot_second_returns_one(self):
+        """第一則冷啟動，但第二則有 reactions → 兩則不都是冷啟動，只取 1 則。"""
+        rows = [
+            _CheckinRow(
+                item_id=1,
+                sort_time=None,
+                user_id=10,
+                reactions_count=0,
+                comments_count=0,
+            ),
+            _CheckinRow(
+                item_id=2,
+                sort_time=None,
+                user_id=20,
+                reactions_count=2,
+                comments_count=0,
+            ),
+        ]
+        selected, consumed = FeedService._select_slot_a(rows)
+        assert len(selected) == 1
+        assert consumed == 1
+        assert selected[0].item_id == 1
+
+    def test_hot_checkin_returns_one(self):
+        """熱門打卡（reactions >= 1）→ Slot A 只放 1 則打卡。"""
+        rows = [
+            _CheckinRow(
+                item_id=1,
+                sort_time=None,
+                user_id=10,
+                reactions_count=1,
+                comments_count=0,
+            ),
+            _CheckinRow(
+                item_id=2,
+                sort_time=None,
+                user_id=20,
+                reactions_count=0,
+                comments_count=0,
+            ),
+        ]
+        selected, consumed = FeedService._select_slot_a(rows)
+        assert len(selected) == 1
+        assert consumed == 1
+        assert selected[0].item_id == 1
+
+    def test_cold_start_two_different_users_returns_two(self):
+        """冷啟動（reactions=0, comments=0, 候選池有 2 個不同 userId）→ Slot A 放 2 則打卡。"""
+        rows = [
+            _CheckinRow(
+                item_id=1,
+                sort_time=None,
+                user_id=10,
+                reactions_count=0,
+                comments_count=0,
+            ),
+            _CheckinRow(
+                item_id=2,
+                sort_time=None,
+                user_id=20,
+                reactions_count=0,
+                comments_count=0,
+            ),
+        ]
+        selected, consumed = FeedService._select_slot_a(rows)
+        assert len(selected) == 2
+        assert consumed == 2
+        assert {r.item_id for r in selected} == {1, 2}
+
+    def test_pool_less_than_two_degrades_to_one(self):
+        """候選池 < 2（只有 1 則）→ 降級為 1 則。"""
+        rows = [
+            _CheckinRow(
+                item_id=1,
+                sort_time=None,
+                user_id=10,
+                reactions_count=0,
+                comments_count=0,
+            ),
+        ]
+        selected, consumed = FeedService._select_slot_a(rows)
+        assert len(selected) == 1
+        assert consumed == 1
+
+    def test_empty_pool_slot_a_skipped(self):
+        """候選池為空 → Slot A 跳過（回傳 0 則）。"""
+        selected, consumed = FeedService._select_slot_a([])
+        assert len(selected) == 0
+        assert consumed == 0
+
+
+# ─────────────────────────────────────────────────────────────
+# Task 5.4: Slot Pattern 循環順序驗證
+# ─────────────────────────────────────────────────────────────
+
+
+class TestSlotCycleOrder:
+
+    def test_cycle_order_is_a_b_c_c_c(self):
+        """API 回傳 items 順序符合 A→B→C→C→C 循環。"""
+        checkin_rows = [
+            _CheckinRow(
+                item_id=101,
+                sort_time=None,
+                user_id=10,
+                reactions_count=0,
+                comments_count=0,
+            ),
+        ]
+        practice_rows = [
+            _PracticeRow(item_id=i, sort_time=None) for i in [201, 202, 203]
+        ]
+
+        slots, p_idx, c_idx = FeedService._assemble_slot_cycles(
+            practice_rows, checkin_rows, [], num_cycles=1
+        )
+
+        slot_types = [s["slot_type"] for s in slots]
+        assert slot_types[0] == SlotType.A
+        assert slot_types[1] == SlotType.B
+        assert slot_types[2:] == [SlotType.C, SlotType.C, SlotType.C]
+
+    def test_slot_b_appears_in_every_cycle(self):
+        """每個循環都應包含一個 Slot B。"""
+        checkin_rows = [
+            _CheckinRow(
+                item_id=101,
+                sort_time=None,
+                user_id=10,
+                reactions_count=1,
+                comments_count=0,
+            ),
+            _CheckinRow(
+                item_id=102,
+                sort_time=None,
+                user_id=11,
+                reactions_count=1,
+                comments_count=0,
+            ),
+        ]
+        practice_rows = [
+            _PracticeRow(item_id=i, sort_time=None) for i in range(201, 207)
+        ]
+
+        slots, _, _ = FeedService._assemble_slot_cycles(
+            practice_rows, checkin_rows, [], num_cycles=2
+        )
+
+        slot_types = [slot["slot_type"] for slot in slots]
+        assert slot_types == [
+            SlotType.A,
+            SlotType.B,
+            SlotType.C,
+            SlotType.C,
+            SlotType.C,
+            SlotType.A,
+            SlotType.B,
+            SlotType.C,
+            SlotType.C,
+            SlotType.C,
+        ]
+
+    def test_limit_budget_keeps_complete_cycles_without_exceeding_limit(self):
+        """完整循環不可被截斷，且不應超過 limit 預算。"""
+        checkin_rows = [
+            _CheckinRow(
+                item_id=101,
+                sort_time=None,
+                user_id=10,
+                reactions_count=1,
+                comments_count=0,
+            ),
+            _CheckinRow(
+                item_id=102,
+                sort_time=None,
+                user_id=11,
+                reactions_count=1,
+                comments_count=0,
+            ),
+        ]
+        practice_rows = [
+            _PracticeRow(item_id=i, sort_time=None) for i in range(201, 207)
+        ]
+
+        slots, p_idx, c_idx = FeedService._assemble_slot_cycles(
+            practice_rows,
+            checkin_rows,
+            [],
+            num_cycles=2,
+            max_items=6,
+        )
+
+        assert len(slots) == 5
+        assert [slot["slot_type"] for slot in slots] == [
+            SlotType.A,
+            SlotType.B,
+            SlotType.C,
+            SlotType.C,
+            SlotType.C,
+        ]
+        assert p_idx == 3
+        assert c_idx == 1
+
+    def test_slot_b_uses_activity_event_text_when_provided(self):
+        """activity_events 有內容時，Slot B 的 ActivityCard event_text 應取用。"""
+        checkin_rows = [
+            _CheckinRow(
+                item_id=101,
+                sort_time=None,
+                user_id=10,
+                reactions_count=0,
+                comments_count=0,
+            ),
+        ]
+        practice_rows = [
+            _PracticeRow(item_id=i, sort_time=None) for i in [201, 202, 203]
+        ]
+        activity_events = ["Anna 對 Bob 的《學英文》打卡說了加油"]
+
+        slots, _, _ = FeedService._assemble_slot_cycles(
+            practice_rows, checkin_rows, activity_events, num_cycles=1
+        )
+
+        slot_b = next((s for s in slots if s["slot_type"] == SlotType.B), None)
+        assert slot_b is not None
+        assert slot_b["item_type"] == "activity"
+        assert slot_b["card"]["event_text"] == "Anna 對 Bob 的《學英文》打卡說了加油"
+
+    def test_slot_b_fallback_text_when_no_events(self):
+        """activity_events 為空時，Slot B 使用預設 fallback event_text。"""
+        checkin_rows = [
+            _CheckinRow(
+                item_id=101,
+                sort_time=None,
+                user_id=10,
+                reactions_count=0,
+                comments_count=0,
+            ),
+        ]
+        practice_rows = [
+            _PracticeRow(item_id=i, sort_time=None) for i in [201, 202, 203]
+        ]
+
+        slots, _, _ = FeedService._assemble_slot_cycles(
+            practice_rows, checkin_rows, [], num_cycles=1
+        )
+
+        slot_b = next((s for s in slots if s["slot_type"] == SlotType.B), None)
+        assert slot_b is not None
+        assert slot_b["item_type"] == "activity"
+        assert isinstance(slot_b["card"]["event_text"], str)
+        assert slot_b["card"]["event_text"] != ""
+
+    def test_slot_b_is_activity_card_regardless_of_input(self):
+        """Slot B 永遠是 ActivityCard，不論輸入為何。"""
+        checkin_rows = [
+            _CheckinRow(
+                item_id=101,
+                sort_time=None,
+                user_id=10,
+                reactions_count=0,
+                comments_count=0,
+            ),
+        ]
+        practice_rows = [
+            _PracticeRow(item_id=i, sort_time=None) for i in [201, 202, 203]
+        ]
+
+        for events in [[], ["任意事件文字"]]:
+            slots, _, _ = FeedService._assemble_slot_cycles(
+                practice_rows, checkin_rows, events, num_cycles=1
+            )
+            slot_b = next((s for s in slots if s["slot_type"] == SlotType.B), None)
+            assert slot_b is not None, f"Slot B missing with events={events}"
+            assert (
+                slot_b["item_type"] == "activity"
+            ), f"Slot B not activity with events={events}"
+
+
+# ─────────────────────────────────────────────────────────────
+# ActivityCard 優先序邏輯
+# ─────────────────────────────────────────────────────────────
+
+
+class TestActivityEventPriority:
+
+    def test_connection_events_win_when_available(self):
+        """Connection 動態優先於 Follow 和社群事件。"""
+        result = FeedService._select_activity_events_with_priority(
+            connection_events=["夥伴 Anna 打了卡"],
+            follow_events=["關注的 Bob 打了卡"],
+            community_events=["Carol 對 Dave 的打卡加油了"],
+        )
+        assert result == ["夥伴 Anna 打了卡"]
+
+    def test_follow_events_win_when_no_connections(self):
+        """沒有 Connection 動態時，Follow 動態優先於社群事件。"""
+        result = FeedService._select_activity_events_with_priority(
+            connection_events=[],
+            follow_events=["關注的 Bob 打了卡"],
+            community_events=["Carol 對 Dave 的打卡加油了"],
+        )
+        assert result == ["關注的 Bob 打了卡"]
+
+    def test_community_events_fallback_when_no_social(self):
+        """沒有 Connection 也沒有 Follow 動態時，使用社群事件。"""
+        result = FeedService._select_activity_events_with_priority(
+            connection_events=[],
+            follow_events=[],
+            community_events=["Carol 對 Dave 的打卡加油了"],
+        )
+        assert result == ["Carol 對 Dave 的打卡加油了"]
+
+    def test_empty_all_returns_empty(self):
+        """三者皆空時回傳空清單（由 _build_activity_card_slot fallback 處理）。"""
+        result = FeedService._select_activity_events_with_priority(
+            connection_events=[],
+            follow_events=[],
+            community_events=[],
+        )
+        assert result == []
+
+
+# ─────────────────────────────────────────────────────────────
+# Task 6.3: Slot B ActivityCard 欄位驗證
+# ─────────────────────────────────────────────────────────────
+
+ACTIVITY_ITEM = {
+    "type": "activity",
+    "activity_type": "community_event",
+    "event_text": "社群最近很活躍，快來看看大家在練什麼！",
+    "label": "學習動態",
+    "slot_type": "B",
+}
+
+
+class TestActivityCardSlotB:
+
+    def test_slot_b_activity_card_fields(self, client):
+        """Slot B 位置的 item 含 type='activity'、event_text 非空字串、label='學習動態'。"""
+        mock_return = {
+            "data": [
+                {**CHECKIN_ITEM, "slot_type": "A"},
+                ACTIVITY_ITEM,
+                {**PRACTICE_ITEM, "slot_type": "C"},
+                {**PRACTICE_ITEM, "slot_type": "C"},
+                {**PRACTICE_ITEM, "slot_type": "C"},
+            ],
+            "next_cursor": None,
+        }
+        with patch(SERVICE_PATH, return_value=mock_return):
+            resp = client.get("/api/v1/feed")
+
+        assert resp.status_code == 200
+        items = resp.json()["data"]
+        slot_b = next((item for item in items if item.get("slot_type") == "B"), None)
+        assert slot_b is not None, "Slot B item missing from response"
+        assert slot_b["type"] == "activity"
+        assert isinstance(slot_b.get("event_text"), str) and slot_b["event_text"] != ""
+        assert slot_b["label"] == "學習動態"

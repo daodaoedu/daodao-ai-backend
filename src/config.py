@@ -120,6 +120,15 @@ _LLM_BACKEND_DEFAULTS: Dict[str, Dict[str, str]] = {
 
 
 class Settings(BaseConfigSettings):
+    model_config = SettingsConfigDict(
+        env_file=[_ENV_FILE, ".env", str(ENV_FILE_PATH)],
+        extra="ignore",
+        frozen=True,
+        env_nested_delimiter="__",
+        case_sensitive=False,
+        validate_assignment=True,
+    )
+
     app_version: str = "0.1.0"
     debug: bool = True
     environment: Literal["development", "staging", "production"] = "development"
@@ -156,9 +165,6 @@ class Settings(BaseConfigSettings):
 
     jwt_security: str = "xxxxxxxxxxxxxxxx"
     jwt_expiration: str = "1h"
-
-    class Config:
-        validate_assignment = True  # 允許設定後驗證
 
     # Qdrant
     qdrant_url: str = "http://qdrant-dev:6333"
