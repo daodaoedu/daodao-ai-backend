@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from src.logger import AppLogger
 from src.models.User import User
-from src.schemas.feed import FeedReasonType, FeedSortBy, FeedTypeFilter
+from src.schemas.feed import FeedReasonType, FeedSortBy, FeedTypeFilter, SlotType
 
 logger = AppLogger(__name__).get_logger()
 
@@ -30,20 +30,13 @@ class FeedService:
         sort_by: FeedSortBy = FeedSortBy.NEWEST,
     ) -> dict:
         """
-        統一 feed 查詢：混合 practice + checkin，按時間排序。
+        統一 feed 查詢：混合 practice + checkin。
 
-        1. UNION query: practices + checkins → sorted by created_at
-        2. Batch enrich: reactions, comments, user info
-        3. Cursor pagination on (sort_time, item_id)
+        type_filter=ALL → Slot Pattern (A→B→C→C→C 循環)
+        type_filter=PRACTICE|CHECKIN → 單類型時序回傳
 
-        current_user_external_id 用於：
-        - Router 層 per-user cache key
-        - 推薦排序的個人化 BehaviorSignal（用戶對 practice 的打卡頻率）
-        TODO v2：
-        - 在 feed response 中內嵌 currentUserReaction（減少前端 N+1）
-        - 過濾已封鎖用戶的內容
+        current_user_external_id 用於 Router 層 per-user cache key。
         """
-        # --- 0. Resolve user_id for personalization ---
         user_id: int | None = None
         if current_user_external_id:
             _user = (
@@ -53,125 +46,57 @@ class FeedService:
             )
             user_id = _user.id if _user else None
 
-        # --- 1. Parse cursor ---
-        cursor_time = None
-        cursor_id = None
-        if cursor:
-            parts = cursor.rsplit("_", 1)
-            if len(parts) == 2:
-                cursor_time = parts[0]
-                try:
-                    cursor_id = int(parts[1])
-                except ValueError:
-                    cursor_time = None
-
-        # --- 2. Build UNION query dynamically based on type_filter ---
-        practice_subquery = """
-            SELECT
-                'practice' AS item_type,
-                p.id AS item_id,
-                p.created_at AS sort_time
-            FROM practices p
-            WHERE p.privacy_status = 'public'
-              AND p.status IN ('active', 'completed')
-              AND p.deleted_at IS NULL
-        """
-
-        checkin_subquery = """
-            SELECT
-                'checkin' AS item_type,
-                c.id AS item_id,
-                c.created_at AS sort_time
-            FROM practice_checkins c
-            JOIN practices p ON p.id = c.practice_id
-            WHERE p.privacy_status = 'public'
-              AND p.status IN ('active', 'completed')
-              AND p.deleted_at IS NULL
-        """
-
-        # Keyword filter
-        if keyword:
-            # Escape ILIKE special chars to prevent unintended wildcard matches
-            escaped = (
-                keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        if type_filter == FeedTypeFilter.ALL:
+            return FeedService._get_feed_slot_pattern(
+                db, user_id, cursor, limit, keyword, tags
             )
-            kw_param = f"%{escaped}%"
-            practice_subquery += """
-              AND (p.title ILIKE :keyword OR p.practice_action ILIKE :keyword)
-            """
-            checkin_subquery += """
-              AND (c.note ILIKE :keyword)
-            """
         else:
-            kw_param = None
+            return FeedService._get_feed_single_type(
+                db, user_id, cursor, limit, keyword, tags, type_filter
+            )
 
-        # Tags filter (via entity_tags table)
-        if tags:
-            practice_subquery += """
-              AND EXISTS (
-                  SELECT 1 FROM entity_tags et
-                  JOIN tags t ON t.id = et.tag_id
-                  WHERE et.entity_type = 'practice'
-                    AND et.entity_id = p.id
-                    AND t.name = ANY(:tags)
-              )
-            """
-            # Checkin: filter by parent practice's tags
-            checkin_subquery += """
-              AND EXISTS (
-                  SELECT 1 FROM entity_tags et
-                  JOIN tags t ON t.id = et.tag_id
-                  WHERE et.entity_type = 'practice'
-                    AND et.entity_id = c.practice_id
-                    AND t.name = ANY(:tags)
-              )
-            """
+    # =========================================================================
+    # Slot Pattern Feed (type_filter=ALL)
+    # =========================================================================
 
-        # Assemble UNION based on type_filter
-        parts = []
-        if type_filter in (FeedTypeFilter.ALL, FeedTypeFilter.PRACTICE):
-            parts.append(practice_subquery)
-        if type_filter in (FeedTypeFilter.ALL, FeedTypeFilter.CHECKIN):
-            parts.append(checkin_subquery)
+    @staticmethod
+    def _get_feed_slot_pattern(
+        db: Session,
+        user_id: Optional[int],
+        cursor: Optional[str],
+        limit: int,
+        keyword: Optional[str],
+        tags: Optional[list[str]],
+    ) -> dict:
+        """Assemble feed in A→B→C→C→C slot cycles (Slot B skipped for MVP)."""
+        p_cursor_time, p_cursor_id, c_cursor_time, c_cursor_id = (
+            FeedService._parse_dual_cursor(cursor)
+        )
 
-        if not parts:
+        num_cycles = max(1, limit // 4)
+
+        # Fetch +1 extra in each pool to detect has_next
+        practice_rows = FeedService._fetch_practice_pool(
+            db, p_cursor_time, p_cursor_id, num_cycles * 3 + 1, keyword, tags
+        )
+        checkin_rows = FeedService._fetch_checkin_pool_with_counts(
+            db, c_cursor_time, c_cursor_id, num_cycles * 2 + 1, keyword, tags
+        )
+
+        slot_assignments, p_idx, c_idx = FeedService._assemble_slot_cycles(
+            practice_rows, checkin_rows, num_cycles
+        )
+
+        if not slot_assignments:
             return {"data": [], "next_cursor": None}
 
-        union_sql = " UNION ALL ".join(parts)
+        practice_ids = [
+            s["item_id"] for s in slot_assignments if s["item_type"] == "practice"
+        ]
+        checkin_ids = [
+            s["item_id"] for s in slot_assignments if s["item_type"] == "checkin"
+        ]
 
-        feed_sql = f"""
-            WITH feed AS (
-                {union_sql}
-            )
-            SELECT item_type, item_id, sort_time
-            FROM feed
-            WHERE (CAST(:cursor_time AS timestamptz) IS NULL
-                   OR sort_time < CAST(:cursor_time AS timestamptz)
-                   OR (sort_time = CAST(:cursor_time AS timestamptz) AND item_id < :cursor_id))
-            ORDER BY sort_time DESC, item_id DESC
-            LIMIT :limit
-        """
-
-        bind_params = {
-            "cursor_time": cursor_time,
-            "cursor_id": cursor_id if cursor_id is not None else 0,
-            "limit": limit + 1,
-        }
-        if kw_param:
-            bind_params["keyword"] = kw_param
-        if tags:
-            bind_params["tags"] = tags
-
-        rows = db.execute(text(feed_sql), bind_params).fetchall()
-
-        has_next = len(rows) > limit
-        rows = rows[:limit]
-
-        # --- 3. Separate IDs by type ---
-        practice_ids = [r.item_id for r in rows if r.item_type == "practice"]
-        checkin_ids = [r.item_id for r in rows if r.item_type == "checkin"]
-
-        # --- 4. Batch fetch ---
         practices_map = FeedService._batch_fetch_practices(db, practice_ids)
         checkins_map = FeedService._batch_fetch_checkins(db, checkin_ids)
         reactions_map = FeedService._batch_fetch_reactions(
@@ -181,13 +106,16 @@ class FeedService:
             db, {"practice": practice_ids, "checkin": checkin_ids}
         )
 
-        # --- 5. Assemble feed items ---
         items = []
-        for row in rows:
-            if row.item_type == "practice" and row.item_id in practices_map:
-                item = practices_map[row.item_id]
-                item["reactions"] = reactions_map.get(("practice", row.item_id), [])
-                comment_data = comments_map.get(("practice", row.item_id), {})
+        for slot in slot_assignments:
+            item_type = slot["item_type"]
+            item_id = slot["item_id"]
+            slot_type = slot["slot_type"]
+
+            if item_type == "practice" and item_id in practices_map:
+                item = practices_map[item_id]
+                item["reactions"] = reactions_map.get(("practice", item_id), [])
+                comment_data = comments_map.get(("practice", item_id), {})
                 item["comment_count"] = comment_data.get("count", 0)
                 feed_reason = (
                     FeedReasonType.new_release
@@ -199,14 +127,14 @@ class FeedService:
                         "type": "practice",
                         "data": item,
                         "feed_reason": feed_reason,
-                        "_row": row,
+                        "slot_type": slot_type,
                     }
                 )
 
-            elif row.item_type == "checkin" and row.item_id in checkins_map:
-                item = checkins_map[row.item_id]
-                item["reactions"] = reactions_map.get(("checkin", row.item_id), [])
-                comment_data = comments_map.get(("checkin", row.item_id), {})
+            elif item_type == "checkin" and item_id in checkins_map:
+                item = checkins_map[item_id]
+                item["reactions"] = reactions_map.get(("checkin", item_id), [])
+                comment_data = comments_map.get(("checkin", item_id), {})
                 item["comment_count"] = comment_data.get("count", 0)
                 item["comment_preview"] = comment_data.get("preview", [])
                 items.append(
@@ -214,163 +142,341 @@ class FeedService:
                         "type": "checkin",
                         "data": item,
                         "feed_reason": FeedReasonType.checked_in,
-                        "_row": row,
+                        "slot_type": slot_type,
                     }
                 )
 
-        # --- 5.5 Recommended sort ---
-        if sort_by == FeedSortBy.RECOMMENDED and items:
-            items = FeedService._apply_recommended_sort(items, db, user_id=user_id)
+        has_next = len(practice_rows) > p_idx or len(checkin_rows) > c_idx
+        next_cursor = None
+        if has_next:
+            p_last = ""
+            if p_idx > 0:
+                last_p = practice_rows[min(p_idx, len(practice_rows)) - 1]
+                p_ts = last_p.sort_time.isoformat() if last_p.sort_time else ""
+                p_last = f"{p_ts}_{last_p.item_id}"
+            c_last = ""
+            if c_idx > 0:
+                last_c = checkin_rows[min(c_idx, len(checkin_rows)) - 1]
+                c_ts = last_c.sort_time.isoformat() if last_c.sort_time else ""
+                c_last = f"{c_ts}_{last_c.item_id}"
+            next_cursor = f"{p_last}|{c_last}"
 
-        # Strip internal _row before returning
-        for item in items:
-            item.pop("_row", None)
+        logger.info(f"feed (slot): {len(items)} items, has_next={has_next}")
+        return {"data": items, "next_cursor": next_cursor}
 
-        # --- 6. Build next_cursor ---
+    # =========================================================================
+    # Single-type Feed (type_filter=PRACTICE or CHECKIN)
+    # =========================================================================
+
+    @staticmethod
+    def _get_feed_single_type(
+        db: Session,
+        user_id: Optional[int],
+        cursor: Optional[str],
+        limit: int,
+        keyword: Optional[str],
+        tags: Optional[list[str]],
+        type_filter: FeedTypeFilter,
+    ) -> dict:
+        cursor_time, cursor_id = FeedService._parse_cursor_part(cursor or "")
+
+        if type_filter == FeedTypeFilter.PRACTICE:
+            rows = FeedService._fetch_practice_pool(
+                db, cursor_time, cursor_id, limit + 1, keyword, tags
+            )
+            has_next = len(rows) > limit
+            rows = rows[:limit]
+
+            practice_ids = [r.item_id for r in rows]
+            practices_map = FeedService._batch_fetch_practices(db, practice_ids)
+            reactions_map = FeedService._batch_fetch_reactions(
+                db, {"practice": practice_ids, "checkin": []}
+            )
+            comments_map = FeedService._batch_fetch_comments(
+                db, {"practice": practice_ids, "checkin": []}
+            )
+
+            items = []
+            for row in rows:
+                if row.item_id in practices_map:
+                    item = practices_map[row.item_id]
+                    item["reactions"] = reactions_map.get(("practice", row.item_id), [])
+                    comment_data = comments_map.get(("practice", row.item_id), {})
+                    item["comment_count"] = comment_data.get("count", 0)
+                    feed_reason = (
+                        FeedReasonType.new_release
+                        if item.get("is_brewing")
+                        else FeedReasonType.new_practice
+                    )
+                    items.append(
+                        {
+                            "type": "practice",
+                            "data": item,
+                            "feed_reason": feed_reason,
+                            "slot_type": SlotType.C,
+                        }
+                    )
+
+        else:  # CHECKIN
+            rows = FeedService._fetch_checkin_pool_with_counts(
+                db, cursor_time, cursor_id, limit + 1, keyword, tags
+            )
+            has_next = len(rows) > limit
+            rows = rows[:limit]
+
+            checkin_ids = [r.item_id for r in rows]
+            checkins_map = FeedService._batch_fetch_checkins(db, checkin_ids)
+            reactions_map = FeedService._batch_fetch_reactions(
+                db, {"practice": [], "checkin": checkin_ids}
+            )
+            comments_map = FeedService._batch_fetch_comments(
+                db, {"practice": [], "checkin": checkin_ids}
+            )
+
+            items = []
+            for row in rows:
+                if row.item_id in checkins_map:
+                    item = checkins_map[row.item_id]
+                    item["reactions"] = reactions_map.get(("checkin", row.item_id), [])
+                    comment_data = comments_map.get(("checkin", row.item_id), {})
+                    item["comment_count"] = comment_data.get("count", 0)
+                    item["comment_preview"] = comment_data.get("preview", [])
+                    items.append(
+                        {
+                            "type": "checkin",
+                            "data": item,
+                            "feed_reason": FeedReasonType.checked_in,
+                            "slot_type": SlotType.A,
+                        }
+                    )
+
         next_cursor = None
         if has_next and rows:
             last = rows[-1]
             ts = last.sort_time.isoformat() if last.sort_time else ""
             next_cursor = f"{ts}_{last.item_id}"
 
-        logger.info(f"feed: {len(items)} items, has_next={has_next}")
+        logger.info(
+            f"feed (single-type={type_filter.value}): {len(items)} items, has_next={has_next}"
+        )
         return {"data": items, "next_cursor": next_cursor}
 
     # =========================================================================
-    # Ranking
+    # Slot Pattern Helpers
     # =========================================================================
 
     @staticmethod
-    def _apply_recommended_sort(
-        items: list[dict],
+    def _parse_cursor_part(part: str) -> tuple[Optional[str], Optional[int]]:
+        if not part:
+            return None, None
+        parts = part.rsplit("_", 1)
+        if len(parts) == 2:
+            try:
+                return parts[0], int(parts[1])
+            except ValueError:
+                pass
+        return None, None
+
+    @staticmethod
+    def _parse_dual_cursor(
+        cursor: Optional[str],
+    ) -> tuple[Optional[str], Optional[int], Optional[str], Optional[int]]:
+        """Parse dual cursor format: '{practice_part}|{checkin_part}'."""
+        if not cursor:
+            return None, None, None, None
+        if "|" in cursor:
+            p_part, c_part = cursor.split("|", 1)
+        else:
+            p_part, c_part = cursor, ""
+        p_time, p_id = FeedService._parse_cursor_part(p_part)
+        c_time, c_id = FeedService._parse_cursor_part(c_part)
+        return p_time, p_id, c_time, c_id
+
+    @staticmethod
+    def _fetch_practice_pool(
         db: Session,
-        user_id: Optional[int] = None,
-    ) -> list[dict]:
-        """Apply recommendation scoring with social graph personalization."""
-        from datetime import datetime, timezone
+        cursor_time: Optional[str],
+        cursor_id: Optional[int],
+        limit: int,
+        keyword: Optional[str] = None,
+        tags: Optional[list[str]] = None,
+    ) -> list:
+        where_clauses = [
+            "p.privacy_status = 'public'",
+            "p.status IN ('active', 'completed')",
+            "p.deleted_at IS NULL",
+        ]
+        bind_params: dict = {"limit": limit}
 
-        from src.services.feed.feed_ranking import (
-            UserSocialGraph,
-            score_checkin,
-            score_practice,
-        )
+        if cursor_time and cursor_id is not None:
+            where_clauses.append(
+                "(p.created_at < CAST(:p_cursor_time AS timestamptz)"
+                " OR (p.created_at = CAST(:p_cursor_time AS timestamptz) AND p.id < :p_cursor_id))"
+            )
+            bind_params["p_cursor_time"] = cursor_time
+            bind_params["p_cursor_id"] = cursor_id
 
-        now = datetime.now(timezone.utc)
+        if keyword:
+            escaped = (
+                keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            )
+            where_clauses.append(
+                "(p.title ILIKE :keyword OR p.practice_action ILIKE :keyword)"
+            )
+            bind_params["keyword"] = f"%{escaped}%"
 
-        # --- 1. Build user's social graph (3 batch queries) ---
-        social_graph = UserSocialGraph()
-        if user_id:
-            # 1a. Follows
-            follow_rows = db.execute(
-                text(
-                    "SELECT target_type, target_id FROM follows WHERE follower_id = :uid"
-                ),
-                {"uid": user_id},
-            ).fetchall()
-            for r in follow_rows:
-                if r.target_type == "user":
-                    social_graph.following_user_ids.add(r.target_id)
-                elif r.target_type == "practice":
-                    social_graph.following_practice_ids.add(r.target_id)
+        if tags:
+            where_clauses.append(
+                "EXISTS (SELECT 1 FROM entity_tags et JOIN tags t ON t.id = et.tag_id"
+                " WHERE et.entity_type = 'practice' AND et.entity_id = p.id AND t.name = ANY(:tags))"
+            )
+            bind_params["tags"] = tags
 
-            # 1b. Connections (normalized: user_a_id < user_b_id)
-            conn_rows = db.execute(
-                text(
-                    """
-                    SELECT user_a_id, user_b_id FROM connections
-                    WHERE user_a_id = :uid OR user_b_id = :uid
-                """
-                ),
-                {"uid": user_id},
-            ).fetchall()
-            for r in conn_rows:
-                other = r.user_b_id if r.user_a_id == user_id else r.user_a_id
-                social_graph.connected_user_ids.add(other)
+        where_sql = " AND ".join(where_clauses)
+        sql = f"""
+            SELECT p.id AS item_id, p.created_at AS sort_time
+            FROM practices p
+            WHERE {where_sql}
+            ORDER BY p.created_at DESC, p.id DESC
+            LIMIT :limit
+        """
+        return db.execute(text(sql), bind_params).fetchall()
 
-            # 1c. Interaction counts
-            interact_rows = db.execute(
-                text(
-                    """
-                    SELECT user_a_id, user_b_id, count FROM interaction_counts
-                    WHERE user_a_id = :uid OR user_b_id = :uid
-                """
-                ),
-                {"uid": user_id},
-            ).fetchall()
-            for r in interact_rows:
-                other = r.user_b_id if r.user_a_id == user_id else r.user_a_id
-                social_graph.interaction_counts[other] = r.count or 0
+    @staticmethod
+    def _fetch_checkin_pool_with_counts(
+        db: Session,
+        cursor_time: Optional[str],
+        cursor_id: Optional[int],
+        limit: int,
+        keyword: Optional[str] = None,
+        tags: Optional[list[str]] = None,
+    ) -> list:
+        """Fetch checkins with reactions_count + comments_count for Slot A count logic."""
+        where_clauses = [
+            "p.privacy_status = 'public'",
+            "p.status IN ('active', 'completed')",
+            "p.deleted_at IS NULL",
+        ]
+        bind_params: dict = {"limit": limit}
 
-        # --- 2. Batch fetch extra practice fields ---
-        practice_ids = [it["_row"].item_id for it in items if it["type"] == "practice"]
-        practice_extra = {}
-        if practice_ids:
-            rows = db.execute(
-                text(
-                    """
-                    SELECT id, user_id, has_resources, progress_percentage, template_id, updated_at
-                    FROM practices WHERE id IN :ids
-                """
-                ).bindparams(bindparam("ids", expanding=True)),
-                {"ids": practice_ids},
-            ).fetchall()
-            for r in rows:
-                practice_extra[r.id] = r
+        if cursor_time and cursor_id is not None:
+            where_clauses.append(
+                "(c.created_at < CAST(:c_cursor_time AS timestamptz)"
+                " OR (c.created_at = CAST(:c_cursor_time AS timestamptz) AND c.id < :c_cursor_id))"
+            )
+            bind_params["c_cursor_time"] = cursor_time
+            bind_params["c_cursor_id"] = cursor_id
 
-        # --- 3. Batch fetch checkin owner info ---
-        checkin_ids = [it["_row"].item_id for it in items if it["type"] == "checkin"]
-        checkin_extra = {}
-        if checkin_ids:
-            rows = db.execute(
-                text(
-                    """
-                    SELECT c.id, c.user_id, c.practice_id, c.image_urls, c.note, c.mood
-                    FROM practice_checkins c WHERE c.id IN :ids
-                """
-                ).bindparams(bindparam("ids", expanding=True)),
-                {"ids": checkin_ids},
-            ).fetchall()
-            for r in rows:
-                checkin_extra[r.id] = r
+        if keyword:
+            escaped = (
+                keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            )
+            where_clauses.append("c.note ILIKE :keyword")
+            bind_params["keyword"] = f"%{escaped}%"
 
-        # --- 4. Score each item ---
-        scored = []
-        for item in items:
-            row = item["_row"]
-            reactions = item["data"].get("reactions", [])
-            reaction_count = sum(r.get("count", 0) for r in reactions)
-            comment_count = item["data"].get("comment_count", 0)
+        if tags:
+            where_clauses.append(
+                "EXISTS (SELECT 1 FROM entity_tags et JOIN tags t ON t.id = et.tag_id"
+                " WHERE et.entity_type = 'practice' AND et.entity_id = c.practice_id"
+                " AND t.name = ANY(:tags))"
+            )
+            bind_params["tags"] = tags
 
-            if item["type"] == "practice":
-                extra = practice_extra.get(row.item_id)
-                owner_id = extra.user_id if extra else None
-                s = score_practice(
-                    extra or row,
-                    reaction_count,
-                    comment_count,
-                    now,
-                    social_graph=social_graph if user_id else None,
-                    owner_user_id=owner_id,
-                    practice_internal_id=row.item_id,
+        where_sql = " AND ".join(where_clauses)
+        sql = f"""
+            SELECT
+                c.id AS item_id,
+                c.created_at AS sort_time,
+                c.user_id,
+                COUNT(DISTINCT r.id) AS reactions_count,
+                COUNT(DISTINCT cm.id) AS comments_count
+            FROM practice_checkins c
+            JOIN practices p ON p.id = c.practice_id
+            LEFT JOIN reactions r ON r.target_type = 'checkin' AND r.target_id = c.id
+            LEFT JOIN comments cm
+                ON cm.target_type = 'checkin' AND cm.target_id = c.id
+                AND cm.visibility = 'public'
+            WHERE {where_sql}
+            GROUP BY c.id, c.created_at, c.user_id
+            ORDER BY c.created_at DESC, c.id DESC
+            LIMIT :limit
+        """
+        return db.execute(text(sql), bind_params).fetchall()
+
+    @staticmethod
+    def _select_slot_a(available: list) -> tuple[list, int]:
+        """
+        Select 1 or 2 checkins for Slot A from the front of the available pool.
+
+        Priority:
+          1. Hot (reactions >= 1 or comments >= 1) → 1 item
+          2. Cold start, pool >= 2, different user_ids → 2 items
+          3. Fallback → 1 item; empty pool → 0 items (skip slot)
+        """
+        if not available:
+            return [], 0
+
+        first = available[0]
+        is_hot = first.reactions_count >= 1 or first.comments_count >= 1
+
+        if is_hot:
+            return [first], 1
+
+        # Cold start: two items with different owners
+        if len(available) >= 2 and available[1].user_id != first.user_id:
+            return [first, available[1]], 2
+
+        return [first], 1
+
+    @staticmethod
+    def _assemble_slot_cycles(
+        practice_rows: list,
+        checkin_rows: list,
+        num_cycles: int,
+    ) -> tuple[list[dict], int, int]:
+        """
+        Assemble A→B→C→C→C cycles (Slot B skipped for MVP).
+
+        Returns (slot_assignments, p_idx_consumed, c_idx_consumed).
+        Stops if fewer than 3 practices remain for Slot C.
+        Skips Slot A if checkin pool is exhausted.
+        """
+        slots: list[dict] = []
+        p_idx = 0
+        c_idx = 0
+
+        for _ in range(num_cycles):
+            # Slot C requires 3 practices; stop if not enough
+            if p_idx + 3 > len(practice_rows):
+                break
+
+            # Slot A: checkins (skip if pool empty)
+            if c_idx < len(checkin_rows):
+                a_rows, consumed = FeedService._select_slot_a(checkin_rows[c_idx:])
+                c_idx += consumed
+                for row in a_rows:
+                    slots.append(
+                        {
+                            "slot_type": SlotType.A,
+                            "item_type": "checkin",
+                            "item_id": row.item_id,
+                        }
+                    )
+
+            # Slot B: skipped for MVP
+
+            # Slot C: 3 practices
+            for i in range(3):
+                slots.append(
+                    {
+                        "slot_type": SlotType.C,
+                        "item_type": "practice",
+                        "item_id": practice_rows[p_idx + i].item_id,
+                    }
                 )
-            else:
-                extra = checkin_extra.get(row.item_id)
-                owner_id = extra.user_id if extra else None
-                practice_id = extra.practice_id if extra else None
-                s = score_checkin(
-                    extra or row,
-                    reaction_count,
-                    comment_count,
-                    now,
-                    social_graph=social_graph if user_id else None,
-                    owner_user_id=owner_id,
-                    practice_internal_id=practice_id,
-                )
+            p_idx += 3
 
-            scored.append((s, item))
-
-        scored.sort(key=lambda x: x[0], reverse=True)
-        return [item for _, item in scored]
+        return slots, p_idx, c_idx
 
     # =========================================================================
     # Batch fetch helpers

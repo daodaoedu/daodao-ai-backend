@@ -13,6 +13,12 @@ class FeedReasonType(str, Enum):
     cheered = "cheered"
 
 
+class SlotType(str, Enum):
+    A = "A"
+    B = "B"
+    C = "C"
+
+
 class FeedTypeFilter(str, Enum):
     ALL = "all"
     PRACTICE = "practice"
