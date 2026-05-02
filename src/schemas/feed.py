@@ -1,4 +1,5 @@
 from enum import Enum
+from typing import Literal, TypedDict
 
 
 class FeedItemType(str, Enum):
@@ -28,3 +29,15 @@ class FeedTypeFilter(str, Enum):
 class FeedSortBy(str, Enum):
     NEWEST = "newest"
     RECOMMENDED = "recommended"
+
+
+class ActivityType(str, Enum):
+    COMMUNITY_EVENT = "community_event"
+    FOLLOW_SUMMARY = "follow_summary"
+
+
+class ActivityCardItem(TypedDict):
+    item_type: Literal["activity"]
+    activity_type: str
+    event_text: str
+    label: str

@@ -12,7 +12,13 @@ from sqlalchemy.orm import Session
 
 from src.logger import AppLogger
 from src.models.User import User
-from src.schemas.feed import FeedReasonType, FeedSortBy, FeedTypeFilter, SlotType
+from src.schemas.feed import (
+    ActivityType,
+    FeedReasonType,
+    FeedSortBy,
+    FeedTypeFilter,
+    SlotType,
+)
 
 logger = AppLogger(__name__).get_logger()
 
@@ -68,7 +74,7 @@ class FeedService:
         keyword: Optional[str],
         tags: Optional[list[str]],
     ) -> dict:
-        """Assemble feed in A→B→C→C→C slot cycles (Slot B skipped for MVP)."""
+        """Assemble feed in A→B→C→C→C slot cycles."""
         p_cursor_time, p_cursor_id, c_cursor_time, c_cursor_id = (
             FeedService._parse_dual_cursor(cursor)
         )
@@ -83,8 +89,13 @@ class FeedService:
             db, c_cursor_time, c_cursor_id, num_cycles * 2 + 1, keyword, tags
         )
 
+        # Fetch cheered pool for Slot B (one per cycle)
+        cheered_rows = FeedService._fetch_cheered_pool(
+            db, num_cycles + 1, keyword, tags
+        )
+
         slot_assignments, p_idx, c_idx = FeedService._assemble_slot_cycles(
-            practice_rows, checkin_rows, num_cycles
+            practice_rows, checkin_rows, cheered_rows, num_cycles
         )
 
         if not slot_assignments:
@@ -111,25 +122,39 @@ class FeedService:
             item_type = slot["item_type"]
             item_id = slot["item_id"]
             slot_type = slot["slot_type"]
+            feed_source = slot.get("feed_source", "original")
+
+            if item_type == "activity":
+                # Slot B ActivityCard injected directly
+                items.append(slot["card"])
+                continue
 
             if item_type == "practice" and item_id in practices_map:
                 item = practices_map[item_id]
                 item["reactions"] = reactions_map.get(("practice", item_id), [])
                 comment_data = comments_map.get(("practice", item_id), {})
                 item["comment_count"] = comment_data.get("count", 0)
-                feed_reason = (
-                    FeedReasonType.new_release
-                    if item.get("is_brewing")
-                    else FeedReasonType.new_practice
-                )
-                items.append(
-                    {
-                        "type": "practice",
-                        "data": item,
-                        "feed_reason": feed_reason,
-                        "slot_type": slot_type,
-                    }
-                )
+                if feed_source == "cheered":
+                    feed_reason = FeedReasonType.cheered
+                    latest_actor_name = FeedService._get_latest_actor_name(
+                        item["reactions"]
+                    )
+                else:
+                    feed_reason = (
+                        FeedReasonType.new_release
+                        if item.get("is_brewing")
+                        else FeedReasonType.new_practice
+                    )
+                    latest_actor_name = None
+                feed_item: dict = {
+                    "type": "practice",
+                    "data": item,
+                    "feed_reason": feed_reason,
+                    "slot_type": slot_type,
+                }
+                if latest_actor_name is not None:
+                    feed_item["latest_actor_name"] = latest_actor_name
+                items.append(feed_item)
 
             elif item_type == "checkin" and item_id in checkins_map:
                 item = checkins_map[item_id]
@@ -137,14 +162,23 @@ class FeedService:
                 comment_data = comments_map.get(("checkin", item_id), {})
                 item["comment_count"] = comment_data.get("count", 0)
                 item["comment_preview"] = comment_data.get("preview", [])
-                items.append(
-                    {
-                        "type": "checkin",
-                        "data": item,
-                        "feed_reason": FeedReasonType.checked_in,
-                        "slot_type": slot_type,
-                    }
-                )
+                if feed_source == "cheered":
+                    feed_reason = FeedReasonType.cheered
+                    latest_actor_name = FeedService._get_latest_actor_name(
+                        item["reactions"]
+                    )
+                else:
+                    feed_reason = FeedReasonType.checked_in
+                    latest_actor_name = None
+                feed_item = {
+                    "type": "checkin",
+                    "data": item,
+                    "feed_reason": feed_reason,
+                    "slot_type": slot_type,
+                }
+                if latest_actor_name is not None:
+                    feed_item["latest_actor_name"] = latest_actor_name
+                items.append(feed_item)
 
         has_next = len(practice_rows) > p_idx or len(checkin_rows) > c_idx
         next_cursor = None
@@ -404,6 +438,112 @@ class FeedService:
         return db.execute(text(sql), bind_params).fetchall()
 
     @staticmethod
+    def _fetch_cheered_pool(
+        db: Session,
+        limit: int,
+        keyword: Optional[str] = None,
+        tags: Optional[list[str]] = None,
+    ) -> list:
+        """
+        Fetch recently cheered practices and checkins for Slot B.
+
+        Uses MAX(r.created_at) as sort_time, DISTINCT ON (item_type, item_id)
+        to avoid duplicates. Returns mixed practice + checkin rows ordered by
+        the most recent reaction time.
+        """
+        practice_where = [
+            "p.privacy_status = 'public'",
+            "p.status IN ('active', 'completed')",
+            "p.deleted_at IS NULL",
+        ]
+        checkin_where = [
+            "p.privacy_status = 'public'",
+            "p.status IN ('active', 'completed')",
+            "p.deleted_at IS NULL",
+        ]
+        bind_params: dict = {"limit": limit}
+
+        if keyword:
+            escaped = (
+                keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            )
+            practice_where.append(
+                "(p.title ILIKE :keyword OR p.practice_action ILIKE :keyword)"
+            )
+            checkin_where.append("c.note ILIKE :keyword")
+            bind_params["keyword"] = f"%{escaped}%"
+
+        if tags:
+            practice_where.append(
+                "EXISTS (SELECT 1 FROM entity_tags et JOIN tags t ON t.id = et.tag_id"
+                " WHERE et.entity_type = 'practice' AND et.entity_id = p.id"
+                " AND t.name = ANY(:tags))"
+            )
+            checkin_where.append(
+                "EXISTS (SELECT 1 FROM entity_tags et JOIN tags t ON t.id = et.tag_id"
+                " WHERE et.entity_type = 'practice' AND et.entity_id = c.practice_id"
+                " AND t.name = ANY(:tags))"
+            )
+            bind_params["tags"] = tags
+
+        p_where_sql = " AND ".join(practice_where)
+        c_where_sql = " AND ".join(checkin_where)
+
+        sql = f"""
+            SELECT item_type, item_id, sort_time
+            FROM (
+                SELECT DISTINCT ON (item_type, item_id)
+                    item_type, item_id, sort_time
+                FROM (
+                    SELECT
+                        'practice' AS item_type,
+                        r.target_id AS item_id,
+                        MAX(r.created_at) AS sort_time
+                    FROM reactions r
+                    JOIN practices p ON p.id = r.target_id
+                    WHERE r.target_type = 'practice'
+                      AND {p_where_sql}
+                    GROUP BY r.target_id
+                    UNION ALL
+                    SELECT
+                        'checkin' AS item_type,
+                        r.target_id AS item_id,
+                        MAX(r.created_at) AS sort_time
+                    FROM reactions r
+                    JOIN practice_checkins c ON c.id = r.target_id
+                    JOIN practices p ON p.id = c.practice_id
+                    WHERE r.target_type = 'checkin'
+                      AND {c_where_sql}
+                    GROUP BY r.target_id
+                ) combined
+                ORDER BY item_type, item_id, sort_time DESC
+            ) deduped
+            ORDER BY sort_time DESC
+            LIMIT :limit
+        """
+        return db.execute(text(sql), bind_params).fetchall()
+
+    @staticmethod
+    def _get_latest_actor_name(reactions: list[dict]) -> Optional[str]:
+        """Extract the latest actor name from a reactions list."""
+        for r in reactions:
+            name = r.get("latestActorName")
+            if name:
+                return name
+        return None
+
+    @staticmethod
+    def _build_activity_card_slot() -> Optional[dict]:
+        """Build a Slot B ActivityCard dict with community stats (no DB needed)."""
+        return {
+            "type": "activity",
+            "activity_type": ActivityType.COMMUNITY_EVENT.value,
+            "event_text": "社群最近很活躍，快來看看大家在練什麼！",
+            "label": "學習動態",
+            "slot_type": SlotType.B,
+        }
+
+    @staticmethod
     def _select_slot_a(available: list) -> tuple[list, int]:
         """
         Select 1 or 2 checkins for Slot A from the front of the available pool.
@@ -432,20 +572,24 @@ class FeedService:
     def _assemble_slot_cycles(
         practice_rows: list,
         checkin_rows: list,
+        cheered_rows: list,
         num_cycles: int,
     ) -> tuple[list[dict], int, int]:
         """
-        Assemble A→B→C→C→C cycles (Slot B skipped for MVP).
+        Assemble A→B→C→C→C cycles.
+
+        Slot A: checkin(s) — skipped if pool empty.
+        Slot B: ActivityCard (cheered item or community stats card) — skipped if unavailable.
+        Slot C: 3 practices per cycle — stops if fewer than 3 remain.
 
         Returns (slot_assignments, p_idx_consumed, c_idx_consumed).
-        Stops if fewer than 3 practices remain for Slot C.
-        Skips Slot A if checkin pool is exhausted.
         """
         slots: list[dict] = []
         p_idx = 0
         c_idx = 0
+        ch_idx = 0
 
-        for _ in range(num_cycles):
+        for cycle_num in range(num_cycles):
             # Slot C requires 3 practices; stop if not enough
             if p_idx + 3 > len(practice_rows):
                 break
@@ -460,10 +604,36 @@ class FeedService:
                             "slot_type": SlotType.A,
                             "item_type": "checkin",
                             "item_id": row.item_id,
+                            "feed_source": "original",
                         }
                     )
 
-            # Slot B: skipped for MVP
+            # Slot B: cheered item (first cycle only) or ActivityCard
+            if cycle_num == 0:
+                if ch_idx < len(cheered_rows):
+                    ch_row = cheered_rows[ch_idx]
+                    ch_idx += 1
+                    slots.append(
+                        {
+                            "slot_type": SlotType.B,
+                            "item_type": ch_row.item_type,
+                            "item_id": ch_row.item_id,
+                            "feed_source": "cheered",
+                        }
+                    )
+                else:
+                    # Fallback: community stats ActivityCard
+                    activity_card = FeedService._build_activity_card_slot()
+                    if activity_card:
+                        slots.append(
+                            {
+                                "slot_type": SlotType.B,
+                                "item_type": "activity",
+                                "item_id": 0,
+                                "feed_source": "activity",
+                                "card": activity_card,
+                            }
+                        )
 
             # Slot C: 3 practices
             for i in range(3):
@@ -472,6 +642,7 @@ class FeedService:
                         "slot_type": SlotType.C,
                         "item_type": "practice",
                         "item_id": practice_rows[p_idx + i].item_id,
+                        "feed_source": "original",
                     }
                 )
             p_idx += 3
