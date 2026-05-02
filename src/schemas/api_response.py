@@ -22,7 +22,15 @@ def _normalize_pagination(pagination: Any) -> Optional[dict]:
     if isinstance(pagination, CursorPaginationInfo):
         return pagination.model_dump()
     if isinstance(pagination, dict):
-        return CursorPaginationInfo.model_validate(pagination).model_dump()
+        try:
+            return CursorPaginationInfo.model_validate(pagination).model_dump()
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "pagination schema mismatch, falling back to None: %s", pagination
+            )
+            return None
     return None
 
 

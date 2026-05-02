@@ -196,14 +196,22 @@ class TestGetFeed:
         cache.client.get.return_value = json.dumps(cached_payload)
         db = _make_db()
         db.query.return_value.filter.return_value.first.return_value = MagicMock(id=123)
+        orig_cache = app.dependency_overrides.get(get_cache_client)
+        orig_db = app.dependency_overrides.get(get_db_session)
         app.dependency_overrides[get_cache_client] = lambda: cache
         app.dependency_overrides[get_db_session] = lambda: db
 
         try:
             resp = client.get("/api/v1/feed")
         finally:
-            app.dependency_overrides[get_cache_client] = lambda: _make_cache()
-            app.dependency_overrides[get_db_session] = lambda: _make_db()
+            if orig_cache is not None:
+                app.dependency_overrides[get_cache_client] = orig_cache
+            else:
+                app.dependency_overrides.pop(get_cache_client, None)
+            if orig_db is not None:
+                app.dependency_overrides[get_db_session] = orig_db
+            else:
+                app.dependency_overrides.pop(get_db_session, None)
 
         assert resp.status_code == 200
         body = resp.json()
@@ -222,14 +230,22 @@ class TestGetFeed:
         cache.client.get.return_value = json.dumps(cached_payload)
         db = _make_db()
         db.query.return_value.filter.return_value.first.return_value = MagicMock(id=123)
+        orig_cache = app.dependency_overrides.get(get_cache_client)
+        orig_db = app.dependency_overrides.get(get_db_session)
         app.dependency_overrides[get_cache_client] = lambda: cache
         app.dependency_overrides[get_db_session] = lambda: db
 
         try:
             resp = client.get("/api/v1/feed")
         finally:
-            app.dependency_overrides[get_cache_client] = lambda: _make_cache()
-            app.dependency_overrides[get_db_session] = lambda: _make_db()
+            if orig_cache is not None:
+                app.dependency_overrides[get_cache_client] = orig_cache
+            else:
+                app.dependency_overrides.pop(get_cache_client, None)
+            if orig_db is not None:
+                app.dependency_overrides[get_db_session] = orig_db
+            else:
+                app.dependency_overrides.pop(get_db_session, None)
 
         assert resp.status_code == 200
         body = resp.json()
@@ -384,7 +400,7 @@ class TestSlotCycleOrder:
         # 無 cheered → fallback ActivityCard for Slot B
         cheered_rows: list = []
 
-        slots, p_idx, c_idx = FeedService._assemble_slot_cycles(
+        slots, p_idx, c_idx, _ = FeedService._assemble_slot_cycles(
             practice_rows, checkin_rows, cheered_rows, num_cycles=1
         )
 
@@ -416,7 +432,7 @@ class TestSlotCycleOrder:
         ]
         cheered_rows = []
 
-        slots, _, _ = FeedService._assemble_slot_cycles(
+        slots, _, _, _ = FeedService._assemble_slot_cycles(
             practice_rows, checkin_rows, cheered_rows, num_cycles=2
         )
 
@@ -457,7 +473,7 @@ class TestSlotCycleOrder:
         ]
         cheered_rows = []
 
-        slots, p_idx, c_idx = FeedService._assemble_slot_cycles(
+        slots, p_idx, c_idx, _ = FeedService._assemble_slot_cycles(
             practice_rows,
             checkin_rows,
             cheered_rows,

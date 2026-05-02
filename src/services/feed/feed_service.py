@@ -15,7 +15,6 @@ from src.models.User import User
 from src.schemas.feed import (
     ActivityType,
     FeedReasonType,
-    FeedSortBy,
     FeedTypeFilter,
     SlotType,
 )
@@ -33,7 +32,6 @@ class FeedService:
         keyword: Optional[str] = None,
         tags: Optional[list[str]] = None,
         type_filter: FeedTypeFilter = FeedTypeFilter.ALL,
-        sort_by: FeedSortBy = FeedSortBy.NEWEST,
     ) -> dict:
         """
         統一 feed 查詢：混合 practice + checkin。
@@ -74,24 +72,37 @@ class FeedService:
         tags: Optional[list[str]],
     ) -> dict:
         """Assemble feed in A→B→C→C→C slot cycles."""
-        p_cursor_time, p_cursor_id, c_cursor_time, c_cursor_id = (
-            FeedService._parse_dual_cursor(cursor)
-        )
+        (
+            p_cursor_time,
+            p_cursor_id,
+            c_cursor_time,
+            c_cursor_id,
+            ch_cursor_time,
+            ch_cursor_id,
+        ) = FeedService._parse_dual_cursor(cursor)
 
         max_cycles = max(1, limit // 5)
 
-        # Fetch one extra cycle to determine whether another完整循環 still exists.
+        # Fetch one extra cycle worth of practices to detect has_next.
         practice_rows = FeedService._fetch_practice_pool(
             db, p_cursor_time, p_cursor_id, max_cycles * 3 + 3, keyword, tags
         )
+        # Extra buffer for checkins so cold-start cycles never starve.
         checkin_rows = FeedService._fetch_checkin_pool_with_counts(
-            db, c_cursor_time, c_cursor_id, max_cycles * 2 + 2, keyword, tags
+            db, c_cursor_time, c_cursor_id, max_cycles * 2 + 4, keyword, tags
         )
 
-        # Fetch cheered pool for Slot B (one per cycle)
-        cheered_rows = FeedService._fetch_cheered_pool(db, max_cycles, keyword, tags)
+        # Fetch cheered pool for Slot B (one per cycle), with cursor to avoid repeats.
+        cheered_rows = FeedService._fetch_cheered_pool(
+            db,
+            max_cycles + 1,
+            keyword,
+            tags,
+            cursor_time=ch_cursor_time,
+            cursor_id=ch_cursor_id,
+        )
 
-        slot_assignments, p_idx, c_idx = FeedService._assemble_slot_cycles(
+        slot_assignments, p_idx, c_idx, ch_idx = FeedService._assemble_slot_cycles(
             practice_rows,
             checkin_rows,
             cheered_rows,
@@ -181,20 +192,25 @@ class FeedService:
                     feed_item["latest_actor_name"] = latest_actor_name
                 items.append(feed_item)
 
-        has_next = len(practice_rows) >= p_idx + 3
+        has_next = len(practice_rows) > p_idx
         next_cursor = None
         if has_next:
             p_last = ""
             if p_idx > 0:
-                last_p = practice_rows[min(p_idx, len(practice_rows)) - 1]
+                last_p = practice_rows[p_idx - 1]
                 p_ts = last_p.sort_time.isoformat() if last_p.sort_time else ""
                 p_last = f"{p_ts}_{last_p.item_id}"
             c_last = ""
             if c_idx > 0:
-                last_c = checkin_rows[min(c_idx, len(checkin_rows)) - 1]
+                last_c = checkin_rows[c_idx - 1]
                 c_ts = last_c.sort_time.isoformat() if last_c.sort_time else ""
                 c_last = f"{c_ts}_{last_c.item_id}"
-            next_cursor = f"{p_last}|{c_last}"
+            ch_last = ""
+            if ch_idx > 0:
+                last_ch = cheered_rows[ch_idx - 1]
+                ch_ts = last_ch.sort_time.isoformat() if last_ch.sort_time else ""
+                ch_last = f"{ch_ts}_{last_ch.item_id}"
+            next_cursor = f"{p_last}|{c_last}|{ch_last}"
 
         logger.info(f"feed (slot): {len(items)} items, has_next={has_next}")
         return {"data": items, "next_cursor": next_cursor}
@@ -315,17 +331,28 @@ class FeedService:
     @staticmethod
     def _parse_dual_cursor(
         cursor: Optional[str],
-    ) -> tuple[Optional[str], Optional[int], Optional[str], Optional[int]]:
-        """Parse dual cursor format: '{practice_part}|{checkin_part}'."""
+    ) -> tuple[
+        Optional[str],
+        Optional[int],
+        Optional[str],
+        Optional[int],
+        Optional[str],
+        Optional[int],
+    ]:
+        """Parse cursor: '{practice_part}|{checkin_part}[|{cheered_part}]'."""
         if not cursor:
-            return None, None, None, None
-        if "|" in cursor:
-            p_part, c_part = cursor.split("|", 1)
-        else:
-            p_part, c_part = cursor, ""
-        p_time, p_id = FeedService._parse_cursor_part(p_part)
-        c_time, c_id = FeedService._parse_cursor_part(c_part)
-        return p_time, p_id, c_time, c_id
+            return None, None, None, None, None, None
+        parts = cursor.split("|", 2)
+        p_time, p_id = FeedService._parse_cursor_part(
+            parts[0] if len(parts) > 0 else ""
+        )
+        c_time, c_id = FeedService._parse_cursor_part(
+            parts[1] if len(parts) > 1 else ""
+        )
+        ch_time, ch_id = FeedService._parse_cursor_part(
+            parts[2] if len(parts) > 2 else ""
+        )
+        return p_time, p_id, c_time, c_id, ch_time, ch_id
 
     @staticmethod
     def _fetch_practice_pool(
@@ -445,6 +472,8 @@ class FeedService:
         limit: int,
         keyword: Optional[str] = None,
         tags: Optional[list[str]] = None,
+        cursor_time: Optional[str] = None,
+        cursor_id: Optional[int] = None,
     ) -> list:
         """
         Fetch recently cheered practices and checkins for Slot B.
@@ -491,6 +520,15 @@ class FeedService:
         p_where_sql = " AND ".join(practice_where)
         c_where_sql = " AND ".join(checkin_where)
 
+        cursor_where = ""
+        if cursor_time and cursor_id is not None:
+            cursor_where = (
+                "WHERE (sort_time < :ch_cursor_time"
+                " OR (sort_time = :ch_cursor_time AND item_id < :ch_cursor_id))"
+            )
+            bind_params["ch_cursor_time"] = cursor_time
+            bind_params["ch_cursor_id"] = cursor_id
+
         sql = f"""
             SELECT item_type, item_id, sort_time
             FROM (
@@ -520,6 +558,7 @@ class FeedService:
                 ) combined
                 ORDER BY item_type, item_id, sort_time DESC
             ) deduped
+            {cursor_where}
             ORDER BY sort_time DESC
             LIMIT :limit
         """
@@ -577,17 +616,18 @@ class FeedService:
         cheered_rows: list,
         num_cycles: int,
         max_items: Optional[int] = None,
-    ) -> tuple[list[dict], int, int]:
+    ) -> tuple[list[dict], int, int, int]:
         """
         Assemble A→B→C→C→C cycles.
 
         Slot A: checkin(s) — skipped if pool empty.
-        Slot B: ActivityCard (cheered item or community stats card) — skipped if unavailable.
+        Slot B: cheered item (deduped against A/C) or community stats card.
         Slot C: 3 practices per cycle — stops if fewer than 3 remain.
 
-        Returns (slot_assignments, p_idx_consumed, c_idx_consumed).
+        Returns (slot_assignments, p_idx_consumed, c_idx_consumed, ch_idx_consumed).
         """
         slots: list[dict] = []
+        seen_keys: set[tuple[str, int]] = set()
         p_idx = 0
         c_idx = 0
         ch_idx = 0
@@ -600,12 +640,19 @@ class FeedService:
             cycle_slots: list[dict] = []
             consumed_checkins = 0
 
+            # Pre-register upcoming Slot C practices so Slot B skips duplicates.
+            upcoming_c_keys = {
+                ("practice", practice_rows[p_idx + i].item_id) for i in range(3)
+            }
+
             # Slot A: checkins (skip if pool empty)
             if c_idx < len(checkin_rows):
                 a_rows, consumed_checkins = FeedService._select_slot_a(
                     checkin_rows[c_idx:]
                 )
                 for row in a_rows:
+                    key = ("checkin", row.item_id)
+                    seen_keys.add(key)
                     cycle_slots.append(
                         {
                             "slot_type": SlotType.A,
@@ -615,55 +662,57 @@ class FeedService:
                         }
                     )
 
-            # Slot B: one item per cycle, falling back to ActivityCard
-            if ch_idx < len(cheered_rows):
+            # Slot B: first non-duplicate cheered item, fallback to ActivityCard
+            b_slot = None
+            while ch_idx < len(cheered_rows):
                 ch_row = cheered_rows[ch_idx]
-                cycle_slots.append(
-                    {
+                ch_idx += 1
+                key = (ch_row.item_type, ch_row.item_id)
+                if key not in seen_keys and key not in upcoming_c_keys:
+                    seen_keys.add(key)
+                    b_slot = {
                         "slot_type": SlotType.B,
                         "item_type": ch_row.item_type,
                         "item_id": ch_row.item_id,
                         "feed_source": "cheered",
                     }
-                )
-            else:
+                    break
+
+            if b_slot is None:
                 activity_card = FeedService._build_activity_card_slot()
                 if activity_card:
-                    cycle_slots.append(
-                        {
-                            "slot_type": SlotType.B,
-                            "item_type": "activity",
-                            "item_id": 0,
-                            "feed_source": "activity",
-                            "card": activity_card,
-                        }
-                    )
+                    b_slot = {
+                        "slot_type": SlotType.B,
+                        "item_type": "activity",
+                        "item_id": 0,
+                        "feed_source": "activity",
+                        "card": activity_card,
+                    }
+
+            if b_slot:
+                cycle_slots.append(b_slot)
 
             # Slot C: 3 practices
             for i in range(3):
+                row = practice_rows[p_idx + i]
+                seen_keys.add(("practice", row.item_id))
                 cycle_slots.append(
                     {
                         "slot_type": SlotType.C,
                         "item_type": "practice",
-                        "item_id": practice_rows[p_idx + i].item_id,
+                        "item_id": row.item_id,
                         "feed_source": "original",
                     }
                 )
 
-            if (
-                max_items is not None
-                and len(slots) + len(cycle_slots) > max_items
-                and slots
-            ):
+            if max_items is not None and len(slots) + len(cycle_slots) > max_items:
                 break
 
             slots.extend(cycle_slots)
             c_idx += consumed_checkins
-            if ch_idx < len(cheered_rows):
-                ch_idx += 1
             p_idx += 3
 
-        return slots, p_idx, c_idx
+        return slots, p_idx, c_idx, ch_idx
 
     # =========================================================================
     # Batch fetch helpers

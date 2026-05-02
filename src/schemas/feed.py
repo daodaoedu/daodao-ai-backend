@@ -38,6 +38,6 @@ class ActivityType(str, Enum):
 
 class ActivityCardItem(TypedDict):
     item_type: Literal["activity"]
-    activity_type: str
+    activity_type: ActivityType
     event_text: str
     label: str

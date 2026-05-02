@@ -8,7 +8,7 @@ from src.logger import AppLogger
 from src.models.User import User
 from src.response_template import api_response_decorator
 from src.auto_metrics import observe_api
-from src.schemas.feed import FeedSortBy, FeedTypeFilter
+from src.schemas.feed import FeedTypeFilter
 from src.schemas.pageInfo import CursorPaginationInfo
 from src.services.feed.feed_service import FeedService
 
@@ -40,7 +40,9 @@ def get_feed(
     keyword: Optional[str] = Query(None, description="搜尋關鍵字"),
     tags: Optional[list[str]] = Query(None, description="標籤篩選"),
     type_filter: FeedTypeFilter = Query(
-        FeedTypeFilter.ALL, description="篩選類型: all | practice | checkin"
+        FeedTypeFilter.ALL,
+        alias="type",
+        description="篩選類型: all | practice | checkin",
     ),
 ):
     # ── 解析 user_id（沿用 /v1/users/practices pattern）──
@@ -69,9 +71,6 @@ def get_feed(
                     f"cache parse error for key={cache_key}, falling back to DB"
                 )
 
-    # ── 登入用戶自動啟用推薦排序 ──
-    sort_by = FeedSortBy.RECOMMENDED if user_id else FeedSortBy.NEWEST
-
     # ── 實際查詢 ──
     result = FeedService.get_feed(
         db=db,
@@ -81,7 +80,6 @@ def get_feed(
         keyword=keyword,
         tags=tags,
         type_filter=type_filter,
-        sort_by=sort_by,
     )
 
     next_cursor = result.get("next_cursor")
@@ -102,7 +100,9 @@ def get_feed(
     # ── 寫入 cache ──
     if user_id:
         try:
-            cache.client.set(cache_key, json.dumps(payload), ex=FEED_CACHE_TTL)
+            cache.client.set(
+                cache_key, json.dumps(payload, default=str), ex=FEED_CACHE_TTL
+            )
         except Exception:
             logger.warning(f"cache write error for key={cache_key}, skipping cache")
 
