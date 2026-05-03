@@ -32,7 +32,7 @@ class LLMBackendConfig(BaseConfigSettings):
 
 class RedisSettings(BaseConfigSettings):
     model_config = SettingsConfigDict(
-        env_file=[".env", str(ENV_FILE_PATH)],
+        env_file=[_ENV_FILE, ".env", str(ENV_FILE_PATH)],
         env_prefix="REDIS_",
         extra="ignore",
         frozen=True,
@@ -49,7 +49,7 @@ class PostgreSQLSettings(BaseSettings):
     """PostgreSQL configuration settings."""
 
     model_config = SettingsConfigDict(
-        env_file=[".env", str(ENV_FILE_PATH)],
+        env_file=[_ENV_FILE, ".env", str(ENV_FILE_PATH)],
         env_prefix="POSTGRES_",
         extra="ignore",
         frozen=True,
@@ -73,7 +73,7 @@ class PostgreSQLSettings(BaseSettings):
 
 class ClickHouseSettings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=[".env", str(ENV_FILE_PATH)],
+        env_file=[_ENV_FILE, ".env", str(ENV_FILE_PATH)],
         env_prefix="CLICKHOUSE_",
         extra="ignore",
         frozen=True,
@@ -90,7 +90,7 @@ class InsightSettings(BaseConfigSettings):
     """精選洞察排程設定"""
 
     model_config = SettingsConfigDict(
-        env_file=[".env", str(ENV_FILE_PATH)],
+        env_file=[_ENV_FILE, ".env", str(ENV_FILE_PATH)],
         env_prefix="INSIGHT__",
         extra="ignore",
         frozen=True,
@@ -106,7 +106,7 @@ _LLM_BACKEND_DEFAULTS: Dict[str, Dict[str, str]] = {
     "openai": {"url": "https://api.openai.com/v1/responses", "model": "gpt-4o"},
     "gemini": {
         "url": "https://generativelanguage.googleapis.com",
-        "model": "gemini-2.0-flash",
+        "model": "gemini-2.5-flash",
     },
     "anthropic": {
         "url": "https://api.anthropic.com/v1/messages",
@@ -148,6 +148,7 @@ class Settings(BaseConfigSettings):
     @model_validator(mode="before")
     @classmethod
     def _merge_llm_backend_defaults(cls, data: Any) -> Any:
+
         if not isinstance(data, dict):
             return data
         llm_data = data.get("llm_backend")
