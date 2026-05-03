@@ -144,12 +144,14 @@ jobs:
               cd $src_DIR
             fi
 
-            # 檢查環境文件
+            # 每次 deploy 都從 sample 重建，確保 non-secret config 保持最新
             ENV_FILE=".env.${src_ENV}"
 
-            if [ ! -f .env.${src_ENV} ] && [ -f .env.${src_ENV}.sample ]; then
+            if [ -f ".env.${src_ENV}.sample" ]; then
               cp ".env.${src_ENV}.sample" "$ENV_FILE"
-              echo "Created $ENV_FILE from .sample"
+              echo "✅ Rebuilt $ENV_FILE from .sample"
+            else
+              echo "⚠️ .env.${src_ENV}.sample not found, keeping existing $ENV_FILE"
             fi
 
             # ── 強制刷新 Secrets ──
