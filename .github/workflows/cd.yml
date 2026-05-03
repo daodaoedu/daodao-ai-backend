@@ -153,25 +153,31 @@ jobs:
             fi
 
             # ── 強制刷新 Secrets ──
-            # 先移除上次 CD 注入的區塊（marker 行到檔尾），避免每次 deploy 累積增長
-            sed -i '/^# --- Updated by GitHub Actions CD ---/,$d' "$ENV_FILE"
-            # 使用 cat << 'EOF' 是處理包含特殊字元（如 | & $）的 API Key 最安全的方法
-            echo "" >> "$ENV_FILE"
-            echo "# --- Updated by GitHub Actions CD ---" >> "$ENV_FILE"
-            cat << 'EOF' >> "$ENV_FILE"
-          JWT_SECURITY=${{ secrets.JWT_SECURITY }}
-          COLLECTION_NAME=${{ secrets.COLLECTION_NAME }}
-          POSTGRES_DB_USER=${{ secrets.POSTGRES_DB_USER }}
-          POSTGRES_DB_PASSWORD=${{ secrets.POSTGRES_DB_PASSWORD }}
-          POSTGRES_DB_NAME=${{ secrets.POSTGRES_DB_NAME }}
-          API_SECRET_KEY=${{ secrets.API_SECRET_KEY }}
-          LLM_BACKEND__OPENAI__API_KEY=${{ secrets.LLM_BACKEND__OPENAI__API_KEY }}
-          LLM_BACKEND__GEMINI__API_KEY=${{ secrets.LLM_BACKEND__GEMINI__API_KEY }}
-          LLM_BACKEND__ANTHROPIC__API_KEY=${{ secrets.LLM_BACKEND__ANTHROPIC__API_KEY }}
-          LLM_BACKEND__GROQ__API_KEY=${{ secrets.LLM_BACKEND__GROQ__API_KEY }}
-          INSIGHT__LLM_BACKEND=${{ secrets.INSIGHT__LLM_BACKEND }}
-          INSIGHT__SCHEDULE_CRON=${{ secrets.INSIGHT__SCHEDULE_CRON }}
-          EOF
+            # 用 sed 原地替換：key 存在則更新值，不存在則 append
+            # 避免重複 key（原始 placeholder + CD 注入真實值）
+            set_env_var() {
+              local key="$1"
+              local value="$2"
+              # 用 | 作為 sed 分隔符，避免 value 含 / 時出錯
+              if grep -q "^${key}=" "$ENV_FILE"; then
+                sed -i "s|^${key}=.*|${key}=${value}|" "$ENV_FILE"
+              else
+                echo "${key}=${value}" >> "$ENV_FILE"
+              fi
+            }
+
+            set_env_var "JWT_SECURITY"                    "${{ secrets.JWT_SECURITY }}"
+            set_env_var "COLLECTION_NAME"                 "${{ secrets.COLLECTION_NAME }}"
+            set_env_var "POSTGRES_DB_USER"                "${{ secrets.POSTGRES_DB_USER }}"
+            set_env_var "POSTGRES_DB_PASSWORD"            "${{ secrets.POSTGRES_DB_PASSWORD }}"
+            set_env_var "POSTGRES_DB_NAME"                "${{ secrets.POSTGRES_DB_NAME }}"
+            set_env_var "API_SECRET_KEY"                  "${{ secrets.API_SECRET_KEY }}"
+            set_env_var "LLM_BACKEND__OPENAI__API_KEY"    "${{ secrets.LLM_BACKEND__OPENAI__API_KEY }}"
+            set_env_var "LLM_BACKEND__GEMINI__API_KEY"    "${{ secrets.LLM_BACKEND__GEMINI__API_KEY }}"
+            set_env_var "LLM_BACKEND__ANTHROPIC__API_KEY" "${{ secrets.LLM_BACKEND__ANTHROPIC__API_KEY }}"
+            set_env_var "LLM_BACKEND__GROQ__API_KEY"      "${{ secrets.LLM_BACKEND__GROQ__API_KEY }}"
+            set_env_var "INSIGHT__LLM_BACKEND"            "${{ secrets.INSIGHT__LLM_BACKEND }}"
+            set_env_var "INSIGHT__SCHEDULE_CRON"          "${{ secrets.INSIGHT__SCHEDULE_CRON }}"
 
             echo "✅ Generated $ENV_FILE with latest GitHub Secrets"
 
