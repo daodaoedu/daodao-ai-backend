@@ -153,6 +153,8 @@ jobs:
             fi
 
             # ── 強制刷新 Secrets ──
+            # 先移除上次 CD 注入的區塊（marker 行到檔尾），避免每次 deploy 累積增長
+            sed -i '/^# --- Updated by GitHub Actions CD ---/,$d' "$ENV_FILE"
             # 使用 cat << 'EOF' 是處理包含特殊字元（如 | & $）的 API Key 最安全的方法
             echo "" >> "$ENV_FILE"
             echo "# --- Updated by GitHub Actions CD ---" >> "$ENV_FILE"
