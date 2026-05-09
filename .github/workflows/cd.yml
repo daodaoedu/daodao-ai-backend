@@ -144,14 +144,18 @@ jobs:
               cd $src_DIR
             fi
 
-            # 每次 deploy 都從 sample 重建，確保 non-secret config 保持最新
             ENV_FILE=".env.${src_ENV}"
 
-            if [ -f ".env.${src_ENV}.sample" ]; then
-              cp ".env.${src_ENV}.sample" "$ENV_FILE"
-              echo "✅ Rebuilt $ENV_FILE from .sample"
+            if [ ! -f "$ENV_FILE" ]; then
+              if [ -f ".env.${src_ENV}.sample" ]; then
+                cp ".env.${src_ENV}.sample" "$ENV_FILE"
+                echo "✅ Initialized $ENV_FILE from .sample (first deploy)"
+              else
+                echo "⚠️ .env.${src_ENV}.sample not found, cannot initialize $ENV_FILE"
+                exit 1
+              fi
             else
-              echo "⚠️ .env.${src_ENV}.sample not found, keeping existing $ENV_FILE"
+              echo "✅ $ENV_FILE already exists, keeping existing config"
             fi
 
             # ── 強制刷新 Secrets ──
