@@ -16,16 +16,23 @@ class OpenAIBackend(BaseLLMBackend):
         self._client = AsyncOpenAI(
             api_key=config.get("api_key"),
             base_url=config.get("url", "https://api.openai.com/v1"),
+            timeout=120.0,
         )
 
     async def generate(
         self, prompt: str, **kwargs
     ) -> Tuple[str, float, Dict[str, Any], str]:
+        api_kwargs: dict = {}
+        if kwargs.get("temperature") is not None:
+            api_kwargs["temperature"] = float(kwargs["temperature"])
+        if kwargs.get("top_p") is not None:
+            api_kwargs["top_p"] = float(kwargs["top_p"])
         try:
             response = await self._client.responses.create(
                 model=self.config["model"],
                 input=prompt,
                 max_output_tokens=kwargs.get("max_tokens", 1000),
+                **api_kwargs,
             )
             output = response.output_text or "未提供回應"
             details = getattr(response.usage, "input_tokens_details", None)
@@ -34,12 +41,13 @@ class OpenAIBackend(BaseLLMBackend):
                 "input_tokens": response.usage.input_tokens,
                 "output_tokens": response.usage.output_tokens,
                 "input_tokens_details": {"cached_tokens": cached_tokens},
+                "finish_reason": response.status,
             }
             cost = self._calc_cost(usage_dict)
             return output, cost, usage_dict, "openai"
         except Exception as e:
             logger.error(f"OpenAI 呼叫失敗: {e}")
-            return f"錯誤：{e}", 0.0, {}, "openai"
+            raise
 
     async def check_health(self) -> bool:
         try:

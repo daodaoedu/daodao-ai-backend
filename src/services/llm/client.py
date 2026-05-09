@@ -8,6 +8,7 @@ from src.services.llm.gemini_backend import GeminiBackend
 from src.services.llm.groq_backend import GroqBackend
 from src.services.llm.ollama_backend import OllamaBackend
 from src.services.llm.openai_backend import OpenAIBackend
+from src.services.llm.openai_chat_backend import OpenAIChatBackend
 from src.services.prompts.prompts import RAGPromptBuilder, ResponseParser
 
 logger = AppLogger(__name__).get_logger()
@@ -18,6 +19,11 @@ _BACKEND_MAP: Dict[str, type] = {
     "anthropic": AnthropicBackend,
     "ollama": OllamaBackend,
     "groq": GroqBackend,
+    "cloudflare": OpenAIChatBackend,
+    "nvidia": OpenAIChatBackend,
+    "cerebras": OpenAIChatBackend,
+    "openrouter": OpenAIChatBackend,
+    "ollama_cloud": OpenAIChatBackend,
 }
 
 
@@ -37,6 +43,7 @@ class LLMClient:
                 "url": backend_cfg.url,
                 "model": backend_cfg.model,
                 "api_key": backend_cfg.api_key,
+                "backend_name": backend,
             }
         )
         # 保留給外部服務使用的 prompt 工具

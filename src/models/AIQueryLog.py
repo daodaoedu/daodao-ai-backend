@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import Column, Index, Integer, Numeric, String, Text
+from sqlalchemy import Boolean, Column, Index, Integer, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP, UUID
 from sqlalchemy.sql import func
 
@@ -50,6 +50,13 @@ class AIQueryLog(Base):
 
     # prompt 字元數（不存 prompt 原文，保護隱私 + 避免大欄位）
     prompt_chars = Column(Integer, nullable=True)
+
+    output_chars = Column(Integer, nullable=True)
+    finish_reason = Column(String(50), nullable=True)
+    http_status_code = Column(Integer, nullable=True)
+    retry_count = Column(Integer, nullable=True)
+    is_stream = Column(Boolean, nullable=True)
+    service_config_id = Column(Integer, nullable=True)
 
     # 主要聚合維度：created_at
     created_at = Column(

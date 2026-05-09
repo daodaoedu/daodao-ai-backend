@@ -34,11 +34,13 @@ class LoggingLLMClient:
         db_session_factory: Callable[[], AbstractContextManager],
         context: str = "unknown",
         user_id: Optional[str] = None,
+        service_config_id: Optional[int] = None,
     ):
         self._client = llm_client
         self._session_factory = db_session_factory
         self.context = context
         self.user_id = user_id
+        self.service_config_id = service_config_id
         # 透傳 LLMClient 的 backend 名稱，供外部識別
         self.backend = llm_client.backend
 
@@ -86,6 +88,7 @@ class LoggingLLMClient:
                 status=status,
                 error_message=error_message,
                 prompt_chars=len(prompt),
+                output_chars=len(output),
             )
 
         return output, cost, usage, backend_name
@@ -99,6 +102,7 @@ class LoggingLLMClient:
         status: str,
         error_message: Optional[str],
         prompt_chars: int,
+        output_chars: int = 0,
     ) -> None:
         """同步寫入 AIQueryLog，使用獨立 session。失敗時只 log 不拋錯。"""
         # 延遲 import 避免循環依賴
@@ -129,6 +133,9 @@ class LoggingLLMClient:
             error_message=error_message,
             usage_detail=usage,
             prompt_chars=prompt_chars,
+            output_chars=output_chars,
+            finish_reason=usage.get("finish_reason"),
+            service_config_id=self.service_config_id,
         )
 
         try:

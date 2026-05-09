@@ -17,28 +17,38 @@ class AnthropicBackend(BaseLLMBackend):
         self._client = AsyncAnthropic(
             api_key=config.get("api_key"),
             base_url=config.get("url", "https://api.anthropic.com"),
+            timeout=120.0,
         )
 
     async def generate(
         self, prompt: str, **kwargs
     ) -> Tuple[str, float, Dict[str, Any], str]:
         max_tokens = kwargs.get("max_tokens", 1024)
+        api_kwargs: dict = {}
+        if kwargs.get("temperature") is not None:
+            api_kwargs["temperature"] = min(float(kwargs["temperature"]), 1.0)
+        if kwargs.get("top_p") is not None:
+            api_kwargs["top_p"] = float(kwargs["top_p"])
+        if kwargs.get("top_k") is not None:
+            api_kwargs["top_k"] = int(kwargs["top_k"])
         try:
             message = await self._client.messages.create(
                 model=self.config["model"],
                 max_tokens=max_tokens,
                 messages=[{"role": "user", "content": prompt}],
+                **api_kwargs,
             )
             output = message.content[0].text if message.content else "未提供回應"
             usage_dict = {
                 "input_tokens": message.usage.input_tokens,
                 "output_tokens": message.usage.output_tokens,
+                "finish_reason": message.stop_reason,
             }
             cost = self._calc_cost(usage_dict)
             return output, cost, usage_dict, "anthropic"
         except Exception as e:
             logger.error(f"Anthropic 呼叫失敗: {e}")
-            return f"錯誤：{e}", 0.0, {}, "anthropic"
+            raise
 
     async def check_health(self) -> bool:
         try:
