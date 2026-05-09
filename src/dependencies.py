@@ -89,11 +89,13 @@ def get_clickhouse_client(request: Request) -> ClickHouseClient:
 
 
 def get_admin_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db_session),
 ) -> User:
     """
     FastAPI Dependency：驗證 JWT 存在且用戶 role.name == 'admin' / 'superadmin'。
+    優先讀 Authorization Bearer header，fallback 讀 auth_token cookie。
     回傳 User ORM 物件供 admin routes 使用。
 
     查詢順序：
@@ -101,12 +103,18 @@ def get_admin_user(
     2. JWT 的 _id → mongo_id 欄位
     3. JWT 的 _id → external_id 欄位（UUID 格式 fallback）
     """
-    if credentials is None:
+    token: Optional[str] = None
+    if credentials is not None:
+        token = credentials.credentials
+    else:
+        token = request.cookies.get("auth_token")
+
+    if not token:
         raise HTTPException(
             status_code=403, detail="Admin access required: not authenticated"
         )
 
-    decoded = verify(credentials.credentials)
+    decoded = verify(token)
     if not decoded:
         raise HTTPException(
             status_code=403, detail="Admin access required: invalid or expired token"
