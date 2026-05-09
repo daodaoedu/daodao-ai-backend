@@ -3,7 +3,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
-from src.dependencies import AdminDep, CacheDep, SessionDep
+from src.dependencies import AdminDep, CacheDep, SessionDep, SettingsDep
 from src.models.LLMModel import LLMModel
 from src.response_template import api_response_decorator
 from src.schemas.admin.llm_model import LLMModelCreate, LLMModelRead, LLMModelUpdate
@@ -134,3 +134,32 @@ def delete_llm_model(
         "pagination": None,
         "cache_hit": False,
     }
+
+
+@router.post("/llm-models/sync/{provider}")
+@api_response_decorator
+async def sync_provider_models(
+    provider: str,
+    admin: AdminDep,  # noqa: ARG001
+    db: SessionDep,
+    cache: CacheDep,
+    settings: SettingsDep,
+) -> dict:
+    """呼叫指定 provider 的 API 取得最新模型清單，upsert 進 llm_models 表。"""
+    from src.services.admin.model_sync_service import (
+        SUPPORTED_PROVIDERS,
+        sync_provider_models as _sync,
+    )
+
+    if provider not in SUPPORTED_PROVIDERS:
+        raise HTTPException(status_code=422, detail=f"不支援的 provider: {provider}")
+
+    try:
+        result = await _sync(provider=provider, db=db, settings=settings)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Provider API 呼叫失敗: {e}")
+
+    _invalidate_cache(cache)
+    return {"data": result, "pagination": None, "cache_hit": False}

@@ -116,6 +116,26 @@ _LLM_BACKEND_DEFAULTS: Dict[str, Dict[str, str]] = {
         "url": "https://api.groq.com/openai/v1",
         "model": "llama-3.3-70b-versatile",
     },
+    "cloudflare": {
+        "url": "https://api.cloudflare.com/client/v4/accounts/PLACEHOLDER/ai/v1",
+        "model": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    },
+    "nvidia": {
+        "url": "https://integrate.api.nvidia.com/v1",
+        "model": "meta/llama-3.3-70b-instruct",
+    },
+    "cerebras": {
+        "url": "https://api.cerebras.ai/v1",
+        "model": "llama3.1-8b",
+    },
+    "openrouter": {
+        "url": "https://openrouter.ai/api/v1",
+        "model": "meta-llama/llama-3.3-70b-instruct:free",
+    },
+    "ollama_cloud": {
+        "url": "https://ollama.com/v1",
+        "model": "gpt-oss:120b",
+    },
 }
 
 
@@ -172,7 +192,30 @@ class Settings(BaseConfigSettings):
     collection_name: str = "daodao_collection"
 
     #
+    cloudflare_account_id: str = ""
     api_secret_key: str = "xxxxxxxxxxxxxxxx"
+
+    @model_validator(mode="after")
+    def _inject_cloudflare_account_id(self) -> "Settings":
+        if self.cloudflare_account_id:
+            cf_cfg = self.llm_backend.get("cloudflare")
+            if cf_cfg and "PLACEHOLDER" in cf_cfg.url:
+                # LLMBackendConfig is frozen, rebuild
+                object.__setattr__(
+                    self,
+                    "llm_backend",
+                    {
+                        **self.llm_backend,
+                        "cloudflare": LLMBackendConfig(
+                            url=cf_cfg.url.replace(
+                                "PLACEHOLDER", self.cloudflare_account_id
+                            ),
+                            model=cf_cfg.model,
+                            api_key=cf_cfg.api_key,
+                        ),
+                    },
+                )
+        return self
 
 
 def get_settings() -> Settings:

@@ -1,7 +1,7 @@
 """
 LLMModel 業務邏輯：
 - seed_llm_models：lifespan 啟動時將 Settings.llm_backend 寫入 llm_models 表（冪等）
-  啟動時會進行健康檢查，若失敗則標記為 is_active=False。
+  只做 seed，不做健康檢查，不覆蓋 is_active。
 """
 
 from decimal import Decimal
@@ -11,7 +11,6 @@ from sqlalchemy.orm import Session
 from src.config import Settings
 from src.logger import AppLogger
 from src.models.LLMModel import LLMModel
-from src.services.llm.client import LLMClient
 
 logger = AppLogger(__name__).get_logger()
 
@@ -50,29 +49,13 @@ async def seed_llm_models(
     db: Session, settings: Settings, cache: Optional[Any] = None
 ) -> None:
     """
-    Lifespan 啟動時呼叫：
-    - 不存在 → insert
-    - 存在 → 進行健康檢查並更新 is_active 狀態
-    - 額外：將不在 settings 中的模型設為 is_active=False
+    Lifespan 啟動時呼叫（冪等）：
+    - 不存在 → insert（is_active=False，由 admin 手動啟用）
+    - 存在 → 只補全費率（若全為 0），不動 is_active
     """
-    active_configs = []
-
     for provider, config in settings.llm_backend.items():
         model_name = config.model
-        active_configs.append((provider, model_name))
         costs = _KNOWN_COSTS.get((provider, model_name))
-
-        # ── 執行健康檢查 ──
-        logger.info(f"[LLMHealth] 正在檢查 {provider} ({model_name})...")
-        is_healthy = False
-        try:
-            client = LLMClient(settings, provider)
-            is_healthy = await client._backend.check_health()
-        except Exception as e:
-            logger.error(f"[LLMHealth] 檢查 {provider} 發生異常: {e}")
-
-        status_msg = "✅ 可用" if is_healthy else "❌ 不可用"
-        logger.info(f"[LLMHealth] {provider}: {status_msg}")
 
         existing = (
             db.query(LLMModel)
@@ -89,7 +72,7 @@ async def seed_llm_models(
                     provider=provider,
                     model_name=model_name,
                     display_name=f"{provider} / {model_name}",
-                    is_active=is_healthy,
+                    is_active=False,
                     input_cost_per_1m=costs["input"] if costs else Decimal("0"),
                     output_cost_per_1m=costs["output"] if costs else Decimal("0"),
                     cached_input_cost_per_1m=(
@@ -98,11 +81,8 @@ async def seed_llm_models(
                 )
             )
             logger.info(f"[LLMModelSeed] 已插入 {provider}/{model_name}")
-
         else:
-            # 更新狀態
-            existing.is_active = is_healthy
-            # 若費率為 0 則補全
+            # 只補全費率，不覆蓋 is_active
             if costs and (
                 existing.input_cost_per_1m == 0
                 and existing.output_cost_per_1m == 0
@@ -112,20 +92,6 @@ async def seed_llm_models(
                 existing.output_cost_per_1m = costs["output"]
                 existing.cached_input_cost_per_1m = costs["cached_input"]
                 logger.info(f"[LLMModelSeed] 費率已補全 {provider}/{model_name}")
-
-            logger.debug(
-                f"[LLMModelSeed] {provider}/{model_name} 狀態已更新為 {is_healthy}"
-            )
-
-    # ── 新增：清理邏輯 ──
-    # 將資料庫中「不在設定檔內」的模型全部設為停用
-    db_models = db.query(LLMModel).filter(LLMModel.is_active).all()
-    for db_m in db_models:
-        if (db_m.provider, db_m.model_name) not in active_configs:
-            db_m.is_active = False
-            logger.info(
-                f"[LLMModelSeed] 已停用未使用的模型: {db_m.provider}/{db_m.model_name}"
-            )
 
     db.commit()
 
