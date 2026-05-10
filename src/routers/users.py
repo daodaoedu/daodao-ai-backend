@@ -152,7 +152,7 @@ def get_my_practices(
             f":dur:{duration_min if duration_min is not None else ''}-{duration_max if duration_max is not None else ''}"
             f":status:{status if status is not None else '__none__'}"
             f":sort:{sort_by}"
-            f":limit:{limit}:after:{after_id or 0}"
+            f":limit:{limit}:offset:{offset}:after:{after_id or 0}"
         )
         cached = cache.client.get(cache_key)
         if cached:

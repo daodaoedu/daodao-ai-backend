@@ -520,4 +520,4 @@ class PracticeService:
         else:
             query = query.order_by(sort_col.asc().nullsfirst(), Practice.id.asc())
 
-        return query.limit(limit).all()
+        return query.offset(offset).limit(limit).all()
