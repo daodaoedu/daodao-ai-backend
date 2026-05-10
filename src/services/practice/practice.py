@@ -31,6 +31,7 @@ class PracticeService:
         status=None,
         sort_by="newest_updated",
         limit=20,
+        offset=0,
         after_id=None,
     ):
         """
@@ -63,7 +64,7 @@ class PracticeService:
 
         else:
             practices = PracticeService._apply_sort_and_pagination(
-                query, sort_by, limit, after_id=after_id, db=db
+                query, sort_by, limit, offset, after_id=after_id, db=db
             )
 
         return practices
@@ -478,7 +479,9 @@ class PracticeService:
     # =========================================================
 
     @staticmethod
-    def _apply_sort_and_pagination(query, sort_by, limit, after_id=None, db=None):
+    def _apply_sort_and_pagination(
+        query, sort_by, limit, offset=0, after_id=None, db=None
+    ):
         sort_configs = {
             "newest_updated": (Practice.updated_at, "desc"),
             "oldest_updated": (Practice.updated_at, "asc"),

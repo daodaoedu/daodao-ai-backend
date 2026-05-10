@@ -118,6 +118,7 @@ def get_my_practices(
     cache: CacheDep,
     # pagination
     limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     after_id: Optional[int] = Query(
         None, description="上一次最後一筆的 id，作為 cursor"
     ),
@@ -174,6 +175,7 @@ def get_my_practices(
         status=status,
         sort_by=sort_by,
         limit=limit,
+        offset=offset,
         after_id=after_id,
     )
 
