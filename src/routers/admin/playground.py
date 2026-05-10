@@ -216,7 +216,22 @@ async def playground_insight(
     # 5. 計算統計
     stats = _analyze_checkins(checkins)
 
-    # 6. 組 prompt
+    # 6. 解析 system prompt override（system_prompt_id 優先於 system_prompt_override）
+    system_prompt_override = body.system_prompt_override
+    if body.system_prompt_id is not None:
+        sp = (
+            db.query(SystemPrompt)
+            .filter(SystemPrompt.id == body.system_prompt_id)
+            .first()
+        )
+        if sp is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"SystemPrompt {body.system_prompt_id} not found",
+            )
+        system_prompt_override = sp.content
+
+    # 7. 組 prompt
     prompt = _build_prompt(
         practice=practice,
         checkins=checkins,
@@ -226,10 +241,10 @@ async def playground_insight(
         include_practice_info=body.include_practice_info,
         include_checkin_stats=body.include_checkin_stats,
         include_notable_notes=body.include_notable_notes,
-        system_prompt_override=body.system_prompt_override,
+        system_prompt_override=system_prompt_override,
     )
 
-    # 7. 建立 LLM client（覆寫 model 為 DB 紀錄的 model_name）
+    # 8. 建立 LLM client（覆寫 model 為 DB 紀錄的 model_name）
     llm_client = LLMClient(settings, model.provider)
     llm_client._backend.config["model"] = model.model_name
     logging_client = LoggingLLMClient(
