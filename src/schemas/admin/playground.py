@@ -34,6 +34,7 @@ class PlaygroundInsightRequest(BaseModel):
     practice_id: int
     model_id: int
     save: bool = False
+    system_prompt_id: Optional[int] = None
     system_prompt_override: Optional[str] = None
     include_user_profile: bool = True
     include_practice_info: bool = True
