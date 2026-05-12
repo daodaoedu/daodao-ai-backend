@@ -1,5 +1,8 @@
 """
 測試 config.py 環境變數載入行為
+
+注意：get_settings() 使用 @lru_cache，測試若需要不同 env 設定，
+須在 fixture 或測試結尾呼叫 get_settings.cache_clear() 清除快取。
 """
 
 import pytest
