@@ -36,8 +36,17 @@ class ActivityType(str, Enum):
     FOLLOW_SUMMARY = "follow_summary"
 
 
+class ActivityEventType(str, Enum):
+    REACTION = "reaction"
+    COMMENT = "comment"
+
+
 class ActivityCardItem(TypedDict):
     item_type: Literal["activity"]
     activity_type: ActivityType
+    event_type: ActivityEventType
+    event_id: str
     event_text: str
     label: str
+    practice_id: str
+    checkin_id: str
