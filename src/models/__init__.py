@@ -38,6 +38,11 @@ from .UserPosition import UserPosition
 from .UserProfile import UserProfile
 from .UserProject import UserProject
 from .Category import Category
+from .AIQueryLog import AIQueryLog
+from .LLMModel import LLMModel
+from .RecommendationFeedback import RecommendationFeedback
+from .SystemPrompt import SystemPrompt
+from .UserTokenQuota import UserTokenQuota
 
 #
 
@@ -79,6 +84,11 @@ __all__ = [
     "EntityTag",
     "Tag",
     "PracticeTemplate",
+    "AIQueryLog",
+    "LLMModel",
+    "RecommendationFeedback",
+    "SystemPrompt",
+    "UserTokenQuota",
 ]
 
 

@@ -24,14 +24,12 @@ def _make_scheduler() -> InsightScheduler:
     settings.insight.schedule_cron = "0 1 * * *"
     settings.insight.llm_backend = "anthropic"
     settings.llm_backend = {
-        "anthropic": MagicMock(url="", model="claude-3-5-sonnet-20241022", api_key="key")
+        "anthropic": MagicMock(
+            url="", model="claude-3-5-sonnet-20241022", api_key="key"
+        )
     }
     database = MagicMock()
-
-    with patch("src.services.insight.insight_scheduler.LLMClient"):
-        scheduler = InsightScheduler(settings, database)
-
-    return scheduler
+    return InsightScheduler(settings, database)
 
 
 def _make_practice(practice_id: int) -> MagicMock:
@@ -87,6 +85,9 @@ class TestInsightSchedulerRunJob:
 
         generated_insights = [MagicMock() for _ in practices]
 
+        async def _side_effect(db, llm, practice):
+            return generated_insights[practice.id - 1]
+
         with (
             patch(
                 "src.services.insight.insight_scheduler.insight_service.get_pending_practices",
@@ -94,7 +95,7 @@ class TestInsightSchedulerRunJob:
             ),
             patch(
                 "src.services.insight.insight_scheduler.insight_service.generate_for_practice",
-                side_effect=[AsyncMock(return_value=ins)() for ins in generated_insights],
+                side_effect=_side_effect,
             ),
         ):
             await scheduler._run_job()
@@ -159,6 +160,24 @@ class TestInsightSchedulerRunJob:
         ):
             await scheduler._run_job()  # 不 raise 即通過
 
+    @pytest.mark.asyncio
+    async def test_llm_client_init_failure_skips_job(self):
+        """LLM client 初始化失敗時，任務應跳過且不往外拋例外"""
+        scheduler = _make_scheduler()
+
+        with (
+            patch(
+                "src.services.insight.insight_scheduler.LLMClient",
+                side_effect=RuntimeError("missing api key"),
+            ),
+            patch(
+                "src.services.insight.insight_scheduler.insight_service.get_pending_practices",
+            ) as mock_get_pending,
+        ):
+            await scheduler._run_job()
+
+        mock_get_pending.assert_not_called()
+
 
 # ─────────────────────────────────────────────────────────────
 # InsightScheduler start / stop
@@ -170,9 +189,10 @@ class TestInsightSchedulerLifecycle:
     def test_start_adds_job_and_starts_scheduler(self):
         scheduler = _make_scheduler()
 
-        with patch.object(scheduler._scheduler, "add_job") as mock_add, patch.object(
-            scheduler._scheduler, "start"
-        ) as mock_start:
+        with (
+            patch.object(scheduler._scheduler, "add_job") as mock_add,
+            patch.object(scheduler._scheduler, "start") as mock_start,
+        ):
             scheduler.start()
 
         mock_add.assert_called_once()

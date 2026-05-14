@@ -1,17 +1,23 @@
 import os
+from functools import lru_cache
 from pathlib import Path
-from typing import Dict, Literal, Optional
+from typing import Any, Dict, Literal, Optional
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).parent.parent
 ENV_FILE_PATH = PROJECT_ROOT / ".env"
 
 
+# 根據環境變數決定讀取的 env 檔案
+_ENV = os.getenv("ENVIRONMENT", "development")
+_ENV_FILE = ".env.prod" if _ENV == "production" else ".env.dev"
+
+
 class BaseConfigSettings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=[".env", str(ENV_FILE_PATH)],
+        env_file=[_ENV_FILE, ".env", str(ENV_FILE_PATH)],
         extra="ignore",
         frozen=True,
         env_nested_delimiter="__",
@@ -27,7 +33,7 @@ class LLMBackendConfig(BaseConfigSettings):
 
 class RedisSettings(BaseConfigSettings):
     model_config = SettingsConfigDict(
-        env_file=[".env", str(ENV_FILE_PATH)],
+        env_file=[_ENV_FILE, ".env", str(ENV_FILE_PATH)],
         env_prefix="REDIS_",
         extra="ignore",
         frozen=True,
@@ -44,7 +50,7 @@ class PostgreSQLSettings(BaseSettings):
     """PostgreSQL configuration settings."""
 
     model_config = SettingsConfigDict(
-        env_file=[".env", str(ENV_FILE_PATH)],
+        env_file=[_ENV_FILE, ".env", str(ENV_FILE_PATH)],
         env_prefix="POSTGRES_",
         extra="ignore",
         frozen=True,
@@ -68,7 +74,7 @@ class PostgreSQLSettings(BaseSettings):
 
 class ClickHouseSettings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=[".env", str(ENV_FILE_PATH)],
+        env_file=[_ENV_FILE, ".env", str(ENV_FILE_PATH)],
         env_prefix="CLICKHOUSE_",
         extra="ignore",
         frozen=True,
@@ -85,7 +91,7 @@ class InsightSettings(BaseConfigSettings):
     """精選洞察排程設定"""
 
     model_config = SettingsConfigDict(
-        env_file=[".env", str(ENV_FILE_PATH)],
+        env_file=[_ENV_FILE, ".env", str(ENV_FILE_PATH)],
         env_prefix="INSIGHT__",
         extra="ignore",
         frozen=True,
@@ -96,7 +102,54 @@ class InsightSettings(BaseConfigSettings):
     llm_backend: str = "groq"  # 預設使用 Groq
 
 
+_LLM_BACKEND_DEFAULTS: Dict[str, Dict[str, str]] = {
+    "ollama": {"url": "http://ollama-dev:11434/api/generate", "model": "qwen2.5:1.5b"},
+    "openai": {"url": "https://api.openai.com/v1/responses", "model": "gpt-4o"},
+    "gemini": {
+        "url": "https://generativelanguage.googleapis.com",
+        "model": "gemini-2.5-flash",
+    },
+    "anthropic": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "model": "claude-3-5-sonnet-20241022",
+    },
+    "groq": {
+        "url": "https://api.groq.com/openai/v1",
+        "model": "llama-3.3-70b-versatile",
+    },
+    "cloudflare": {
+        "url": "https://api.cloudflare.com/client/v4/accounts/PLACEHOLDER/ai/v1",
+        "model": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    },
+    "nvidia": {
+        "url": "https://integrate.api.nvidia.com/v1",
+        "model": "meta/llama-3.3-70b-instruct",
+    },
+    "cerebras": {
+        "url": "https://api.cerebras.ai/v1",
+        "model": "llama3.1-8b",
+    },
+    "openrouter": {
+        "url": "https://openrouter.ai/api/v1",
+        "model": "meta-llama/llama-3.3-70b-instruct:free",
+    },
+    "ollama_cloud": {
+        "url": "https://ollama.com/v1",
+        "model": "gpt-oss:120b",
+    },
+}
+
+
 class Settings(BaseConfigSettings):
+    model_config = SettingsConfigDict(
+        env_file=[_ENV_FILE, ".env", str(ENV_FILE_PATH)],
+        extra="ignore",
+        frozen=True,
+        env_nested_delimiter="__",
+        case_sensitive=False,
+        validate_assignment=True,
+    )
+
     app_version: str = "0.1.0"
     debug: bool = True
     environment: Literal["development", "staging", "production"] = "development"
@@ -109,47 +162,64 @@ class Settings(BaseConfigSettings):
 
     llm_backend: Dict[str, LLMBackendConfig] = Field(
         default_factory=lambda: {
-            "ollama": LLMBackendConfig(
-                url="http://ollama-dev:11434/api/generate",
-                model="phi3:mini",
-            ),
-            "openai": LLMBackendConfig(
-                url="https://api.openai.com/v1/responses",
-                model="gpt-4o",
-                api_key=os.getenv("OPENAI_API_KEY"),
-            ),
-            "gemini": LLMBackendConfig(
-                url="https://generativelanguage.googleapis.com",
-                model="gemini-2.0-flash",
-                api_key=os.getenv("GEMINI_API_KEY"),
-            ),
-            "anthropic": LLMBackendConfig(
-                url="https://api.anthropic.com/v1/messages",
-                model="claude-3-5-sonnet-20241022",
-                api_key=os.getenv("ANTHROPIC_API_KEY"),
-            ),
-            "groq": LLMBackendConfig(
-                url="https://api.groq.com/openai/v1",
-                model="llama-3.3-70b-versatile",
-                api_key=os.getenv("GROQ_API_KEY"),
-            ),
+            k: LLMBackendConfig(**v) for k, v in _LLM_BACKEND_DEFAULTS.items()
         }
     )
 
+    @model_validator(mode="before")
+    @classmethod
+    def _merge_llm_backend_defaults(cls, data: Any) -> Any:
+
+        if not isinstance(data, dict):
+            return data
+        llm_data = data.get("llm_backend")
+        if not llm_data or not isinstance(llm_data, dict):
+            return data
+        merged: Dict[str, Dict] = {k: dict(v) for k, v in _LLM_BACKEND_DEFAULTS.items()}
+        for provider, cfg in llm_data.items():
+            if isinstance(cfg, dict):
+                merged.setdefault(provider, {})
+                merged[provider].update(
+                    {k: v for k, v in cfg.items() if v is not None and v != ""}
+                )
+        data["llm_backend"] = merged
+        return data
+
     jwt_security: str = "xxxxxxxxxxxxxxxx"
     jwt_expiration: str = "1h"
-
-    class Config:
-        validate_assignment = True  # 允許設定後驗證
 
     # Qdrant
     qdrant_url: str = "http://qdrant-dev:6333"
     collection_name: str = "daodao_collection"
 
     #
+    cloudflare_account_id: str = ""
     api_secret_key: str = "xxxxxxxxxxxxxxxx"
 
+    @model_validator(mode="after")
+    def _inject_cloudflare_account_id(self) -> "Settings":
+        if self.cloudflare_account_id:
+            cf_cfg = self.llm_backend.get("cloudflare")
+            if cf_cfg and "PLACEHOLDER" in cf_cfg.url:
+                # LLMBackendConfig is frozen, rebuild
+                object.__setattr__(
+                    self,
+                    "llm_backend",
+                    {
+                        **self.llm_backend,
+                        "cloudflare": LLMBackendConfig(
+                            url=cf_cfg.url.replace(
+                                "PLACEHOLDER", self.cloudflare_account_id
+                            ),
+                            model=cf_cfg.model,
+                            api_key=cf_cfg.api_key,
+                        ),
+                    },
+                )
+        return self
 
+
+@lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings()
 

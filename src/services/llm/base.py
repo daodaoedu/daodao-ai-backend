@@ -18,6 +18,13 @@ class BaseLLMBackend(ABC):
         """
         raise NotImplementedError
 
+    @abstractmethod
+    async def check_health(self) -> bool:
+        """
+        檢查 LLM backend 是否可用（API Key, URL, 模型權限）。
+        """
+        raise NotImplementedError
+
     def _estimate_tokens(self, text: str) -> int:
         return max(1, len(text) // 4)
 

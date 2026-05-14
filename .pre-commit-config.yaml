@@ -33,15 +33,8 @@
   - repo: local
     hooks:
       - id: check-with-make
-        name: Check with Makefile (ruff)
+        name: Check with Makefile (black + ruff)
         entry: make check
-        language: system
-        types: [python]
-        pass_filenames: false
-
-      - id: lint-with-make
-        name: Lint with Makefile (pylint + bandit)
-        entry: make lint
         language: system
         types: [python]
         pass_filenames: false

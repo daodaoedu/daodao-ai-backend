@@ -1,12 +1,15 @@
 from typing import Annotated, Generator, Optional
 
-from fastapi import Depends, Request
+from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import String
 from sqlalchemy.orm import Session
 
 from src.config import Settings, get_settings
 from src.db.interface_db import BaseDatabase
 from src.db.postgresql import PostgreSQLDatabase
+from src.models.Role import Role
+from src.models.User import User
 from src.services.cache.client import CacheClient
 from src.services.clickhouse.client import ClickHouseClient
 from src.services.llm.client import LLMClient
@@ -17,28 +20,30 @@ security = HTTPBearer(auto_error=False)
 
 
 def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
 ) -> Optional[str]:
-    # def get_current_user(authorization: Optional[str] = Header(None)):
-
     """
     FastAPI Dependency: 驗證 JWT 並回傳 payload
+    優先讀 Authorization Bearer header，fallback 讀 auth_token cookie
     """
 
-    # ⭐ 無 token → 無痕模式
-    if credentials is None:
-        return None
+    token: Optional[str] = None
 
-    token = credentials.credentials
+    if credentials is not None:
+        token = credentials.credentials
+    else:
+        # Fallback: 從 cookie 讀取（與 daodao-server 共用 auth_token）
+        token = request.cookies.get("auth_token")
+
+    if not token:
+        return None
 
     try:
         decoded = verify(token)
-
         if not decoded:
             return None
-
         return decoded.get("_id")
-
     except Exception:
         return None
 
@@ -83,6 +88,63 @@ def get_clickhouse_client(request: Request) -> ClickHouseClient:
     return request.app.state.clickhouse_client
 
 
+def get_admin_user(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db_session),
+) -> User:
+    """
+    FastAPI Dependency：驗證 JWT 存在且用戶 role.name == 'admin' / 'superadmin'。
+    優先讀 Authorization Bearer header，fallback 讀 auth_token cookie。
+    回傳 User ORM 物件供 admin routes 使用。
+
+    查詢順序：
+    1. JWT 的 id（PostgreSQL PK，最可靠）
+    2. JWT 的 _id → mongo_id 欄位
+    3. JWT 的 _id → external_id 欄位（UUID 格式 fallback）
+    """
+    token: Optional[str] = None
+    if credentials is not None:
+        token = credentials.credentials
+    else:
+        token = request.cookies.get("auth_token")
+
+    if not token:
+        raise HTTPException(
+            status_code=403, detail="Admin access required: not authenticated"
+        )
+
+    decoded = verify(token)
+    if not decoded:
+        raise HTTPException(
+            status_code=403, detail="Admin access required: invalid or expired token"
+        )
+
+    numeric_id = decoded.get("id")
+    mongo_id = decoded.get("_id")
+
+    user: Optional[User] = None
+    if numeric_id:
+        user = db.query(User).filter(User.id == int(numeric_id)).first()
+    if user is None and mongo_id:
+        user = db.query(User).filter(User.mongo_id == mongo_id).first()
+    if user is None and mongo_id:
+        user = db.query(User).filter(User.external_id.cast(String) == mongo_id).first()
+
+    if user is None:
+        raise HTTPException(
+            status_code=403, detail="Admin access required: user not found"
+        )
+
+    role: Optional[Role] = db.query(Role).filter(Role.id == user.role_id).first()
+    if role is None or role.name.lower() not in ("admin", "superadmin"):
+        raise HTTPException(
+            status_code=403, detail="Admin access required: insufficient permissions"
+        )
+
+    return user
+
+
 # Dependency annotations
 
 
@@ -97,3 +159,4 @@ CacheDep = Annotated[CacheClient, Depends(get_cache_client)]
 DatabaseDep = Annotated[BaseDatabase, Depends(get_database_postgres)]
 SessionDep = Annotated[Session, Depends(get_db_session)]
 UserDep = Annotated[Optional[str], Depends(get_current_user)]
+AdminDep = Annotated[User, Depends(get_admin_user)]

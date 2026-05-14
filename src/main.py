@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
-
 from fastapi import FastAPI
+from sqlalchemy.orm import configure_mappers
 
 # from starlette.concurrency import run_in_threadpool
 
@@ -9,10 +9,12 @@ from src.db.factory import make_database
 from src.logger import AppLogger
 from src.middleware.middleware import setup_middlewares
 from src.routers import feed, insight, ping, recommendation, users
-from src.services.insight.insight_scheduler import InsightScheduler
+from src.routers.admin import router as admin_router
 from src.services.cache.factory import make_cache_client
-
-from sqlalchemy.orm import configure_mappers
+from src.services.admin.llm_model_service import seed_llm_models
+from src.services.admin.prompt_service import seed_default_prompts
+from src.services.quota_service import seed_admin_quotas
+from src.services.insight.insight_scheduler import InsightScheduler
 
 configure_mappers()
 
@@ -61,12 +63,18 @@ async def lifespan(app: FastAPI):
     # await run_in_threadpool(app.state.qdrant_client.create_collection)
     logger.info("✅ daodao_collection ready")
 
+    # 啟動時 seed system prompts + llm models + admin quotas（冪等）
+    with app.state.database.get_session() as db:
+        seed_default_prompts(db)
+        await seed_llm_models(db, settings, cache=app.state.cache_client)
+        seed_admin_quotas(db)
+
     # 啟動精選洞察排程（LLM backend 未設定時跳過，不影響主服務）
     try:
         insight_scheduler = InsightScheduler(settings, app.state.database)
         insight_scheduler.start()
         app.state.insight_scheduler = insight_scheduler
-    except ValueError as exc:
+    except (ValueError, RuntimeError) as exc:
         logger.warning(f"InsightScheduler 啟動失敗，已跳過: {exc}")
         app.state.insight_scheduler = None
 
@@ -83,8 +91,8 @@ def _build_servers(environment: str) -> list:
     server_config = {
         "production": [{"url": "https://ai.daodao.so", "description": "Production"}],
         "development": [
-            {"url": "https://ai-dev.daodao.so", "description": "Development"},
             {"url": "http://127.0.0.1:8002", "description": "Local Development"},
+            {"url": "https://ai-dev.daodao.so", "description": "Development"},
         ],
     }
     # 若找不到對應的環境設定，預設回傳 development 的設定
@@ -111,6 +119,7 @@ app.include_router(feed.router, prefix="/api", tags=["feed"])
 app.include_router(insight.router, prefix="/api", tags=["insights"])
 
 app.include_router(ping.router, prefix="/api", tags=["Health"])
+app.include_router(admin_router, prefix="/api", tags=["admin"])
 
 
 @app.get("/")

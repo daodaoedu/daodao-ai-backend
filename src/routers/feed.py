@@ -1,14 +1,14 @@
 import json
+from typing import Optional
 
 from fastapi import APIRouter, Query
-from typing import Optional
 
 from src.dependencies import SessionDep, UserDep, CacheDep
 from src.logger import AppLogger
 from src.models.User import User
 from src.response_template import api_response_decorator
 from src.auto_metrics import observe_api
-from src.schemas.feed import FeedSortBy, FeedTypeFilter
+from src.schemas.feed import FeedTypeFilter
 from src.schemas.pageInfo import CursorPaginationInfo
 from src.services.feed.feed_service import FeedService
 
@@ -31,11 +31,18 @@ def get_feed(
     current_user: UserDep,
     cache: CacheDep,
     cursor: Optional[str] = Query(None, description="分頁游標"),
-    limit: int = Query(20, ge=1, le=100, description="每頁數量"),
+    limit: int = Query(
+        20,
+        ge=1,
+        le=100,
+        description="每頁最多回傳幾張卡片；type=all 時會以完整循環單位（5～6 格）回傳",
+    ),
     keyword: Optional[str] = Query(None, description="搜尋關鍵字"),
     tags: Optional[list[str]] = Query(None, description="標籤篩選"),
-    type: FeedTypeFilter = Query(
-        FeedTypeFilter.ALL, description="篩選類型: all | practice | checkin"
+    type_filter: FeedTypeFilter = Query(
+        FeedTypeFilter.ALL,
+        alias="type",
+        description="篩選類型: all | practice | checkin",
     ),
 ):
     # ── 解析 user_id（沿用 /v1/users/practices pattern）──
@@ -51,7 +58,7 @@ def get_feed(
             f"feed:user:{user_id}"
             f":kw:{keyword if keyword is not None else '__none__'}"
             f":tags:{tags_str}"
-            f":type:{type.value}"
+            f":type:{type_filter.value}"
             f":limit:{limit}:cursor:{cursor or '0'}"
         )
         cached = cache.client.get(cache_key)
@@ -64,9 +71,6 @@ def get_feed(
                     f"cache parse error for key={cache_key}, falling back to DB"
                 )
 
-    # ── 登入用戶自動啟用推薦排序 ──
-    sort_by = FeedSortBy.RECOMMENDED if user_id else FeedSortBy.NEWEST
-
     # ── 實際查詢 ──
     result = FeedService.get_feed(
         db=db,
@@ -75,22 +79,22 @@ def get_feed(
         limit=limit,
         keyword=keyword,
         tags=tags,
-        type_filter=type,
-        sort_by=sort_by,
+        type_filter=type_filter,
     )
 
     next_cursor = result.get("next_cursor")
+    pagination = CursorPaginationInfo(
+        cursors={
+            "start": cursor,
+            "end": next_cursor,
+        },
+        hasPrev=cursor is not None,
+        hasNext=next_cursor is not None,
+        count=len(result["data"]),
+    )
     payload = {
         "data": result["data"],
-        "pagination": CursorPaginationInfo(
-            cursors={
-                "start": cursor,
-                "end": next_cursor,
-            },
-            hasPrev=cursor is not None,
-            hasNext=next_cursor is not None,
-            count=len(result["data"]),
-        ),
+        "pagination": pagination.model_dump(),
     }
 
     # ── 寫入 cache ──
