@@ -7,6 +7,7 @@ from src.models import AIReviewFeedback
 from src.schemas.feedback import GenerateFeedbackRequest
 from src.services.cache.client import CacheClient
 from src.services.llm.client import LLMClient
+from src.services.llm.guardrail import GuardrailLayer
 
 logger = AppLogger(__name__).get_logger()
 
@@ -16,7 +17,8 @@ def pre_process_feedback(
     context: str,
     wordNum: int = 300,
 ) -> str:
-    prompt = f"你是一個專業的摘要生成工具，能夠讀取一段文字並將其精簡成重點，並且保持原始意圖不變。請將以下內容進行摘要，並保持字數在 {wordNum} 字以內：\n\n{context}\n\n請給出精簡的版本。"
+    safe_context = GuardrailLayer.sanitize_user_input(context)
+    prompt = f"你是一個專業的摘要生成工具，能夠讀取一段文字並將其精簡成重點，並且保持原始意圖不變。請將以下內容進行摘要，並保持字數在 {wordNum} 字以內：\n\n{safe_context}\n\n請給出精簡的版本。"
 
     output, cost, usage, llm_name = llm_client.generate(prompt)
     logger.info(
@@ -43,6 +45,7 @@ def process_feedback(
         logger.info(f"feedback:{task_id}, status : pending")
         cache_clent.write_dict(f"feedback:{task_id}", {"status": "pending"})
 
+        GuardrailLayer.sanitize_user_input(context)
         if len(context) > 300:
             context = pre_process_feedback(
                 llm_client=llm_client, context=context, wordNum=300

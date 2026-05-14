@@ -21,6 +21,7 @@ from src.services.insight.insight_service import (
     get_checkins_for_practice,
 )
 from src.services.llm.client import LLMClient
+from src.services.llm.guardrail import GuardrailLayer, GuardrailViolationError
 from src.services.llm.logging_client import LoggingLLMClient
 from src.services.quota_service import QuotaExceededError
 
@@ -59,6 +60,13 @@ async def playground_chat(
         )
 
     # 2. 組合 prompt
+    try:
+        safe_message = GuardrailLayer.sanitize_user_input(body.message)
+    except GuardrailViolationError as exc:
+        raise HTTPException(
+            status_code=400, detail=f"訊息內容違反安全規則：{exc}"
+        ) from exc
+
     system_content = ""
     if body.system_prompt_id is not None:
         sp = (
@@ -70,7 +78,7 @@ async def playground_chat(
             system_content = sp.content
 
     full_prompt = (
-        f"{system_content}\n\n---\n{body.message}" if system_content else body.message
+        f"{system_content}\n\n---\n{safe_message}" if system_content else safe_message
     )
 
     # 3. 建立 LLM client（使用 model.provider 對應的 backend，覆寫 model_name）

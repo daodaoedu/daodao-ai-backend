@@ -13,6 +13,7 @@ from src.models.PracticeCheckIn import PracticeCheckIn
 from src.models.User import User
 from src.services.admin.prompt_service import get_active_system_prompt
 from src.services.llm.client import LLMClient
+from src.services.llm.guardrail import GuardrailLayer
 
 _THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
 
@@ -142,7 +143,8 @@ def _build_prompt(
         for c in stats["notable_notes"]:
             date_str = str(c.checkin_date) if c.checkin_date else "未知日期"
             mood_str = c.mood or "未記錄"
-            note_lines.append(f"  - {date_str} | {mood_str} | 「{c.note.strip()}」")
+            safe_note = GuardrailLayer.sanitize_user_input(c.note.strip())
+            note_lines.append(f"  - {date_str} | {mood_str} | 「{safe_note}」")
         notes_block = "精選打卡筆記（情緒最鮮明的紀錄）：\n" + "\n".join(note_lines)
     else:
         notes_block = "精選打卡筆記：（用戶未留下筆記，請根據統計數據生成洞察）"
@@ -154,7 +156,9 @@ def _build_prompt(
         if user.nickname:
             profile_parts.append(f"暱稱：{user.nickname}")
         if user.personal_slogan:
-            profile_parts.append(f"個人格言：{user.personal_slogan}")
+            profile_parts.append(
+                f"個人格言：{GuardrailLayer.sanitize_user_input(user.personal_slogan)}"
+            )
         if user.professional_field:
             profile_parts.append(f"專業領域：{user.professional_field}")
         if user.custom_position:
@@ -172,7 +176,9 @@ def _build_prompt(
         if user.basic_info and user.basic_info.self_introduction:
             intro = user.basic_info.self_introduction.strip()
             if intro:
-                profile_parts.append(f"自我介紹：{intro}")
+                profile_parts.append(
+                    f"自我介紹：{GuardrailLayer.sanitize_user_input(intro)}"
+                )
         # preferences
         if db is not None:
             rows = db.execute(
@@ -200,9 +206,14 @@ def _build_prompt(
     sections = []
 
     if include_practice_info:
+        safe_action = (
+            GuardrailLayer.sanitize_user_input(practice.practice_action)
+            if practice.practice_action
+            else "（未填寫）"
+        )
         sections.append(
-            f"實踐標題：{practice.title}\n"
-            f"目標行動：{practice.practice_action or '（未填寫）'}\n"
+            f"實踐標題：{GuardrailLayer.sanitize_user_input(practice.title)}\n"
+            f"目標行動：{safe_action}\n"
             f"持續天數：{practice.duration_days or '未設定'} 天"
         )
 
