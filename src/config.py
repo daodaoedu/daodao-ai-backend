@@ -1,4 +1,5 @@
 import os
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Literal, Optional
 
@@ -218,6 +219,7 @@ class Settings(BaseConfigSettings):
         return self
 
 
+@lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings()
 
