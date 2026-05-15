@@ -169,7 +169,6 @@ class Settings(BaseConfigSettings):
     @model_validator(mode="before")
     @classmethod
     def _merge_llm_backend_defaults(cls, data: Any) -> Any:
-
         if not isinstance(data, dict):
             return data
         llm_data = data.get("llm_backend")
