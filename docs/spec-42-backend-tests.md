@@ -182,7 +182,7 @@ checkin_exists = (
 
 ## 12.6 整合測試：組合篩選 — tags + status + duration 精確性
 
-**Target**: `GET /api/v1/users/practices?tags=ai&status=active&duration=7`  
+**Target**: `GET /api/v1/users/practices?tags=ai&status=active&duration_min=7&duration_max=7`  
 **Test type**: pytest + TestClient + 測試用 DB
 
 ### 測試設計
