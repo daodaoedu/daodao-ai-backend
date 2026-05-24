@@ -106,6 +106,9 @@ app = FastAPI(
     version="1.0.0",
     servers=_build_servers(_settings.environment),
     lifespan=lifespan,
+    docs_url="/docs" if _settings.debug else None,
+    redoc_url="/redoc" if _settings.debug else None,
+    openapi_url="/openapi.json" if _settings.debug else None,
 )
 
 setup_middlewares(app)
