@@ -113,12 +113,14 @@ class FeedService:
             db, max_cycles + 1, user_id, keyword, tags
         )
 
-        slot_assignments, p_idx, c_idx, last_consumed_practice = FeedService._assemble_slot_cycles(
-            practice_rows,
-            checkin_rows,
-            activity_events,
-            max_cycles,
-            max_items=limit,
+        slot_assignments, p_idx, c_idx, last_consumed_practice = (
+            FeedService._assemble_slot_cycles(
+                practice_rows,
+                checkin_rows,
+                activity_events,
+                max_cycles,
+                max_items=limit,
+            )
         )
 
         if not slot_assignments:
@@ -202,7 +204,11 @@ class FeedService:
             p_last = ""
             if last_consumed_practice is not None:
                 # 用最後實際分配到 Slot C 的 practice，而非 p_idx-1（可能是 Rule ③ 跳過的）
-                p_ts = last_consumed_practice.sort_time.isoformat() if last_consumed_practice.sort_time else ""
+                p_ts = (
+                    last_consumed_practice.sort_time.isoformat()
+                    if last_consumed_practice.sort_time
+                    else ""
+                )
                 p_last = f"{p_ts}_{last_consumed_practice.item_id}"
             c_last = ""
             if c_idx > 0:
@@ -1012,7 +1018,10 @@ class FeedService:
                 )
 
             # Slot C: advance past practices already shown in Slot A (Rule ③)
-            while p_idx < len(practice_rows) and practice_rows[p_idx].item_id in shown_practice_ids:
+            while (
+                p_idx < len(practice_rows)
+                and practice_rows[p_idx].item_id in shown_practice_ids
+            ):
                 p_idx += 1
 
             if p_idx >= len(practice_rows):
