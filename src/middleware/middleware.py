@@ -82,7 +82,6 @@ def setup_middlewares(app: FastAPI):
                 "/api/v1/ping",
                 "/api/v1/health",
                 "/api/v1/admin",  # JWT 驗證已足夠，瀏覽器不送 x-api-key
-                "/metrics",
                 "/docs",
                 "/redoc",
                 "/openapi.json",
@@ -91,6 +90,18 @@ def setup_middlewares(app: FastAPI):
         async def dispatch(self, request: Request, call_next):
             if self.environment == "development":
                 return await call_next(request)
+
+            # /metrics requires explicit Bearer token (METRICS_SECRET env var)
+            if request.url.path.startswith("/metrics"):
+                import os
+                metrics_token = os.environ.get("METRICS_SECRET")
+                if metrics_token:
+                    auth = request.headers.get("Authorization", "")
+                    if auth != f"Bearer {metrics_token}":
+                        raise HTTPException(status_code=401, detail="Unauthorized: metrics endpoint requires Bearer token")
+                else:
+                    # Fall through to API key check below
+                    pass
 
             # 不驗證的路徑
             for path in self.exempt_paths:
