@@ -101,14 +101,17 @@ def _build_servers(environment: str) -> list:
 
 _settings = get_settings()
 
+_is_production = _settings.environment == "production"
+
 app = FastAPI(
     title="DAODAO AI backend API",
     version="1.0.0",
+    debug=_settings.debug,
+    docs_url=None if _is_production else "/docs",
+    redoc_url=None if _is_production else "/redoc",
+    openapi_url=None if _is_production else "/openapi.json",
     servers=_build_servers(_settings.environment),
     lifespan=lifespan,
-    docs_url="/docs" if _settings.debug else None,
-    redoc_url="/redoc" if _settings.debug else None,
-    openapi_url="/openapi.json" if _settings.debug else None,
 )
 
 setup_middlewares(app)
