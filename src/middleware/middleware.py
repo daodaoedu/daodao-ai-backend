@@ -82,7 +82,6 @@ def setup_middlewares(app: FastAPI):
                 "/api/v1/ping",
                 "/api/v1/health",
                 "/api/v1/admin",  # JWT 驗證已足夠，瀏覽器不送 x-api-key
-                "/metrics",
                 "/docs",
                 "/redoc",
                 "/openapi.json",
@@ -90,6 +89,20 @@ def setup_middlewares(app: FastAPI):
 
         async def dispatch(self, request: Request, call_next):
             if self.environment == "development":
+                return await call_next(request)
+
+            # /metrics 需要獨立的 Bearer token 認證（Prometheus scraper 用）
+            if request.url.path == "/metrics":
+                metrics_secret = settings.metrics_secret
+                if not metrics_secret:
+                    raise HTTPException(
+                        status_code=403, detail="Forbidden: metrics_secret not configured"
+                    )
+                auth_header = request.headers.get("Authorization", "")
+                if auth_header != f"Bearer {metrics_secret}":
+                    raise HTTPException(
+                        status_code=403, detail="Forbidden: Invalid metrics token"
+                    )
                 return await call_next(request)
 
             # 不驗證的路徑
