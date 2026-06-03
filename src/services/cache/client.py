@@ -1,4 +1,4 @@
-import pickle
+import json
 from datetime import timedelta
 
 import redis
@@ -31,19 +31,19 @@ class CacheClient:
         return r
 
     @classmethod
-    def write_dict(self, key, value, expire=None):
+    def write_dict(cls, key, value, expire=None):
         expire_in_seconds = expire or 600
 
-        r = self._get_r()
-        r.set(key, pickle.dumps(value), ex=expire_in_seconds)
+        r = cls._get_r()
+        r.set(key, json.dumps(value, default=str), ex=expire_in_seconds)
 
     @classmethod
-    def read_dict(self, key):
-        r = self._get_r()
+    def read_dict(cls, key):
+        r = cls._get_r()
         data = r.get(key)
         if data is None:
             return None
-        return pickle.loads(data)
+        return json.loads(data)
 
     @classmethod
     def delete(self, *names):
