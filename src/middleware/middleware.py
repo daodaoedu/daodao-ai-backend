@@ -74,10 +74,9 @@ def setup_middlewares(app: FastAPI):
     from fastapi import HTTPException
 
     class ApiKeyMiddleware(BaseHTTPMiddleware):
-        def __init__(self, app, api_key: str, environment: str):
+        def __init__(self, app, api_key: str):
             super().__init__(app)
             self.api_key = api_key
-            self.environment = environment
             self.exempt_paths = (
                 "/api/v1/ping",
                 "/api/v1/health",
@@ -89,9 +88,6 @@ def setup_middlewares(app: FastAPI):
             )
 
         async def dispatch(self, request: Request, call_next):
-            if self.environment == "development":
-                return await call_next(request)
-
             # 不驗證的路徑
             for path in self.exempt_paths:
                 if request.url.path.startswith(path):
@@ -111,7 +107,6 @@ def setup_middlewares(app: FastAPI):
     app.add_middleware(
         ApiKeyMiddleware,
         api_key=settings.api_secret_key,
-        environment=settings.environment,
     )
 
     # === Prometheus Instrumentator ===
