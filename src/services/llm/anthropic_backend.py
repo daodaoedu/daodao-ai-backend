@@ -3,7 +3,7 @@ from typing import Any, Dict, Tuple
 from anthropic import AsyncAnthropic
 
 from src.logger import AppLogger
-from src.services.llm.base import BaseLLMBackend
+from src.services.llm.base import BaseLLMBackend, with_retry
 
 logger = AppLogger(__name__).get_logger()
 
@@ -17,7 +17,7 @@ class AnthropicBackend(BaseLLMBackend):
         self._client = AsyncAnthropic(
             api_key=config.get("api_key"),
             base_url=config.get("url", "https://api.anthropic.com"),
-            timeout=120.0,
+            timeout=30.0,
         )
 
     async def generate(
@@ -32,11 +32,13 @@ class AnthropicBackend(BaseLLMBackend):
         if kwargs.get("top_k") is not None:
             api_kwargs["top_k"] = int(kwargs["top_k"])
         try:
-            message = await self._client.messages.create(
-                model=self.config["model"],
-                max_tokens=max_tokens,
-                messages=[{"role": "user", "content": prompt}],
-                **api_kwargs,
+            message = await with_retry(
+                lambda: self._client.messages.create(
+                    model=self.config["model"],
+                    max_tokens=max_tokens,
+                    messages=[{"role": "user", "content": prompt}],
+                    **api_kwargs,
+                )
             )
             output = message.content[0].text if message.content else "未提供回應"
             usage_dict = {

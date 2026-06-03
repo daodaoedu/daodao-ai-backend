@@ -4,7 +4,7 @@ from google import genai
 from google.genai import types as genai_types
 
 from src.logger import AppLogger
-from src.services.llm.base import BaseLLMBackend
+from src.services.llm.base import BaseLLMBackend, with_retry
 
 logger = AppLogger(__name__).get_logger()
 
@@ -16,7 +16,7 @@ class GeminiBackend(BaseLLMBackend):
         super().__init__(config)
         self._client = genai.Client(
             api_key=config.get("api_key"),
-            http_options={"timeout": 120000},
+            http_options={"timeout": 30000},
         )
 
     async def generate(
@@ -33,14 +33,16 @@ class GeminiBackend(BaseLLMBackend):
             gen_config["top_k"] = int(kwargs["top_k"])
         try:
             # 修正：google-genai SDK 的異步調用方式
-            response = await self._client.aio.models.generate_content(
-                model=self.config["model"],
-                contents=prompt,
-                config=(
-                    genai_types.GenerateContentConfig(**gen_config)
-                    if gen_config
-                    else None
-                ),
+            response = await with_retry(
+                lambda: self._client.aio.models.generate_content(
+                    model=self.config["model"],
+                    contents=prompt,
+                    config=(
+                        genai_types.GenerateContentConfig(**gen_config)
+                        if gen_config
+                        else None
+                    ),
+                )
             )
             output = response.text or "未提供回應"
             meta = response.usage_metadata

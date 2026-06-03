@@ -3,7 +3,7 @@ from typing import Any, Dict, Tuple
 from openai import AsyncOpenAI
 
 from src.logger import AppLogger
-from src.services.llm.base import BaseLLMBackend
+from src.services.llm.base import BaseLLMBackend, with_retry
 
 logger = AppLogger(__name__).get_logger()
 
@@ -16,7 +16,7 @@ class GroqBackend(BaseLLMBackend):
         self._client = AsyncOpenAI(
             api_key=config.get("api_key"),
             base_url=config.get("url", "https://api.groq.com/openai/v1"),
-            timeout=120.0,
+            timeout=30.0,
         )
 
     async def generate(
@@ -24,12 +24,14 @@ class GroqBackend(BaseLLMBackend):
     ) -> Tuple[str, float, Dict[str, Any], str]:
         top_p_val = kwargs.get("top_p")
         try:
-            response = await self._client.chat.completions.create(
-                model=self.config["model"],
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=kwargs.get("max_tokens", 2000),
-                temperature=kwargs.get("temperature", 0.7),
-                **({"top_p": float(top_p_val)} if top_p_val is not None else {}),
+            response = await with_retry(
+                lambda: self._client.chat.completions.create(
+                    model=self.config["model"],
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=kwargs.get("max_tokens", 2000),
+                    temperature=kwargs.get("temperature", 0.7),
+                    **({"top_p": float(top_p_val)} if top_p_val is not None else {}),
+                )
             )
             output = response.choices[0].message.content or "未提供回應"
             usage_dict = {

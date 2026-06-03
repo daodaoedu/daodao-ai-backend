@@ -3,7 +3,7 @@ from typing import Any, Dict, Tuple
 from openai import AsyncOpenAI
 
 from src.logger import AppLogger
-from src.services.llm.base import BaseLLMBackend
+from src.services.llm.base import BaseLLMBackend, with_retry
 
 logger = AppLogger(__name__).get_logger()
 
@@ -16,7 +16,7 @@ class OpenAIBackend(BaseLLMBackend):
         self._client = AsyncOpenAI(
             api_key=config.get("api_key"),
             base_url=config.get("url", "https://api.openai.com/v1"),
-            timeout=120.0,
+            timeout=30.0,
         )
 
     async def generate(
@@ -28,11 +28,13 @@ class OpenAIBackend(BaseLLMBackend):
         if kwargs.get("top_p") is not None:
             api_kwargs["top_p"] = float(kwargs["top_p"])
         try:
-            response = await self._client.responses.create(
-                model=self.config["model"],
-                input=prompt,
-                max_output_tokens=kwargs.get("max_tokens", 1000),
-                **api_kwargs,
+            response = await with_retry(
+                lambda: self._client.responses.create(
+                    model=self.config["model"],
+                    input=prompt,
+                    max_output_tokens=kwargs.get("max_tokens", 1000),
+                    **api_kwargs,
+                )
             )
             output = response.output_text or "未提供回應"
             details = getattr(response.usage, "input_tokens_details", None)
