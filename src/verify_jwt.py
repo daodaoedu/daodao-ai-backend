@@ -3,25 +3,30 @@ import os
 import jwt
 from jwt import ExpiredSignatureError, InvalidTokenError
 
+from src.config import get_settings
 from src.logger import AppLogger
 
 logger = AppLogger(__name__).get_logger()
 
-JWT_SECURITY = os.getenv("JWT_SECURITY")
-JWT_EXPIRATION = os.getenv("JWT_EXPIRATION")
+_PLACEHOLDER = "xxxxxxxxxxxxxxxx"
 
 
 def verify(token: str):
+    settings = get_settings()
+    jwt_secret = settings.jwt_security
+
+    if not jwt_secret or jwt_secret == _PLACEHOLDER:
+        logger.error("JWT_SECURITY 未正確設定，拒絕驗證所有 token")
+        return None
+
     try:
-        payload = jwt.decode(token, JWT_SECURITY, algorithms=["HS256"])
-        logger.info(f"驗證成功，payload:{payload}")
+        payload = jwt.decode(token, jwt_secret, algorithms=["HS256"])
+        logger.debug(f"驗證成功，user_id:{payload.get('_id') or payload.get('id')}")
         return payload
     except ExpiredSignatureError:
         logger.info("Token 已過期")
     except InvalidTokenError:
-        logger.info("無效的 Token")
-
-    # {'id': 20, '_id': '2e', 'time': , 'isTemp': False, 'iat': 1756544897, 'exp': 1756566497}
+        logger.warning("無效的 Token")
 
 
 if __name__ == "__main__":
