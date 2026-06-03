@@ -12,7 +12,7 @@ from src.services.llm.guardrail import GuardrailLayer
 logger = AppLogger(__name__).get_logger()
 
 
-def pre_process_feedback(
+async def pre_process_feedback(
     llm_client: LLMClient,
     context: str,
     wordNum: int = 300,
@@ -20,14 +20,14 @@ def pre_process_feedback(
     safe_context = GuardrailLayer.sanitize_user_input(context)
     prompt = f"你是一個專業的摘要生成工具，能夠讀取一段文字並將其精簡成重點，並且保持原始意圖不變。請將以下內容進行摘要，並保持字數在 {wordNum} 字以內：\n\n{safe_context}\n\n請給出精簡的版本。"
 
-    output, cost, usage, llm_name = llm_client.generate(prompt)
+    output, cost, usage, llm_name = await llm_client.generate(prompt)
     logger.info(
         f"[pre_process_feedback] {llm_name} output: {output}, cost: {cost}, usage: {usage}"
     )
     return output
 
 
-def process_feedback(
+async def process_feedback(
     req: GenerateFeedbackRequest,
     llm_client: LLMClient,
     context: str,
@@ -47,11 +47,11 @@ def process_feedback(
 
         GuardrailLayer.sanitize_user_input(context)
         if len(context) > 300:
-            context = pre_process_feedback(
+            context = await pre_process_feedback(
                 llm_client=llm_client, context=context, wordNum=300
             )
         # output: str, cost: float, usage: dict
-        output, cost, usage, llm_name = llm_client.generate(context)
+        output, cost, usage, llm_name = await llm_client.generate(context)
         token_usage = round(usage.get("estimated_tokens"), 6)
         generated_at = datetime.now().isoformat()
         logger.info(f"feedback:{task_id}, status : running")
