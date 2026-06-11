@@ -2,8 +2,11 @@
 LLMModel 業務邏輯：
 - seed_llm_models：lifespan 啟動時將 Settings.llm_backend 寫入 llm_models 表（冪等）
   只做 seed，不做健康檢查，不覆蓋 is_active。
+- health_check_llm_models：啟動後背景執行，逐一呼叫各 provider API，
+  成功 → is_active=True，失敗 → is_active=False。
 """
 
+import asyncio
 from decimal import Decimal
 from typing import Optional, Any
 from sqlalchemy.orm import Session
@@ -104,3 +107,72 @@ async def seed_llm_models(
             logger.info(f"[LLMModelSeed] 已清除快取: {_MODELS_CACHE_KEY}")
         except Exception as e:
             logger.warning(f"[LLMModelSeed] 清除快取失敗: {e}")
+
+
+async def health_check_llm_models(
+    database: Any,
+    settings: Settings,
+    cache: Optional[Any] = None,
+    timeout: float = 10.0,
+) -> None:
+    """
+    啟動後背景執行（asyncio.create_task）：
+    對每個 llm_models 記錄發送測試 prompt，依結果更新 is_active。
+    不阻塞 API 啟動，失敗不影響服務。
+    """
+    from src.services.llm.client import LLMClient
+
+    # 略過不需要外部 API key 的本地 provider
+    _SKIP_PROVIDERS = {"ollama"}
+
+    logger.info("[LLMHealthCheck] 開始背景 LLM 健康檢查...")
+
+    async def _check_one(provider: str, model_name: str) -> bool:
+        if provider in _SKIP_PROVIDERS:
+            logger.info(f"[LLMHealthCheck] 跳過 {provider}（本地服務）")
+            return False
+        try:
+            client = LLMClient(settings, provider, enable_guardrail=False)
+            client._backend.config["model"] = model_name
+            output, _, _, _ = await asyncio.wait_for(
+                client.generate("reply ok", max_tokens=5),
+                timeout=timeout,
+            )
+            ok = bool(output and output.strip())
+            logger.info(f"[LLMHealthCheck] ✅ {provider}/{model_name}")
+            return ok
+        except asyncio.TimeoutError:
+            logger.warning(f"[LLMHealthCheck] ⏱ timeout {provider}/{model_name}")
+            return False
+        except Exception as e:
+            logger.warning(f"[LLMHealthCheck] ❌ {provider}/{model_name}: {e}")
+            return False
+
+    with database.get_session() as db:
+        models = db.query(LLMModel).all()
+        if not models:
+            logger.warning("[LLMHealthCheck] llm_models 表為空，跳過")
+            return
+
+        tasks = {
+            m.id: asyncio.create_task(_check_one(m.provider, m.model_name))
+            for m in models
+        }
+        results = {mid: await task for mid, task in tasks.items()}
+
+        for m in models:
+            new_active = results.get(m.id, False)
+            if m.is_active != new_active:
+                m.is_active = new_active
+
+        db.commit()
+
+    active = sum(1 for v in results.values() if v)
+    logger.info(f"[LLMHealthCheck] 完成：{active}/{len(results)} 個 provider 可用")
+
+    if cache:
+        try:
+            from src.routers.admin.llm_models import _MODELS_CACHE_KEY
+            cache.client.delete(_MODELS_CACHE_KEY)
+        except Exception:
+            pass

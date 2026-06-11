@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from sqlalchemy.orm import configure_mappers
@@ -11,7 +12,7 @@ from src.middleware.middleware import setup_middlewares
 from src.routers import feed, insight, ping, recommendation, users
 from src.routers.admin import router as admin_router
 from src.services.cache.factory import make_cache_client
-from src.services.admin.llm_model_service import seed_llm_models
+from src.services.admin.llm_model_service import seed_llm_models, health_check_llm_models
 from src.services.admin.prompt_service import seed_default_prompts
 from src.services.quota_service import seed_admin_quotas
 from src.services.insight.insight_scheduler import InsightScheduler
@@ -77,6 +78,15 @@ async def lifespan(app: FastAPI):
     except (ValueError, RuntimeError) as exc:
         logger.warning(f"InsightScheduler 啟動失敗，已跳過: {exc}")
         app.state.insight_scheduler = None
+
+    # 背景 LLM 健康檢查（不阻塞啟動，約 10s 後更新 is_active）
+    asyncio.create_task(
+        health_check_llm_models(
+            database=app.state.database,
+            settings=settings,
+            cache=app.state.cache_client,
+        )
+    )
 
     yield
 

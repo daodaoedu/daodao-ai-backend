@@ -10,6 +10,7 @@ from src.routers.admin import (
     system_prompts,
     user_quotas,
 )
+from src.routers import agent as agent_admin
 
 router = APIRouter(prefix="/v1/admin")
 
@@ -21,3 +22,4 @@ router.include_router(system_prompts.router, tags=["admin-system-prompts"])
 router.include_router(llm_models.router, tags=["admin-llm-models"])
 router.include_router(user_quotas.router, tags=["admin-user-quotas"])
 router.include_router(playground.router, tags=["admin-playground"])
+router.include_router(agent_admin.router, tags=["admin-agent"])
