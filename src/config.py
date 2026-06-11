@@ -131,7 +131,7 @@ _LLM_BACKEND_DEFAULTS: Dict[str, Dict[str, str]] = {
     },
     "openrouter": {
         "url": "https://openrouter.ai/api/v1",
-        "model": "meta-llama/llama-3.3-70b-instruct:free",
+        "model": "deepseek/deepseek-v4-flash",
     },
     "ollama_cloud": {
         "url": "https://ollama.com/v1",
