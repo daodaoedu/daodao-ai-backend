@@ -202,15 +202,10 @@ class FeedService:
         next_cursor = None
         if has_next:
             p_last = ""
-            # 優先用最後實際分配到 Slot C 的 practice；
-            # 若沒有（全被 Rule ③ 跳過），用 pool 中最後一筆避免下一頁重複抓
-            p_ref = last_consumed_practice
-            if p_ref is None and practice_rows:
-                p_ref = practice_rows[-1]
+            # 用最後 evaluated 的 practice 作為 cursor，確保跳過所有已處理的（含 Rule ③ 跳過的）
+            p_ref = practice_rows[p_idx - 1] if p_idx > 0 else None
             if p_ref is not None:
-                p_ts = (
-                    p_ref.sort_time.isoformat() if p_ref.sort_time else ""
-                )
+                p_ts = p_ref.sort_time.isoformat() if p_ref.sort_time else ""
                 p_last = f"{p_ts}_{p_ref.item_id}"
             c_last = ""
             if c_idx > 0:
@@ -536,15 +531,13 @@ class FeedService:
         ).fetchall()
 
         interactions = db.execute(
-            text(
-                """
+            text("""
                 SELECT c.user_id AS target_user_id, COUNT(*) AS cnt
                 FROM reactions r
                 JOIN practice_checkins c ON c.id = r.target_id
                 WHERE r.target_type = 'checkin' AND r.user_id = :uid
                 GROUP BY c.user_id
-                """
-            ),
+                """),
             {"uid": user_id},
         ).fetchall()
 
@@ -610,13 +603,11 @@ class FeedService:
     @staticmethod
     def _fetch_connected_user_ids(db: Session, user_id: int) -> set[int]:
         rows = db.execute(
-            text(
-                """
+            text("""
                 SELECT CASE WHEN user_a_id = :uid THEN user_b_id ELSE user_a_id END AS user_id
                 FROM connections
                 WHERE user_a_id = :uid OR user_b_id = :uid
-                """
-            ),
+                """),
             {"uid": user_id},
         ).fetchall()
         return {r.user_id for r in rows}
@@ -624,13 +615,11 @@ class FeedService:
     @staticmethod
     def _fetch_following_user_ids(db: Session, user_id: int) -> set[int]:
         rows = db.execute(
-            text(
-                """
+            text("""
                 SELECT target_id
                 FROM follows
                 WHERE follower_id = :uid AND target_type = 'user'
-                """
-            ),
+                """),
             {"uid": user_id},
         ).fetchall()
         return {r.target_id for r in rows}
@@ -1064,16 +1053,14 @@ class FeedService:
         if not practice_ids or not social_user_ids:
             return set()
         rows = db.execute(
-            text(
-                """
+            text("""
                 SELECT DISTINCT c.practice_id
                 FROM reactions r
                 JOIN practice_checkins c ON c.id = r.target_id
                 WHERE r.target_type = 'checkin'
                   AND c.practice_id IN :practice_ids
                   AND r.user_id IN :social_user_ids
-                """
-            ).bindparams(
+                """).bindparams(
                 bindparam("practice_ids", expanding=True),
                 bindparam("social_user_ids", expanding=True),
             ),
@@ -1088,8 +1075,7 @@ class FeedService:
             return {}
 
         rows = db.execute(
-            text(
-                """
+            text("""
                 SELECT
                     p.id,
                     p.external_id,
@@ -1110,8 +1096,7 @@ class FeedService:
                 JOIN users u ON u.id = p.user_id
                 LEFT JOIN contacts ct ON ct.id = u.contact_id
                 WHERE p.id IN :ids
-            """
-            ).bindparams(bindparam("ids", expanding=True)),
+            """).bindparams(bindparam("ids", expanding=True)),
             {"ids": ids},
         ).fetchall()
 
@@ -1146,8 +1131,7 @@ class FeedService:
             return {}
 
         rows = db.execute(
-            text(
-                """
+            text("""
                 SELECT
                     c.id,
                     c.checkin_date::text AS checkin_date,
@@ -1165,8 +1149,7 @@ class FeedService:
                 JOIN users u ON u.id = c.user_id
                 LEFT JOIN contacts ct ON ct.id = u.contact_id
                 WHERE c.id IN :ids
-            """
-            ).bindparams(bindparam("ids", expanding=True)),
+            """).bindparams(bindparam("ids", expanding=True)),
             {"ids": ids},
         ).fetchall()
 
@@ -1200,8 +1183,7 @@ class FeedService:
             if not ids:
                 continue
             rows = db.execute(
-                text(
-                    """
+                text("""
                     SELECT
                         r.target_id,
                         r.reaction_type,
@@ -1220,8 +1202,7 @@ class FeedService:
                     WHERE r.target_type = :target_type
                       AND r.target_id IN :ids
                     GROUP BY r.target_id, r.reaction_type
-                """
-                ).bindparams(bindparam("ids", expanding=True)),
+                """).bindparams(bindparam("ids", expanding=True)),
                 {"target_type": target_type, "ids": ids},
             ).fetchall()
 
@@ -1248,16 +1229,14 @@ class FeedService:
 
             # 1. Counts
             count_rows = db.execute(
-                text(
-                    """
+                text("""
                     SELECT target_id, COUNT(*) AS cnt
                     FROM comments
                     WHERE target_type = :target_type
                       AND target_id IN :ids
                       AND visibility = 'public'
                     GROUP BY target_id
-                """
-                ).bindparams(bindparam("ids", expanding=True)),
+                """).bindparams(bindparam("ids", expanding=True)),
                 {"target_type": target_type, "ids": ids},
             ).fetchall()
 
@@ -1266,8 +1245,7 @@ class FeedService:
 
             # 2. Preview (latest 2 per target) using LATERAL join
             preview_rows = db.execute(
-                text(
-                    """
+                text("""
                     SELECT sub.target_id, sub.id, sub.content, sub.created_at,
                            u.external_id AS user_external_id,
                            u.nickname AS user_name,
@@ -1290,8 +1268,7 @@ class FeedService:
                     ) sub
                     JOIN users u ON u.id = sub.user_id
                     LEFT JOIN contacts ct ON ct.id = u.contact_id
-                """
-                ).bindparams(bindparam("ids", expanding=True)),
+                """).bindparams(bindparam("ids", expanding=True)),
                 {"target_type": target_type, "ids": ids},
             ).fetchall()
 
