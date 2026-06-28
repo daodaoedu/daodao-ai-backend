@@ -202,14 +202,16 @@ class FeedService:
         next_cursor = None
         if has_next:
             p_last = ""
-            if last_consumed_practice is not None:
-                # 用最後實際分配到 Slot C 的 practice，而非 p_idx-1（可能是 Rule ③ 跳過的）
+            # 優先用最後實際分配到 Slot C 的 practice；
+            # 若沒有（全被 Rule ③ 跳過），用 pool 中最後一筆避免下一頁重複抓
+            p_ref = last_consumed_practice
+            if p_ref is None and practice_rows:
+                p_ref = practice_rows[-1]
+            if p_ref is not None:
                 p_ts = (
-                    last_consumed_practice.sort_time.isoformat()
-                    if last_consumed_practice.sort_time
-                    else ""
+                    p_ref.sort_time.isoformat() if p_ref.sort_time else ""
                 )
-                p_last = f"{p_ts}_{last_consumed_practice.item_id}"
+                p_last = f"{p_ts}_{p_ref.item_id}"
             c_last = ""
             if c_idx > 0:
                 last_c = checkin_rows[c_idx - 1]
