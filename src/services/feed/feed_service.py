@@ -197,8 +197,8 @@ class FeedService:
                     }
                 )
 
-        # has_next: practice pool 還有剩餘（含 extra buffer 那 1 筆）
-        has_next = p_idx < len(practice_rows)
+        # has_next: practice 或 checkin 任一 pool 還有剩餘就繼續分頁
+        has_next = p_idx < len(practice_rows) or c_idx < len(checkin_rows)
         next_cursor = None
         if has_next:
             p_last = ""
@@ -1024,32 +1024,29 @@ class FeedService:
             ):
                 p_idx += 1
 
-            if p_idx >= len(practice_rows):
-                # No more eligible practices; commit A+B slots already collected
-                if cycle_slots:
-                    if max_items is None or len(slots) + len(cycle_slots) <= max_items:
-                        slots.extend(cycle_slots)
-                        c_idx += consumed_checkins
-                break
+            if p_idx < len(practice_rows):
+                # Slot C: 1 practice per cycle (Rule ⑤: 1:1:1)
+                row = practice_rows[p_idx]
+                cycle_slots.append(
+                    {
+                        "slot_type": SlotType.C,
+                        "item_type": "practice",
+                        "item_id": row.item_id,
+                        "feed_source": "original",
+                    }
+                )
 
-            # Slot C: 1 practice per cycle (Rule ⑤: 1:1:1)
-            row = practice_rows[p_idx]
-            cycle_slots.append(
-                {
-                    "slot_type": SlotType.C,
-                    "item_type": "practice",
-                    "item_id": row.item_id,
-                    "feed_source": "original",
-                }
-            )
+            if not cycle_slots:
+                break
 
             if max_items is not None and len(slots) + len(cycle_slots) > max_items:
                 break
 
             slots.extend(cycle_slots)
             c_idx += consumed_checkins
-            last_consumed_practice = row
-            p_idx += 1
+            if p_idx < len(practice_rows):
+                last_consumed_practice = practice_rows[p_idx]
+                p_idx += 1
 
         return slots, p_idx, c_idx, last_consumed_practice
 
