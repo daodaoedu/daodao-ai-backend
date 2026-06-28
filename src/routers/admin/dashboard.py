@@ -36,8 +36,7 @@ def get_dashboard_stats(
 
     # 整體統計
     total_row = db.execute(
-        text(
-            """
+        text("""
             SELECT
                 COALESCE(SUM(cost_usd), 0)        AS total_cost_usd,
                 COUNT(*)                           AS total_queries,
@@ -46,15 +45,13 @@ def get_dashboard_stats(
             FROM ai_query_logs
             WHERE created_at >= CAST(:date_from AS DATE)
               AND created_at <  CAST(:date_to AS DATE) + INTERVAL '1 day'
-            """
-        ),
+            """),
         {"date_from": _date_from, "date_to": _date_to},
     ).fetchone()
 
     # 按 backend 分組
     backend_rows = db.execute(
-        text(
-            """
+        text("""
             SELECT
                 backend,
                 COUNT(*)                        AS query_count,
@@ -65,15 +62,13 @@ def get_dashboard_stats(
               AND created_at <  CAST(:date_to AS DATE) + INTERVAL '1 day'
             GROUP BY backend
             ORDER BY cost_usd DESC
-            """
-        ),
+            """),
         {"date_from": _date_from, "date_to": _date_to},
     ).fetchall()
 
     # 每日趨勢
     daily_rows = db.execute(
-        text(
-            """
+        text("""
             SELECT
                 DATE_TRUNC('day', created_at AT TIME ZONE 'UTC')::date AS day,
                 COUNT(*)                        AS query_count,
@@ -84,8 +79,7 @@ def get_dashboard_stats(
               AND created_at <  CAST(:date_to AS DATE) + INTERVAL '1 day'
             GROUP BY day
             ORDER BY day ASC
-            """
-        ),
+            """),
         {"date_from": _date_from, "date_to": _date_to},
     ).fetchall()
 
