@@ -187,7 +187,8 @@ def get_my_practices(
     if results:
         practice_ids = [r["id"] for r in results]
         reaction_rows = db.execute(
-            text("""
+            text(
+                """
                 SELECT
                     r.target_id,
                     r.reaction_type,
@@ -206,7 +207,8 @@ def get_my_practices(
                 WHERE r.target_type = 'practice'
                   AND r.target_id IN :practice_ids
                 GROUP BY r.target_id, r.reaction_type
-                """).bindparams(bindparam("practice_ids", expanding=True)),
+                """
+            ).bindparams(bindparam("practice_ids", expanding=True)),
             {"practice_ids": practice_ids},
         ).fetchall()
 

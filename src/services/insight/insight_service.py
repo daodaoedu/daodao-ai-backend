@@ -182,14 +182,16 @@ def _build_prompt(
         # preferences
         if db is not None:
             rows = db.execute(
-                text("""
+                text(
+                    """
                     SELECT pt.name AS type_name, po.name AS option_name
                     FROM user_preferences up
                     JOIN preference_options po ON up.preference_option_id = po.id
                     JOIN preference_types pt ON po.preference_type_id = pt.id
                     WHERE up.user_id = :uid AND up.is_selected = true
                     ORDER BY pt.display_order, po.display_order
-                    """),
+                    """
+                ),
                 {"uid": user.id},
             ).fetchall()
             if rows:

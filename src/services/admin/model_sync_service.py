@@ -48,14 +48,16 @@ async def sync_provider_models(
     for m in models:
         display_name = (m.get("display_name") or "")[:200] or None
         result = db.execute(
-            text("""
+            text(
+                """
                 INSERT INTO llm_models (provider, model_name, display_name, is_active,
                     input_cost_per_1m, output_cost_per_1m, cached_input_cost_per_1m)
                 VALUES (:provider, :model_name, :display_name, false, 0, 0, 0)
                 ON CONFLICT (provider, model_name)
                 DO UPDATE SET display_name = EXCLUDED.display_name
                 RETURNING (xmax = 0) AS inserted
-            """),
+            """
+            ),
             {
                 "provider": provider,
                 "model_name": m["model_name"],

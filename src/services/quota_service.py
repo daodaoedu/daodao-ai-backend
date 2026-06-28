@@ -32,13 +32,15 @@ class QuotaExceededError(Exception):
 def get_monthly_usage(db: Session, user_id: int) -> int:
     """當月已使用 token 數（來自 ai_query_logs）。"""
     row = db.execute(
-        text("""
+        text(
+            """
             SELECT COALESCE(SUM(total_tokens), 0) AS used
             FROM ai_query_logs
             WHERE user_id = :user_id
               AND DATE_TRUNC('month', created_at AT TIME ZONE 'UTC')
                   = DATE_TRUNC('month', NOW() AT TIME ZONE 'UTC')
-            """),
+            """
+        ),
         {"user_id": user_id},
     ).fetchone()
     return int(row.used) if row else 0
@@ -47,13 +49,15 @@ def get_monthly_usage(db: Session, user_id: int) -> int:
 def get_daily_usage(db: Session, user_id: int) -> int:
     """今日已使用 token 數（來自 ai_query_logs）。"""
     row = db.execute(
-        text("""
+        text(
+            """
             SELECT COALESCE(SUM(total_tokens), 0) AS used
             FROM ai_query_logs
             WHERE user_id = :user_id
               AND DATE_TRUNC('day', created_at AT TIME ZONE 'UTC')
                   = DATE_TRUNC('day', NOW() AT TIME ZONE 'UTC')
-            """),
+            """
+        ),
         {"user_id": user_id},
     ).fetchone()
     return int(row.used) if row else 0
