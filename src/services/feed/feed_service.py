@@ -1100,7 +1100,8 @@ class FeedService:
                     p.created_at,
                     u.external_id AS user_external_id,
                     u.nickname AS user_name,
-                    ct.photo_url AS user_photo_url
+                    ct.photo_url AS user_photo_url,
+                    u.custom_id AS user_custom_id
                 FROM practices p
                 JOIN users u ON u.id = p.user_id
                 LEFT JOIN contacts ct ON ct.id = u.contact_id
@@ -1130,6 +1131,7 @@ class FeedService:
                     "id": str(r.user_external_id) if r.user_external_id else None,
                     "name": r.user_name or "",
                     "photo_url": r.user_photo_url,
+                    "custom_id": r.user_custom_id,
                 },
             }
         return result
@@ -1154,7 +1156,8 @@ class FeedService:
                     p.title AS practice_title,
                     u.external_id AS user_external_id,
                     u.nickname AS user_name,
-                    ct.photo_url AS user_photo_url
+                    ct.photo_url AS user_photo_url,
+                    u.custom_id AS user_custom_id
                 FROM practice_checkins c
                 JOIN practices p ON p.id = c.practice_id
                 JOIN users u ON u.id = c.user_id
@@ -1183,6 +1186,7 @@ class FeedService:
                     "id": str(r.user_external_id) if r.user_external_id else None,
                     "name": r.user_name or "",
                     "photo_url": r.user_photo_url,
+                    "custom_id": r.user_custom_id,
                 },
             }
         return result
