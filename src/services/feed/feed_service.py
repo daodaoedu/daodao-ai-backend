@@ -1270,7 +1270,8 @@ class FeedService:
                     SELECT sub.target_id, sub.id, sub.content, sub.created_at,
                            u.external_id AS user_external_id,
                            u.nickname AS user_name,
-                           ct.photo_url AS user_photo_url
+                           ct.photo_url AS user_photo_url,
+                           u.custom_id AS user_custom_id
                     FROM (
                         SELECT DISTINCT target_id AS target_id
                         FROM comments
@@ -1311,6 +1312,7 @@ class FeedService:
                             ),
                             "name": r.user_name or "",
                             "photo_url": r.user_photo_url,
+                            "custom_id": r.user_custom_id,
                         },
                     }
                 )
