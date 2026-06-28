@@ -197,19 +197,16 @@ class FeedService:
                     }
                 )
 
-        # has_next: practice pool 還有剩餘（含 extra buffer 那 1 筆）
-        has_next = p_idx < len(practice_rows)
+        # has_next: practice 或 checkin 任一 pool 還有剩餘就繼續分頁
+        has_next = p_idx < len(practice_rows) or c_idx < len(checkin_rows)
         next_cursor = None
         if has_next:
             p_last = ""
-            if last_consumed_practice is not None:
-                # 用最後實際分配到 Slot C 的 practice，而非 p_idx-1（可能是 Rule ③ 跳過的）
-                p_ts = (
-                    last_consumed_practice.sort_time.isoformat()
-                    if last_consumed_practice.sort_time
-                    else ""
-                )
-                p_last = f"{p_ts}_{last_consumed_practice.item_id}"
+            # 用最後 evaluated 的 practice 作為 cursor，確保跳過所有已處理的（含 Rule ③ 跳過的）
+            p_ref = practice_rows[p_idx - 1] if p_idx > 0 else None
+            if p_ref is not None:
+                p_ts = p_ref.sort_time.isoformat() if p_ref.sort_time else ""
+                p_last = f"{p_ts}_{p_ref.item_id}"
             c_last = ""
             if c_idx > 0:
                 last_c = checkin_rows[c_idx - 1]
@@ -1024,32 +1021,29 @@ class FeedService:
             ):
                 p_idx += 1
 
-            if p_idx >= len(practice_rows):
-                # No more eligible practices; commit A+B slots already collected
-                if cycle_slots:
-                    if max_items is None or len(slots) + len(cycle_slots) <= max_items:
-                        slots.extend(cycle_slots)
-                        c_idx += consumed_checkins
-                break
+            if p_idx < len(practice_rows):
+                # Slot C: 1 practice per cycle (Rule ⑤: 1:1:1)
+                row = practice_rows[p_idx]
+                cycle_slots.append(
+                    {
+                        "slot_type": SlotType.C,
+                        "item_type": "practice",
+                        "item_id": row.item_id,
+                        "feed_source": "original",
+                    }
+                )
 
-            # Slot C: 1 practice per cycle (Rule ⑤: 1:1:1)
-            row = practice_rows[p_idx]
-            cycle_slots.append(
-                {
-                    "slot_type": SlotType.C,
-                    "item_type": "practice",
-                    "item_id": row.item_id,
-                    "feed_source": "original",
-                }
-            )
+            if not cycle_slots:
+                break
 
             if max_items is not None and len(slots) + len(cycle_slots) > max_items:
                 break
 
             slots.extend(cycle_slots)
             c_idx += consumed_checkins
-            last_consumed_practice = row
-            p_idx += 1
+            if p_idx < len(practice_rows):
+                last_consumed_practice = practice_rows[p_idx]
+                p_idx += 1
 
         return slots, p_idx, c_idx, last_consumed_practice
 
