@@ -80,7 +80,7 @@ class FeedService:
         keyword: Optional[str],
         tags: Optional[list[str]],
     ) -> dict:
-        """Assemble feed in A→B→C→C→C slot cycles."""
+        """Assemble feed in A→B→C slot cycles (1:1:1 ratio)."""
         (
             p_cursor_time,
             p_cursor_id,
@@ -90,11 +90,12 @@ class FeedService:
             _,
         ) = FeedService._parse_dual_cursor(cursor)
 
-        max_cycles = max(1, limit // 5)
+        # 1:1:1 cycle: each cycle = 1 checkin + 1 activity + 1 practice
+        max_cycles = max(1, limit // 3)
 
-        # Fetch one extra cycle worth of practices to detect has_next.
+        # Rule ③ skips up to 1 practice per cycle → need 2x buffer + 1 to detect has_next.
         practice_rows = FeedService._fetch_practice_pool(
-            db, p_cursor_time, p_cursor_id, max_cycles * 3 + 3, keyword, tags
+            db, p_cursor_time, p_cursor_id, max_cycles * 2 + 1, keyword, tags
         )
         # Extra buffer for checkins so cold-start cycles never starve.
         checkin_rows = FeedService._fetch_checkin_pool_with_counts(
@@ -112,12 +113,14 @@ class FeedService:
             db, max_cycles + 1, user_id, keyword, tags
         )
 
-        slot_assignments, p_idx, c_idx = FeedService._assemble_slot_cycles(
-            practice_rows,
-            checkin_rows,
-            activity_events,
-            max_cycles,
-            max_items=limit,
+        slot_assignments, p_idx, c_idx, last_consumed_practice = (
+            FeedService._assemble_slot_cycles(
+                practice_rows,
+                checkin_rows,
+                activity_events,
+                max_cycles,
+                max_items=limit,
+            )
         )
 
         if not slot_assignments:
@@ -194,14 +197,16 @@ class FeedService:
                     }
                 )
 
-        has_next = len(practice_rows) > p_idx
+        # has_next: practice 或 checkin 任一 pool 還有剩餘就繼續分頁
+        has_next = p_idx < len(practice_rows) or c_idx < len(checkin_rows)
         next_cursor = None
         if has_next:
             p_last = ""
-            if p_idx > 0:
-                last_p = practice_rows[p_idx - 1]
-                p_ts = last_p.sort_time.isoformat() if last_p.sort_time else ""
-                p_last = f"{p_ts}_{last_p.item_id}"
+            # 用最後 evaluated 的 practice 作為 cursor，確保跳過所有已處理的（含 Rule ③ 跳過的）
+            p_ref = practice_rows[p_idx - 1] if p_idx > 0 else None
+            if p_ref is not None:
+                p_ts = p_ref.sort_time.isoformat() if p_ref.sort_time else ""
+                p_last = f"{p_ts}_{p_ref.item_id}"
             c_last = ""
             if c_idx > 0:
                 last_c = checkin_rows[c_idx - 1]
@@ -375,6 +380,12 @@ class FeedService:
             "p.privacy_status = 'public'",
             "p.status IN ('active', 'completed')",
             "p.deleted_at IS NULL",
+            # Rule ④: 主題實踐需在 30 天內有打卡紀錄才出現
+            "EXISTS ("
+            "  SELECT 1 FROM practice_checkins pc"
+            "  WHERE pc.practice_id = p.id"
+            "    AND pc.created_at >= NOW() - INTERVAL '30 days'"
+            ")",
         ]
         bind_params: dict = {"limit": limit}
 
@@ -470,6 +481,7 @@ class FeedService:
                 c.id AS item_id,
                 c.created_at AS sort_time,
                 c.user_id,
+                c.practice_id,
                 COUNT(DISTINCT r.id) AS reactions_count,
                 COUNT(DISTINCT cm.id) AS comments_count
             FROM practice_checkins c
@@ -479,7 +491,7 @@ class FeedService:
                 ON cm.target_type = 'checkin' AND cm.target_id = c.id
                 AND cm.visibility = 'public'
             WHERE {where_sql}
-            GROUP BY c.id, c.created_at, c.user_id
+            GROUP BY c.id, c.created_at, c.user_id, c.practice_id
             ORDER BY c.created_at DESC, c.id DESC
             LIMIT :limit
         """
@@ -944,28 +956,26 @@ class FeedService:
         activity_events: list[ActivityEvent],
         num_cycles: int,
         max_items: Optional[int] = None,
-    ) -> tuple[list[dict], int, int]:
+    ) -> tuple[list[dict], int, int, object]:
         """
-        Assemble A→B→C→C→C cycles.
+        Assemble A→B→C cycles (1:1:1).
 
         Slot A: checkin(s) — skipped if pool empty.
         Slot B: ActivityCard for a real interaction event; skipped when no event exists.
-        Slot C: 3 practices per cycle — stops if fewer than 3 remain.
+        Slot C: 1 practice per cycle — Rule ③: skip practices whose practice_id
+                was already assigned to Slot A on this page.
 
-        Returns (slot_assignments, p_idx_consumed, c_idx_consumed).
+        Returns (slot_assignments, p_idx_consumed, c_idx_consumed, last_consumed_practice_row).
         """
+        # Rule ③: dynamically track which practice_ids have been shown in Slot A
+        shown_practice_ids: set[int] = set()
         slots: list[dict] = []
         p_idx = 0
         c_idx = 0
         ev_idx = 0
+        last_consumed_practice = None  # 最後實際分配到 Slot C 的 practice row
 
         for _ in range(num_cycles):
-            if p_idx >= len(practice_rows):
-                break
-            # Slot C prefers 3 practices, but accepts fewer on the final cycle
-            remaining_practices = len(practice_rows) - p_idx
-            cycle_size = min(3, remaining_practices)
-
             cycle_slots: list[dict] = []
             consumed_checkins = 0
 
@@ -975,6 +985,9 @@ class FeedService:
                     checkin_rows[c_idx:]
                 )
                 for row in a_rows:
+                    # Track this checkin's practice_id for Rule ③
+                    if hasattr(row, "practice_id") and row.practice_id is not None:
+                        shown_practice_ids.add(row.practice_id)
                     cycle_slots.append(
                         {
                             "slot_type": SlotType.A,
@@ -1001,9 +1014,16 @@ class FeedService:
                     }
                 )
 
-            # Slot C: up to 3 practices (partial cycle allowed on last page)
-            for i in range(cycle_size):
-                row = practice_rows[p_idx + i]
+            # Slot C: advance past practices already shown in Slot A (Rule ③)
+            while (
+                p_idx < len(practice_rows)
+                and practice_rows[p_idx].item_id in shown_practice_ids
+            ):
+                p_idx += 1
+
+            if p_idx < len(practice_rows):
+                # Slot C: 1 practice per cycle (Rule ⑤: 1:1:1)
+                row = practice_rows[p_idx]
                 cycle_slots.append(
                     {
                         "slot_type": SlotType.C,
@@ -1013,14 +1033,19 @@ class FeedService:
                     }
                 )
 
+            if not cycle_slots:
+                break
+
             if max_items is not None and len(slots) + len(cycle_slots) > max_items:
                 break
 
             slots.extend(cycle_slots)
             c_idx += consumed_checkins
-            p_idx += cycle_size
+            if p_idx < len(practice_rows):
+                last_consumed_practice = practice_rows[p_idx]
+                p_idx += 1
 
-        return slots, p_idx, c_idx
+        return slots, p_idx, c_idx, last_consumed_practice
 
     # =========================================================================
     # Batch fetch helpers
@@ -1075,7 +1100,8 @@ class FeedService:
                     p.created_at,
                     u.external_id AS user_external_id,
                     u.nickname AS user_name,
-                    ct.photo_url AS user_photo_url
+                    ct.photo_url AS user_photo_url,
+                    u.custom_id AS user_custom_id
                 FROM practices p
                 JOIN users u ON u.id = p.user_id
                 LEFT JOIN contacts ct ON ct.id = u.contact_id
@@ -1105,6 +1131,7 @@ class FeedService:
                     "id": str(r.user_external_id) if r.user_external_id else None,
                     "name": r.user_name or "",
                     "photo_url": r.user_photo_url,
+                    "custom_id": r.user_custom_id,
                 },
             }
         return result
@@ -1129,7 +1156,8 @@ class FeedService:
                     p.title AS practice_title,
                     u.external_id AS user_external_id,
                     u.nickname AS user_name,
-                    ct.photo_url AS user_photo_url
+                    ct.photo_url AS user_photo_url,
+                    u.custom_id AS user_custom_id
                 FROM practice_checkins c
                 JOIN practices p ON p.id = c.practice_id
                 JOIN users u ON u.id = c.user_id
@@ -1158,6 +1186,7 @@ class FeedService:
                     "id": str(r.user_external_id) if r.user_external_id else None,
                     "name": r.user_name or "",
                     "photo_url": r.user_photo_url,
+                    "custom_id": r.user_custom_id,
                 },
             }
         return result
@@ -1241,7 +1270,8 @@ class FeedService:
                     SELECT sub.target_id, sub.id, sub.content, sub.created_at,
                            u.external_id AS user_external_id,
                            u.nickname AS user_name,
-                           ct.photo_url AS user_photo_url
+                           ct.photo_url AS user_photo_url,
+                           u.custom_id AS user_custom_id
                     FROM (
                         SELECT DISTINCT target_id AS target_id
                         FROM comments
@@ -1282,6 +1312,7 @@ class FeedService:
                             ),
                             "name": r.user_name or "",
                             "photo_url": r.user_photo_url,
+                            "custom_id": r.user_custom_id,
                         },
                     }
                 )
