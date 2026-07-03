@@ -54,6 +54,7 @@ dependencies = [
     "google-genai>=1.68.0",
     "anthropic>=0.86.0",
     "apscheduler>=3.10.0",
+    "opencc-python-reimplemented>=0.1.7",
 ]
 
 # === 測試依賴 ===

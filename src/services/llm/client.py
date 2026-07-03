@@ -11,6 +11,7 @@ from src.services.llm.ollama_backend import OllamaBackend
 from src.services.llm.openai_backend import OpenAIBackend
 from src.services.llm.openai_chat_backend import OpenAIChatBackend
 from src.services.prompts.prompts import RAGPromptBuilder, ResponseParser
+from src.utils.opencc_converter import to_traditional_chinese
 
 logger = AppLogger(__name__).get_logger()
 
@@ -63,4 +64,7 @@ class LLMClient:
         """
         if self._enable_guardrail:
             prompt = prompt + GuardrailLayer.GUARDRAIL_SUFFIX
-        return await self._backend.generate(prompt, **kwargs)
+        output, cost, usage, backend_name = await self._backend.generate(
+            prompt, **kwargs
+        )
+        return to_traditional_chinese(output), cost, usage, backend_name
