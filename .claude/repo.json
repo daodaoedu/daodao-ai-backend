@@ -1,0 +1,25 @@
+{
+  "repo": "daodao-ai-backend",
+  "defaultBranch": "dev",
+  "highRisk": false,
+  "quality": {
+    "fix": "make format",
+    "lint": "make check && make lint",
+    "typecheck": null,
+    "test": "make test"
+  },
+  "formatFile": "uv run black \"{file}\" && uv run ruff check --fix \"{file}\"",
+  "reviewFocus": [
+    "邏輯錯誤：async 處理、異常路徑、None 處理",
+    "安全：SQL injection、缺少認證、prompt injection 面",
+    "效能：資料庫查詢、大量資料未分頁、缺少 cache",
+    "架構：FastAPI 模式、service 層分離"
+  ],
+  "protectedPaths": [
+    ".github/workflows/*",
+    ".env*",
+    "secrets/*",
+    "migrate/sql/*"
+  ],
+  "generatedBy": "daodao/.claude/sync.sh — 不要手改，改 bin/pipeline.config.json 後重新 sync"
+}

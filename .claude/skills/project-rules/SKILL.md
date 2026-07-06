@@ -91,3 +91,9 @@ async def search(q: str = Query(min_length=1, max_length=100)):
 - `make check` — 檢查格式
 - `make lint` — Pylint + Bandit
 - `.pylintrc` 停用：missing docstrings、too-few-public-methods、import-error
+
+## 工具版本 pin（CI 一致性）
+
+- CI 使用 `uv.lock` 內鎖定的 black / ruff 版本；本機或 hook 格式化一律透過
+  `uv run black` / `uv run ruff`，**不要**用系統全域版本（版本不同會產生
+  CI 拒絕的格式差異）。
