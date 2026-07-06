@@ -173,6 +173,7 @@ async def health_check_llm_models(
     if cache:
         try:
             from src.routers.admin.llm_models import _MODELS_CACHE_KEY
+
             cache.client.delete(_MODELS_CACHE_KEY)
         except Exception:
             pass

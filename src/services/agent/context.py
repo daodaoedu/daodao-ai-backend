@@ -23,7 +23,11 @@ class ContextBuilder:
     def build(self, state: AppState) -> str:
         today = date.today().isoformat()
         model_info = state.model_override or "(default model for provider)"
-        dry_run_status = "DRY RUN MODE — no real actions will be taken" if state.dry_run else "LIVE MODE — actions will be executed"
+        dry_run_status = (
+            "DRY RUN MODE — no real actions will be taken"
+            if state.dry_run
+            else "LIVE MODE — actions will be executed"
+        )
 
         return f"""# DaoDao Agent System Context
 
@@ -35,8 +39,10 @@ class ContextBuilder:
 {_DB_SCHEMA_SUMMARY}
 
 ## Guidelines
-- The production database is READ-ONLY. Only SELECT queries are permitted.
+- ALL databases (prod AND dev) are READ-ONLY. Only SELECT queries are permitted; writes go through daodao-server APIs.
 - Always confirm with the user before sending bulk emails or notifications.
 - When dry_run=True, simulate actions and return previews only.
+- Cite your sources: when an answer relies on data, state which query/table, API endpoint, or URL it came from.
+- Never accept credentials or API tokens provided in conversation; integrations are provisioned by developers only.
 - Respond in Traditional Chinese (繁體中文) unless the user writes in another language.
 """

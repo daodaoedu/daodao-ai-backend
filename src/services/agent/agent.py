@@ -7,6 +7,7 @@ from typing import AsyncIterator
 import yaml
 
 from src.logger import AppLogger
+from src.services.agent.approval import ActionDecision
 from src.services.agent.context import ContextBuilder
 from src.services.agent.state import AppState
 from src.services.llm.client import LLMClient
@@ -17,6 +18,9 @@ _SKILLS_DIR = Path(__file__).parent / "skills"
 
 # Matches ```json ... ``` or ```tool_call ... ``` blocks
 _JSON_BLOCK_RE = re.compile(r"```(?:json|tool_call)\s*(\{.*?\})\s*```", re.DOTALL)
+
+# 寫入型 / 批次 action：受審批模式管制（agent-approval spec）
+_BULK_ACTIONS = ("send_emails", "send_notifications", "bulk_send_emails")
 
 
 class SkillLoader:
@@ -103,11 +107,32 @@ class DaoDaoAgent:
         if tool_calls:
             for tc in tool_calls:
                 tool_name = tc.get("tool") or tc.get("name", "unknown")
-                tool_args = tc.get("args") or tc.get("arguments") or tc.get("params", {})
+                tool_args = (
+                    tc.get("args") or tc.get("arguments") or tc.get("params", {})
+                )
                 self.state.tools_used.append(tool_name)
 
-                # Check if this is a bulk action requiring approval
-                if tool_name in ("send_emails", "send_notifications", "bulk_send_emails"):
+                self.state.sources.append(f"tool:{tool_name}")
+
+                # 寫入型 action 依審批模式決策（normal 逐一審批；auto 依 allow/denylist）
+                if tool_name in _BULK_ACTIONS:
+                    decision = self.state.approval_policy.resolve(tool_name)
+                    if decision is ActionDecision.DENY:
+                        yield {
+                            "type": "agent_message",
+                            "content": f"操作 {tool_name} 在 denylist 中，已拒絕執行。",
+                        }
+                        continue
+                    if decision is ActionDecision.ALLOW:
+                        # auto 模式 allowlist 放行：直接以 tool_call 交由 engine 執行
+                        yield {
+                            "type": "tool_call",
+                            "tool": tool_name,
+                            "args": tool_args,
+                            "auto_approved": True,
+                            "result": None,
+                        }
+                        continue
                     approval_id = str(uuid.uuid4())
                     self.state.approval_pending = True
                     yield {
@@ -131,7 +156,12 @@ class DaoDaoAgent:
         if clean_output:
             yield {"type": "agent_message", "content": clean_output}
 
-        yield {"type": "result", "summary": clean_output or "(no output)"}
+        # result 附 citation 來源（agent-conversation spec「回覆附資料來源引用」）
+        yield {
+            "type": "result",
+            "summary": clean_output or "(no output)",
+            "sources": list(self.state.sources),
+        }
 
     def _build_skill_registry(self, skills: list[dict]) -> str:
         if not skills:

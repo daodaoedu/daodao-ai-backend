@@ -12,7 +12,10 @@ from src.middleware.middleware import setup_middlewares
 from src.routers import feed, insight, ping, recommendation, users
 from src.routers.admin import router as admin_router
 from src.services.cache.factory import make_cache_client
-from src.services.admin.llm_model_service import seed_llm_models, health_check_llm_models
+from src.services.admin.llm_model_service import (
+    seed_llm_models,
+    health_check_llm_models,
+)
 from src.services.admin.prompt_service import seed_default_prompts
 from src.services.quota_service import seed_admin_quotas
 from src.services.insight.insight_scheduler import InsightScheduler

@@ -4,35 +4,74 @@ from sqlalchemy import text
 _SCHEMA_SUMMARY: dict = {
     "practices": {
         "columns": [
-            "id", "user_id", "title", "description", "status",
-            "goal", "start_date", "end_date", "insight",
-            "created_at", "updated_at", "deleted_at",
+            "id",
+            "user_id",
+            "title",
+            "description",
+            "status",
+            "goal",
+            "start_date",
+            "end_date",
+            "insight",
+            "created_at",
+            "updated_at",
+            "deleted_at",
         ],
         "notes": "status: active | completed | archived. Soft-delete via deleted_at.",
     },
     "practice_checkins": {
         "columns": [
-            "id", "practice_id", "user_id", "note", "mood",
-            "created_at", "updated_at", "deleted_at",
+            "id",
+            "practice_id",
+            "user_id",
+            "note",
+            "mood",
+            "created_at",
+            "updated_at",
+            "deleted_at",
         ],
         "notes": "mood: integer 1-5. Soft-delete via deleted_at.",
     },
     "users": {
         "columns": [
-            "id", "nickname", "email", "mongo_id", "external_id", "role_id",
-            "personal_slogan", "professional_field", "custom_position",
-            "education_stage", "tag_list", "birth_date", "created_at", "updated_at",
+            "id",
+            "nickname",
+            "email",
+            "mongo_id",
+            "external_id",
+            "role_id",
+            "personal_slogan",
+            "professional_field",
+            "custom_position",
+            "education_stage",
+            "tag_list",
+            "birth_date",
+            "created_at",
+            "updated_at",
         ],
         "notes": "Primary key is numeric id. mongo_id stores legacy MongoDB ObjectId.",
     },
     "reactions": {
-        "columns": ["id", "user_id", "target_type", "target_id", "reaction_type", "created_at"],
+        "columns": [
+            "id",
+            "user_id",
+            "target_type",
+            "target_id",
+            "reaction_type",
+            "created_at",
+        ],
         "notes": "target_type: 'practice' | 'checkin' | 'comment'.",
     },
     "comments": {
         "columns": [
-            "id", "user_id", "target_type", "target_id", "content",
-            "created_at", "updated_at", "deleted_at",
+            "id",
+            "user_id",
+            "target_type",
+            "target_id",
+            "content",
+            "created_at",
+            "updated_at",
+            "deleted_at",
         ],
         "notes": "Soft-delete via deleted_at.",
     },
@@ -42,8 +81,14 @@ _SCHEMA_SUMMARY: dict = {
     },
     "email_logs": {
         "columns": [
-            "id", "user_id", "email_type", "subject", "to_email",
-            "status", "sent_at", "created_at",
+            "id",
+            "user_id",
+            "email_type",
+            "subject",
+            "to_email",
+            "status",
+            "sent_at",
+            "created_at",
         ],
         "notes": "status: pending | sent | failed.",
     },
@@ -54,18 +99,41 @@ _SCHEMA_SUMMARY: dict = {
 }
 
 
-async def query_prod_db(sql: str, db_session: Session) -> list[dict]:
-    """Execute read-only SQL against prod DB. Raises if not a SELECT statement."""
-    normalized = sql.strip().lstrip(";").strip().upper()
+def assert_readonly_sql(sql: str, env: str) -> None:
+    """Guard: 所有環境（dev 與 prod）一律唯讀，只放行單一 SELECT / WITH...SELECT 語句。
+
+    Raises ValueError for anything else, including multi-statement payloads
+    that try to smuggle a write after a SELECT.
+    """
+    stripped = sql.strip().rstrip(";").strip()
+    if ";" in stripped:
+        raise ValueError(f"Multi-statement SQL is not permitted on the {env} DB.")
+    normalized = stripped.upper()
     if not normalized.startswith("SELECT") and not normalized.startswith("WITH"):
         raise ValueError(
-            "Only SELECT (and WITH ... SELECT) queries are permitted on the production DB."
+            f"Only SELECT (and WITH ... SELECT) queries are permitted on the {env} DB. "
+            "Writes must go through daodao-server APIs."
         )
+
+
+async def query_db(sql: str, db_session: Session, env: str = "prod") -> list[dict]:
+    """Execute read-only SQL against the given environment's DB（dev / prod 皆唯讀）."""
+    assert_readonly_sql(sql, env)
 
     result = db_session.execute(text(sql))
     columns = list(result.keys())
     rows = result.fetchall()
     return [dict(zip(columns, row)) for row in rows]
+
+
+async def query_prod_db(sql: str, db_session: Session) -> list[dict]:
+    """Execute read-only SQL against prod DB. Raises if not a SELECT statement."""
+    return await query_db(sql, db_session, env="prod")
+
+
+async def query_dev_db(sql: str, db_session: Session) -> list[dict]:
+    """Execute read-only SQL against dev DB（同樣唯讀，見 agent-security spec）."""
+    return await query_db(sql, db_session, env="dev")
 
 
 async def describe_schema(table: str | None = None) -> dict:

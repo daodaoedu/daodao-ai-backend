@@ -83,7 +83,10 @@ async def execute(
             "type": "agent_message",
             "content": f"在 {start_date} 至 {end_date} 期間沒有找到完成實踐的用戶。",
         }
-        yield {"type": "result", "summary": "No completed practices found in the given range."}
+        yield {
+            "type": "result",
+            "summary": "No completed practices found in the given range.",
+        }
         return
 
     yield {
@@ -127,25 +130,27 @@ async def execute(
         )
 
         user_context = f"""用戶資訊：
-- 暱稱：{row.get('nickname', '用戶')}
-- 個人slogan：{row.get('personal_slogan') or '(未填)'}
-- 專業領域：{row.get('professional_field') or '(未填)'}
+- 暱稱：{row.get("nickname", "用戶")}
+- 個人slogan：{row.get("personal_slogan") or "(未填)"}
+- 專業領域：{row.get("professional_field") or "(未填)"}
 
 實踐資訊：
-- 實踐名稱：{row.get('practice_title', '你的實踐')}
-- 完成日期：{str(row.get('completed_at', ''))[:10]}
-- 總打卡次數：{checkin_summary.get('total_checkins', 0)}
-- 第一次打卡：{str(checkin_summary.get('first_checkin', ''))[:10]}
-- 最後打卡：{str(checkin_summary.get('last_checkin', ''))[:10]}
+- 實踐名稱：{row.get("practice_title", "你的實踐")}
+- 完成日期：{str(row.get("completed_at", ""))[:10]}
+- 總打卡次數：{checkin_summary.get("total_checkins", 0)}
+- 第一次打卡：{str(checkin_summary.get("first_checkin", ""))[:10]}
+- 最後打卡：{str(checkin_summary.get("last_checkin", ""))[:10]}
 
-請為這位用戶寫一封個人化的慶賀信，慶祝他們完成「{row.get('practice_title', '實踐')}」。"""
+請為這位用戶寫一封個人化的慶賀信，慶祝他們完成「{row.get("practice_title", "實踐")}」。"""
 
         full_prompt = f"<system>\n{system_prompt}\n</system>\n<user>\n{user_context}\n</user>\n<assistant>"
 
         try:
             output, _cost, _usage, _backend = await llm.generate(full_prompt)
         except Exception as exc:  # noqa: BLE001
-            logger.warning(f"LLM generation failed for user {row.get('user_id')}: {exc}")
+            logger.warning(
+                f"LLM generation failed for user {row.get('user_id')}: {exc}"
+            )
             continue
 
         # Parse subject and body from LLM output
@@ -157,19 +162,21 @@ async def execute(
             for i, line in enumerate(lines):
                 if line.startswith("SUBJECT:"):
                     subject = line.replace("SUBJECT:", "").strip()
-                    remaining = "\n".join(lines[i + 1:])
+                    remaining = "\n".join(lines[i + 1 :])
                     html_body = remaining.replace("---", "", 1).strip()
                     break
 
-        emails.append({
-            "to": row["email"],
-            "subject": subject,
-            "html": html_body,
-            "email_type": "practice_completion",
-            "user_id": str(row["user_id"]),
-            "nickname": row.get("nickname", ""),
-            "practice_title": row.get("practice_title", ""),
-        })
+        emails.append(
+            {
+                "to": row["email"],
+                "subject": subject,
+                "html": html_body,
+                "email_type": "practice_completion",
+                "user_id": str(row["user_id"]),
+                "nickname": row.get("nickname", ""),
+                "practice_title": row.get("practice_title", ""),
+            }
+        )
 
     if not emails:
         yield {

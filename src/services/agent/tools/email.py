@@ -4,6 +4,9 @@ from src.logger import AppLogger
 
 logger = AppLogger(__name__).get_logger()
 
+# 單次批次上限（agent-security spec「批次上限」）：超過需二次確認。
+BULK_EMAIL_LIMIT = 500
+
 
 async def send_email(
     to: str,
@@ -39,8 +42,18 @@ async def bulk_send_emails(
     api_base: str,
     admin_token: str,
     dry_run: bool = True,
+    confirmed_over_limit: bool = False,
 ) -> dict:
-    """Bulk send emails. If dry_run=True, returns preview only without sending."""
+    """Bulk send emails. If dry_run=True, returns preview only without sending.
+
+    超過 BULK_EMAIL_LIMIT 封時 MUST 帶 confirmed_over_limit=True（二次確認）才放行。
+    """
+    if len(emails) > BULK_EMAIL_LIMIT and not confirmed_over_limit:
+        raise ValueError(
+            f"Batch size {len(emails)} exceeds limit {BULK_EMAIL_LIMIT}; "
+            "explicit second confirmation (confirmed_over_limit=True) is required."
+        )
+
     if dry_run:
         preview_count = min(3, len(emails))
         return {
