@@ -158,7 +158,7 @@ make insight-run-anthropic # 指定 Anthropic Claude
 
 ## LLM 後端設定
 
-透過 `.env` 設定使用哪個 LLM，支援四個後端：
+透過 `.env` 設定使用哪個 LLM。權威清單是 `src/services/llm/client.py` 的 `_BACKEND_MAP`（盤點時共 10 個 provider：openai / gemini / anthropic / ollama / groq / cloudflare / nvidia / cerebras / openrouter / ollama_cloud）。常用範例：
 
 | Backend | 說明 | 環境變數 |
 |---------|------|---------|
@@ -190,7 +190,7 @@ python scripts/run_insight_job.py --backend openai --dry-run  # 僅預覽，不�
 
 `src/models/` 下的 ORM 模型需與 [daodao-storage](https://github.com/daodaoedu/daodao-storage) 的 schema 保持一致。新增或修改模型時請同步更新兩個倉庫。
 
-> 專案使用 `create_all()` 自動建表，不需要 migration 工具。
+> 本服務**不執行任何 DDL**（不建表、不跑 migration）。schema 由 daodao-storage 的 SQL migration 管理，啟動時僅唯讀驗證核心表存在（`src/db/postgresql.py`）。
 
 ### 程式碼品質
 

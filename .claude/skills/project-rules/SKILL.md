@@ -7,7 +7,9 @@ description: daodao-ai-backend 專案開發規範，涵蓋 FastAPI 模式、資�
 
 ## 技術棧
 
-Python 3.12、FastAPI、SQLAlchemy（PostgreSQL）、Redis、Qdrant（向量搜尋）、ClickHouse（分析）、Prometheus。
+Python 3.12（Makefile/CI 綁定 3.12，儘管 pyproject 寫 `>=3.10`）、FastAPI、SQLAlchemy（PostgreSQL）、Redis（**啟動硬依賴**，不健康 app 直接中止）、Prometheus。
+
+Qdrant（向量搜尋）與 ClickHouse（分析）**目前停用**——lifespan 與 dependencies 中已註解，重新啟用前先恢復初始化（見 codebase-map）。
 
 ## 專案結構
 
@@ -87,7 +89,17 @@ async def search(q: str = Query(min_length=1, max_length=100)):
 
 ## Lint / Format
 
-- `make format` — Ruff + Black
-- `make check` — 檢查格式
-- `make lint` — Pylint + Bandit
+- `make format` — Ruff + Black 自動修復
+- `make check` — Black --check + Ruff check（**與 CI 相同門檻，這是實質強制的檢查**）
+- `make lint` — Pylint + Bandit（皆 `|| true` 非阻斷，CI 也不跑 pylint，僅供參考）
 - `.pylintrc` 停用：missing docstrings、too-few-public-methods、import-error
+
+### 工具鏈版本鎖定（踩過的坑，必守）
+
+CI 精確 pin `black==25.9`、`ruff==0.14.1`（`.github/workflows/ci.yml`），但 pyproject 只給下界——black 25.9 與 26.x 對多行字串縮排結果不同，版本不對齊會導致 CI 反覆紅。本地安裝：
+
+```
+uv pip install "black==25.9" "ruff==0.14.1"
+```
+
+版本以 CI workflow 檔為準；若 CI 改版，本條要同步更新。
