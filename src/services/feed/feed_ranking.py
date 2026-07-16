@@ -4,7 +4,7 @@ Feed Ranking Model
 混合 Feed 推薦評分：同時處理 practice 和 checkin，基於社群關係個人化。
 
 Score = W_social × Social + W_engage × Engagement + W_content × Content
-      + W_decay × TimeDecay + W_fresh × Freshness
+      + W_decay × TimeDecay + W_fresh × Freshness + W_featured × Featured
 
 Social Signal（個人化核心）:
     Connected user       → +1.0
@@ -26,9 +26,13 @@ Freshness（新內容加分）:
     max(0, 1 - age_hours / freshness_window_hours)
     發布當下加滿分，於視窗內線性遞減至 0；獎勵尚未累積互動的新內容。
 
+Featured（精選加分，僅 practice）:
+    管理員標記的精選內容（practices.is_featured）固定加分，
+    對應 content-performance spec 的「置頂於動態牆」需求；設 0 則精選不影響排序。
+
 Weights（預設值，可由 admin 後台的 feed_ranking_configs 覆蓋）:
     W_social=0.35, W_engage=0.30, W_content=0.15, W_decay=0.20,
-    W_fresh=0.30（視窗 72 小時）
+    W_fresh=0.30（視窗 72 小時）, W_featured=0.50
 """
 
 import math
@@ -42,6 +46,7 @@ W_CONTENT = 0.15
 W_DECAY = 0.20
 W_FRESHNESS = 0.30
 FRESHNESS_WINDOW_HOURS = 72
+W_FEATURED = 0.50
 
 # --- Social signal values ---
 SOCIAL_CONNECTED = 1.0
@@ -61,6 +66,7 @@ class RankingWeights:
     w_decay: float = W_DECAY
     w_freshness: float = W_FRESHNESS
     freshness_window_hours: int = FRESHNESS_WINDOW_HOURS
+    w_featured: float = W_FEATURED
 
 
 DEFAULT_WEIGHTS = RankingWeights()
@@ -131,12 +137,16 @@ def score_practice(
     # --- Freshness（新內容加分）---
     freshness = _freshness(created_at, now, weights.freshness_window_hours)
 
+    # --- Featured（精選加分）---
+    featured = 1 if getattr(practice_row, "is_featured", False) else 0
+
     return (
         weights.w_social * social
         + weights.w_engagement * engagement
         + weights.w_content * content
         + weights.w_decay * decay
         + weights.w_freshness * freshness
+        + weights.w_featured * featured
     )
 
 

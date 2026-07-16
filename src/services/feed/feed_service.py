@@ -168,7 +168,9 @@ class FeedService:
                 item["reactions"] = reactions_map.get(("practice", item_id), [])
                 comment_data = comments_map.get(("practice", item_id), {})
                 item["comment_count"] = comment_data.get("count", 0)
-                if item.get("is_brewing"):
+                if item.get("is_featured"):
+                    feed_reason = FeedReasonType.featured
+                elif item.get("is_brewing"):
                     feed_reason = FeedReasonType.new_release
                 elif item_id in cheered_practice_ids:
                     feed_reason = FeedReasonType.cheered
@@ -267,7 +269,9 @@ class FeedService:
                     item["reactions"] = reactions_map.get(("practice", row.item_id), [])
                     comment_data = comments_map.get(("practice", row.item_id), {})
                     item["comment_count"] = comment_data.get("count", 0)
-                    if item.get("is_brewing"):
+                    if item.get("is_featured"):
+                        feed_reason = FeedReasonType.featured
+                    elif item.get("is_brewing"):
                         feed_reason = FeedReasonType.new_release
                     elif row.item_id in cheered_practice_ids:
                         feed_reason = FeedReasonType.cheered
@@ -422,6 +426,7 @@ class FeedService:
                 p.created_at AS sort_time,
                 p.user_id,
                 p.updated_at,
+                COALESCE(p.is_featured, FALSE) AS is_featured,
                 COUNT(DISTINCT r.id) AS reactions_count,
                 COUNT(DISTINCT cm.id) AS comments_count
             FROM practices p
@@ -430,7 +435,7 @@ class FeedService:
                 ON cm.target_type = 'practice' AND cm.target_id = p.id
                 AND cm.visibility = 'public'
             WHERE {where_sql}
-            GROUP BY p.id, p.created_at, p.user_id, p.updated_at
+            GROUP BY p.id, p.created_at, p.user_id, p.updated_at, p.is_featured
             ORDER BY p.created_at DESC, p.id DESC
             LIMIT :limit
         """
@@ -570,6 +575,7 @@ class FeedService:
                     w_decay=float(config.w_decay),
                     w_freshness=float(config.w_freshness),
                     freshness_window_hours=int(config.freshness_window_hours),
+                    w_featured=float(config.w_featured),
                 )
         except Exception:
             logger.warning(
@@ -1120,6 +1126,7 @@ class FeedService:
                     p.title,
                     p.status,
                     p.privacy_status,
+                    COALESCE(p.is_featured, FALSE) AS is_featured,
                     p.practice_action,
                     p.start_date::text AS start_date,
                     p.end_date::text AS end_date,
@@ -1148,6 +1155,7 @@ class FeedService:
                 "status": r.status,
                 "privacy_status": r.privacy_status,
                 "is_brewing": is_brewing,
+                "is_featured": bool(r.is_featured),
                 "practice_action": r.practice_action,
                 "start_date": r.start_date,
                 "end_date": r.end_date,

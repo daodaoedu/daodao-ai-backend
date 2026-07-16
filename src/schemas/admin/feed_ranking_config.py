@@ -13,6 +13,7 @@ class FeedRankingConfigCreate(BaseModel):
     w_decay: float = Field(0.20, ge=0.0, le=10.0)
     w_freshness: float = Field(0.30, ge=0.0, le=10.0)
     freshness_window_hours: int = Field(72, ge=1, le=720)
+    w_featured: float = Field(0.50, ge=0.0, le=10.0)
     is_active: bool = False
     notes: Optional[str] = None
 
@@ -25,6 +26,7 @@ class FeedRankingConfigUpdate(BaseModel):
     w_decay: Optional[float] = Field(None, ge=0.0, le=10.0)
     w_freshness: Optional[float] = Field(None, ge=0.0, le=10.0)
     freshness_window_hours: Optional[int] = Field(None, ge=1, le=720)
+    w_featured: Optional[float] = Field(None, ge=0.0, le=10.0)
     is_active: Optional[bool] = None
     notes: Optional[str] = None
 
@@ -38,6 +40,7 @@ class FeedRankingConfigRead(BaseModel):
     w_decay: Decimal
     w_freshness: Decimal
     freshness_window_hours: int
+    w_featured: Decimal
     is_active: bool
     notes: Optional[str]
     created_at: datetime

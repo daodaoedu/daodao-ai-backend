@@ -23,6 +23,9 @@ class FeedRankingConfig(Base):
     w_freshness = Column(Numeric(5, 2), nullable=False, default=0.30)
     freshness_window_hours = Column(Integer, nullable=False, default=72)
 
+    # 精選加分：practices.is_featured 的內容加分；0 表示不影響排序
+    w_featured = Column(Numeric(5, 2), nullable=False, default=0.50)
+
     # 全表最多一筆 is_active=True（由 DB partial unique index 強制）
     is_active = Column(Boolean, nullable=False, default=False)
 

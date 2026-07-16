@@ -85,6 +85,7 @@ def create_feed_ranking_config(
         w_decay=body.w_decay,
         w_freshness=body.w_freshness,
         freshness_window_hours=body.freshness_window_hours,
+        w_featured=body.w_featured,
         is_active=body.is_active,
         notes=body.notes,
     )
@@ -129,6 +130,8 @@ def update_feed_ranking_config(
         config.w_freshness = body.w_freshness
     if body.freshness_window_hours is not None:
         config.freshness_window_hours = body.freshness_window_hours
+    if body.w_featured is not None:
+        config.w_featured = body.w_featured
     if body.notes is not None:
         config.notes = body.notes
 

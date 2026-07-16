@@ -16,12 +16,20 @@ NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=timezone.utc)
 
 PracticeRow = namedtuple(
     "PracticeRow",
-    ["created_at", "updated_at", "has_resources", "progress_percentage", "template_id"],
+    [
+        "created_at",
+        "updated_at",
+        "has_resources",
+        "progress_percentage",
+        "template_id",
+        "is_featured",
+    ],
+    defaults=[False],
 )
 CheckinRow = namedtuple("CheckinRow", ["created_at", "image_urls", "note", "mood"])
 
 
-def _practice(age_hours: float) -> PracticeRow:
+def _practice(age_hours: float, is_featured: bool = False) -> PracticeRow:
     created = NOW - timedelta(hours=age_hours)
     return PracticeRow(
         created_at=created,
@@ -29,6 +37,7 @@ def _practice(age_hours: float) -> PracticeRow:
         has_resources=False,
         progress_percentage=0,
         template_id=None,
+        is_featured=is_featured,
     )
 
 
@@ -75,6 +84,33 @@ class TestFreshnessSignal:
         legacy_score = score_practice(row, 3, 2, NOW, weights=legacy)
         # legacy score = w_social×0 + w_engage×eng + w_content×0 + w_decay×decay
         assert legacy_score < score_practice(row, 3, 2, NOW, weights=DEFAULT_WEIGHTS)
+
+
+class TestFeaturedSignal:
+    def test_featured_practice_outscores_identical_non_featured(self):
+        featured = score_practice(_practice(24 * 5, is_featured=True), 0, 0, NOW)
+        normal = score_practice(_practice(24 * 5, is_featured=False), 0, 0, NOW)
+        assert featured > normal
+
+    def test_zero_featured_weight_disables_boost(self):
+        weights = RankingWeights(w_featured=0.0)
+        featured = score_practice(
+            _practice(24 * 5, is_featured=True), 0, 0, NOW, weights=weights
+        )
+        normal = score_practice(
+            _practice(24 * 5, is_featured=False), 0, 0, NOW, weights=weights
+        )
+        assert featured == normal
+
+    def test_featured_boost_equals_weight(self):
+        weights = RankingWeights(w_featured=0.5)
+        featured = score_practice(
+            _practice(24 * 5, is_featured=True), 0, 0, NOW, weights=weights
+        )
+        normal = score_practice(
+            _practice(24 * 5, is_featured=False), 0, 0, NOW, weights=weights
+        )
+        assert abs((featured - normal) - 0.5) < 1e-9
 
 
 class TestConfigurableWeights:
@@ -126,6 +162,7 @@ class TestLoadRankingWeights:
         config.w_decay = "0.40"
         config.w_freshness = "0.50"
         config.freshness_window_hours = 48
+        config.w_featured = "0.60"
 
         db = MagicMock()
         db.query.return_value.filter.return_value.first.return_value = config
@@ -137,6 +174,7 @@ class TestLoadRankingWeights:
             w_decay=0.40,
             w_freshness=0.50,
             freshness_window_hours=48,
+            w_featured=0.60,
         )
 
     def test_falls_back_to_defaults_on_db_error(self):
