@@ -426,7 +426,10 @@ class FeedService:
                 p.created_at AS sort_time,
                 p.user_id,
                 p.updated_at,
-                COALESCE(p.is_featured, FALSE) AS is_featured,
+                (COALESCE(p.is_featured, FALSE)
+                    AND (p.featured_start_at IS NULL OR p.featured_start_at <= NOW())
+                    AND (p.featured_end_at IS NULL OR p.featured_end_at > NOW())
+                ) AS is_featured,
                 COUNT(DISTINCT r.id) AS reactions_count,
                 COUNT(DISTINCT cm.id) AS comments_count
             FROM practices p
@@ -435,7 +438,8 @@ class FeedService:
                 ON cm.target_type = 'practice' AND cm.target_id = p.id
                 AND cm.visibility = 'public'
             WHERE {where_sql}
-            GROUP BY p.id, p.created_at, p.user_id, p.updated_at, p.is_featured
+            GROUP BY p.id, p.created_at, p.user_id, p.updated_at,
+                p.is_featured, p.featured_start_at, p.featured_end_at
             ORDER BY p.created_at DESC, p.id DESC
             LIMIT :limit
         """
@@ -1126,7 +1130,10 @@ class FeedService:
                     p.title,
                     p.status,
                     p.privacy_status,
-                    COALESCE(p.is_featured, FALSE) AS is_featured,
+                    (COALESCE(p.is_featured, FALSE)
+                        AND (p.featured_start_at IS NULL OR p.featured_start_at <= NOW())
+                        AND (p.featured_end_at IS NULL OR p.featured_end_at > NOW())
+                    ) AS is_featured,
                     p.practice_action,
                     p.start_date::text AS start_date,
                     p.end_date::text AS end_date,
