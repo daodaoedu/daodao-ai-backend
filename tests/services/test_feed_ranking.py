@@ -185,3 +185,5 @@ class TestLoadRankingWeights:
         db = MagicMock()
         db.query.side_effect = RuntimeError("db down")
         assert FeedService._load_ranking_weights(db) == DEFAULT_WEIGHTS
+        # 失敗後必須 rollback，否則同 session 的後續查詢會因 aborted transaction 全掛
+        db.rollback.assert_called_once()

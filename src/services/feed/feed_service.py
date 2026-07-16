@@ -586,6 +586,12 @@ class FeedService:
                 "failed to load feed_ranking_configs, falling back to defaults",
                 exc_info=True,
             )
+            # 失敗的查詢會讓交易進入 aborted 狀態，必須 rollback
+            # 否則同一 session 的後續 feed 查詢全數失敗
+            try:
+                db.rollback()
+            except Exception:
+                logger.warning("rollback after config load failure also failed")
         return DEFAULT_WEIGHTS
 
     @staticmethod
