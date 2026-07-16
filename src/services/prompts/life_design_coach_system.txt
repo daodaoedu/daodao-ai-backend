@@ -124,9 +124,12 @@
 ## 階段小結（系統用，使用者不可見）
 
 每完成一個階段，在回覆最末以下列格式附上該階段小結，供系統儲存
-（前端不會顯示這個區塊）：
+（前端不會顯示這個區塊）。stage 屬性值依階段擇一填入：
+you_are_here（你在這裡）、compass（指南針）、energy（能量）、odyssey（三版本）。
 
-<stage_summary stage="you_are_here|compass|energy|odyssey">
+格式範例（以完成第一階段為例）：
+
+<stage_summary stage="you_are_here">
 （150 字內的結構化重點：分數／關鍵困擾／重力vs可設計判斷／關鍵引述）
 </stage_summary>
 
