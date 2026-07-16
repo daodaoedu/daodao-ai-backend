@@ -406,8 +406,8 @@ class TestSlotASelection:
 
 class TestSlotCycleOrder:
 
-    def test_cycle_order_is_a_b_c_c_c_when_activity_event_exists(self):
-        """有互動事件時，API 回傳 items 順序符合 A→B→C→C→C 循環。"""
+    def test_cycle_order_is_a_b_c_when_activity_event_exists(self):
+        """有互動事件時，API 回傳 items 順序符合 A→B→C 循環（1:1:1）。"""
         checkin_rows = [
             _CheckinRow(
                 item_id=101,
@@ -421,14 +421,14 @@ class TestSlotCycleOrder:
             _PracticeRow(item_id=i, sort_time=None) for i in [201, 202, 203]
         ]
 
-        slots, p_idx, c_idx = FeedService._assemble_slot_cycles(
+        slots, p_idx, c_idx, _ = FeedService._assemble_slot_cycles(
             practice_rows, checkin_rows, ["任意事件文字"], num_cycles=1
         )
 
         slot_types = [s["slot_type"] for s in slots]
         assert slot_types[0] == SlotType.A
         assert slot_types[1] == SlotType.B
-        assert slot_types[2:] == [SlotType.C, SlotType.C, SlotType.C]
+        assert slot_types[2:] == [SlotType.C]
 
     def test_slot_b_appears_only_in_cycles_with_activity_event(self):
         """只有有互動事件的循環才包含 Slot B。"""
@@ -452,7 +452,7 @@ class TestSlotCycleOrder:
             _PracticeRow(item_id=i, sort_time=None) for i in range(201, 207)
         ]
 
-        slots, _, _ = FeedService._assemble_slot_cycles(
+        slots, _, _, _ = FeedService._assemble_slot_cycles(
             practice_rows, checkin_rows, ["事件 1"], num_cycles=2
         )
 
@@ -461,11 +461,7 @@ class TestSlotCycleOrder:
             SlotType.A,
             SlotType.B,
             SlotType.C,
-            SlotType.C,
-            SlotType.C,
             SlotType.A,
-            SlotType.C,
-            SlotType.C,
             SlotType.C,
         ]
 
@@ -491,23 +487,22 @@ class TestSlotCycleOrder:
             _PracticeRow(item_id=i, sort_time=None) for i in range(201, 207)
         ]
 
-        slots, p_idx, c_idx = FeedService._assemble_slot_cycles(
+        slots, p_idx, c_idx, _ = FeedService._assemble_slot_cycles(
             practice_rows,
             checkin_rows,
             ["任意事件文字"],
             num_cycles=2,
-            max_items=6,
+            max_items=4,
         )
 
-        assert len(slots) == 5
+        # 第二循環（A+C 共 2 格）會超出 max_items=4，整個循環不進場
+        assert len(slots) == 3
         assert [slot["slot_type"] for slot in slots] == [
             SlotType.A,
             SlotType.B,
             SlotType.C,
-            SlotType.C,
-            SlotType.C,
         ]
-        assert p_idx == 3
+        assert p_idx == 1
         assert c_idx == 1
 
     def test_slot_b_uses_activity_event_text_when_provided(self):
@@ -526,7 +521,7 @@ class TestSlotCycleOrder:
         ]
         activity_events = ["Anna 對 Bob 的《學英文》打卡說了加油"]
 
-        slots, _, _ = FeedService._assemble_slot_cycles(
+        slots, _, _, _ = FeedService._assemble_slot_cycles(
             practice_rows, checkin_rows, activity_events, num_cycles=1
         )
 
@@ -559,7 +554,7 @@ class TestSlotCycleOrder:
             }
         ]
 
-        slots, _, _ = FeedService._assemble_slot_cycles(
+        slots, _, _, _ = FeedService._assemble_slot_cycles(
             practice_rows, checkin_rows, activity_events, num_cycles=1
         )
 
@@ -585,7 +580,7 @@ class TestSlotCycleOrder:
             _PracticeRow(item_id=i, sort_time=None) for i in [201, 202, 203]
         ]
 
-        slots, _, _ = FeedService._assemble_slot_cycles(
+        slots, _, _, _ = FeedService._assemble_slot_cycles(
             practice_rows, checkin_rows, [], num_cycles=1
         )
 
@@ -606,12 +601,12 @@ class TestSlotCycleOrder:
             _PracticeRow(item_id=i, sort_time=None) for i in [201, 202, 203]
         ]
 
-        slots_without_event, _, _ = FeedService._assemble_slot_cycles(
+        slots_without_event, _, _, _ = FeedService._assemble_slot_cycles(
             practice_rows, checkin_rows, [], num_cycles=1
         )
         assert all(s["slot_type"] != SlotType.B for s in slots_without_event)
 
-        slots_with_event, _, _ = FeedService._assemble_slot_cycles(
+        slots_with_event, _, _, _ = FeedService._assemble_slot_cycles(
             practice_rows, checkin_rows, ["任意事件文字"], num_cycles=1
         )
         slot_b = next(

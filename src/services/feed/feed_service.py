@@ -104,8 +104,9 @@ class FeedService:
 
         # Personalized ranking: re-sort pools by social + engagement score.
         social_graph = FeedService._fetch_social_graph(db, user_id) if user_id else None
+        weights = FeedService._load_ranking_weights(db)
         practice_rows, checkin_rows = FeedService._apply_ranking(
-            practice_rows, checkin_rows, social_graph
+            practice_rows, checkin_rows, social_graph, weights
         )
 
         # Fetch Slot B activity events with Connection > Follow > Community priority.
@@ -531,15 +532,13 @@ class FeedService:
         ).fetchall()
 
         interactions = db.execute(
-            text(
-                """
+            text("""
                 SELECT c.user_id AS target_user_id, COUNT(*) AS cnt
                 FROM reactions r
                 JOIN practice_checkins c ON c.id = r.target_id
                 WHERE r.target_type = 'checkin' AND r.user_id = :uid
                 GROUP BY c.user_id
-                """
-            ),
+                """),
             {"uid": user_id},
         ).fetchall()
 
@@ -551,16 +550,51 @@ class FeedService:
         )
 
     @staticmethod
+    def _load_ranking_weights(db: Session):
+        """讀取 admin 後台設定的 active 排序權重；查無或失敗時退回程式碼預設值。"""
+        from src.services.feed.feed_ranking import DEFAULT_WEIGHTS, RankingWeights
+
+        try:
+            from src.models.FeedRankingConfig import FeedRankingConfig
+
+            config = (
+                db.query(FeedRankingConfig)
+                .filter(FeedRankingConfig.is_active.is_(True))
+                .first()
+            )
+            if config:
+                return RankingWeights(
+                    w_social=float(config.w_social),
+                    w_engagement=float(config.w_engagement),
+                    w_content=float(config.w_content),
+                    w_decay=float(config.w_decay),
+                    w_freshness=float(config.w_freshness),
+                    freshness_window_hours=int(config.freshness_window_hours),
+                )
+        except Exception:
+            logger.warning(
+                "failed to load feed_ranking_configs, falling back to defaults",
+                exc_info=True,
+            )
+        return DEFAULT_WEIGHTS
+
+    @staticmethod
     def _apply_ranking(
         practice_rows: list,
         checkin_rows: list,
         social_graph,
+        weights=None,
     ) -> tuple[list, list]:
         """Re-score and re-sort practice and checkin pools by personalized score."""
         from datetime import datetime, timezone
 
-        from src.services.feed.feed_ranking import score_checkin, score_practice
+        from src.services.feed.feed_ranking import (
+            DEFAULT_WEIGHTS,
+            score_checkin,
+            score_practice,
+        )
 
+        weights = weights or DEFAULT_WEIGHTS
         now = datetime.now(timezone.utc)
 
         scored_p = [
@@ -573,6 +607,7 @@ class FeedService:
                     social_graph=social_graph,
                     owner_user_id=getattr(row, "user_id", None),
                     practice_internal_id=row.item_id,
+                    weights=weights,
                 ),
                 row,
             )
@@ -589,6 +624,7 @@ class FeedService:
                     now=now,
                     social_graph=social_graph,
                     owner_user_id=getattr(row, "user_id", None),
+                    weights=weights,
                 ),
                 row,
             )
@@ -605,13 +641,11 @@ class FeedService:
     @staticmethod
     def _fetch_connected_user_ids(db: Session, user_id: int) -> set[int]:
         rows = db.execute(
-            text(
-                """
+            text("""
                 SELECT CASE WHEN user_a_id = :uid THEN user_b_id ELSE user_a_id END AS user_id
                 FROM connections
                 WHERE user_a_id = :uid OR user_b_id = :uid
-                """
-            ),
+                """),
             {"uid": user_id},
         ).fetchall()
         return {r.user_id for r in rows}
@@ -619,13 +653,11 @@ class FeedService:
     @staticmethod
     def _fetch_following_user_ids(db: Session, user_id: int) -> set[int]:
         rows = db.execute(
-            text(
-                """
+            text("""
                 SELECT target_id
                 FROM follows
                 WHERE follower_id = :uid AND target_type = 'user'
-                """
-            ),
+                """),
             {"uid": user_id},
         ).fetchall()
         return {r.target_id for r in rows}
@@ -1059,16 +1091,14 @@ class FeedService:
         if not practice_ids or not social_user_ids:
             return set()
         rows = db.execute(
-            text(
-                """
+            text("""
                 SELECT DISTINCT c.practice_id
                 FROM reactions r
                 JOIN practice_checkins c ON c.id = r.target_id
                 WHERE r.target_type = 'checkin'
                   AND c.practice_id IN :practice_ids
                   AND r.user_id IN :social_user_ids
-                """
-            ).bindparams(
+                """).bindparams(
                 bindparam("practice_ids", expanding=True),
                 bindparam("social_user_ids", expanding=True),
             ),
@@ -1083,8 +1113,7 @@ class FeedService:
             return {}
 
         rows = db.execute(
-            text(
-                """
+            text("""
                 SELECT
                     p.id,
                     p.external_id,
@@ -1106,8 +1135,7 @@ class FeedService:
                 JOIN users u ON u.id = p.user_id
                 LEFT JOIN contacts ct ON ct.id = u.contact_id
                 WHERE p.id IN :ids
-            """
-            ).bindparams(bindparam("ids", expanding=True)),
+            """).bindparams(bindparam("ids", expanding=True)),
             {"ids": ids},
         ).fetchall()
 
@@ -1143,8 +1171,7 @@ class FeedService:
             return {}
 
         rows = db.execute(
-            text(
-                """
+            text("""
                 SELECT
                     c.id,
                     c.checkin_date::text AS checkin_date,
@@ -1163,8 +1190,7 @@ class FeedService:
                 JOIN users u ON u.id = c.user_id
                 LEFT JOIN contacts ct ON ct.id = u.contact_id
                 WHERE c.id IN :ids
-            """
-            ).bindparams(bindparam("ids", expanding=True)),
+            """).bindparams(bindparam("ids", expanding=True)),
             {"ids": ids},
         ).fetchall()
 
@@ -1199,8 +1225,7 @@ class FeedService:
             if not ids:
                 continue
             rows = db.execute(
-                text(
-                    """
+                text("""
                     SELECT
                         r.target_id,
                         r.reaction_type,
@@ -1219,8 +1244,7 @@ class FeedService:
                     WHERE r.target_type = :target_type
                       AND r.target_id IN :ids
                     GROUP BY r.target_id, r.reaction_type
-                """
-                ).bindparams(bindparam("ids", expanding=True)),
+                """).bindparams(bindparam("ids", expanding=True)),
                 {"target_type": target_type, "ids": ids},
             ).fetchall()
 
@@ -1247,16 +1271,14 @@ class FeedService:
 
             # 1. Counts
             count_rows = db.execute(
-                text(
-                    """
+                text("""
                     SELECT target_id, COUNT(*) AS cnt
                     FROM comments
                     WHERE target_type = :target_type
                       AND target_id IN :ids
                       AND visibility = 'public'
                     GROUP BY target_id
-                """
-                ).bindparams(bindparam("ids", expanding=True)),
+                """).bindparams(bindparam("ids", expanding=True)),
                 {"target_type": target_type, "ids": ids},
             ).fetchall()
 
@@ -1265,8 +1287,7 @@ class FeedService:
 
             # 2. Preview (latest 2 per target) using LATERAL join
             preview_rows = db.execute(
-                text(
-                    """
+                text("""
                     SELECT sub.target_id, sub.id, sub.content, sub.created_at,
                            u.external_id AS user_external_id,
                            u.nickname AS user_name,
@@ -1290,8 +1311,7 @@ class FeedService:
                     ) sub
                     JOIN users u ON u.id = sub.user_id
                     LEFT JOIN contacts ct ON ct.id = u.contact_id
-                """
-                ).bindparams(bindparam("ids", expanding=True)),
+                """).bindparams(bindparam("ids", expanding=True)),
                 {"target_type": target_type, "ids": ids},
             ).fetchall()
 
