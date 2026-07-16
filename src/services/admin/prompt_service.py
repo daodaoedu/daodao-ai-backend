@@ -21,6 +21,8 @@ _PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 _SEED_PROMPTS: dict[str, str] = {
     "insight": "insight_system.txt",
     "rag": "rag_system.txt",
+    "life_design_coach": "life_design_coach_system.txt",
+    "life_design": "life_design_system.txt",
 }
 
 

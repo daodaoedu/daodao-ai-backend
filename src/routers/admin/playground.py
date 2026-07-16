@@ -11,6 +11,7 @@ from src.models.SystemPrompt import SystemPrompt
 from src.models.User import User
 from src.response_template import api_response_decorator
 from src.schemas.admin.playground import (
+    ChatTurn,
     PlaygroundChatRequest,
     PlaygroundInsightRequest,
     SaveInsightRequest,
@@ -36,6 +37,37 @@ def _split_thinking(output: str) -> tuple[str, str]:
     return thinking, clean
 
 
+_ROLE_LABELS = {"user": "使用者", "assistant": "設計師"}
+
+
+def _build_chat_prompt(
+    system_content: str,
+    history: list[ChatTurn] | None,
+    safe_message: str,
+) -> str:
+    """
+    組合 playground chat 的完整 prompt。
+    無 history：維持既有單次對話格式（向後相容）。
+    有 history：將對話紀錄攤平為文字腳本，結尾以「設計師：」引導接續。
+    history 中 user 內容須由呼叫端先經 guardrail 清洗。
+    """
+    if not history:
+        return (
+            f"{system_content}\n\n---\n{safe_message}"
+            if system_content
+            else safe_message
+        )
+
+    lines = [f"{_ROLE_LABELS[turn.role]}：{turn.content}" for turn in history]
+    transcript = "\n\n".join(lines)
+    parts = []
+    if system_content:
+        parts.append(system_content)
+    parts.append(f"---\n以下是先前的對話紀錄：\n\n{transcript}")
+    parts.append(f"---\n使用者：{safe_message}\n設計師：")
+    return "\n\n".join(parts)
+
+
 router = APIRouter()
 
 
@@ -59,9 +91,22 @@ async def playground_chat(
             status_code=404, detail=f"LLM model {body.model_id} not found"
         )
 
-    # 2. 組合 prompt
+    # 2. 組合 prompt（guardrail 清洗最新訊息與 history 中的 user 內容）
     try:
         safe_message = GuardrailLayer.sanitize_user_input(body.message)
+        safe_history = None
+        if body.history:
+            safe_history = [
+                (
+                    ChatTurn(
+                        role=turn.role,
+                        content=GuardrailLayer.sanitize_user_input(turn.content),
+                    )
+                    if turn.role == "user"
+                    else turn
+                )
+                for turn in body.history
+            ]
     except GuardrailViolationError as exc:
         raise HTTPException(
             status_code=400, detail=f"訊息內容違反安全規則：{exc}"
@@ -77,9 +122,7 @@ async def playground_chat(
         if sp:
             system_content = sp.content
 
-    full_prompt = (
-        f"{system_content}\n\n---\n{safe_message}" if system_content else safe_message
-    )
+    full_prompt = _build_chat_prompt(system_content, safe_history, safe_message)
 
     # 3. 建立 LLM client（使用 model.provider 對應的 backend，覆寫 model_name）
     llm_client = LLMClient(settings, model.provider)
