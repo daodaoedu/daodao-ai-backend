@@ -88,6 +88,11 @@ class Practice(Base):
 
     first_checkin_at = Column(TIMESTAMP(timezone=True))
 
+    # ===== featured（精選；生效狀態由查詢時計算，見 feed_service）=====
+    is_featured = Column(Boolean, nullable=False, default=False)
+    featured_start_at = Column(TIMESTAMP(timezone=True))
+    featured_end_at = Column(TIMESTAMP(timezone=True))
+
     # ===== timestamps =====
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 

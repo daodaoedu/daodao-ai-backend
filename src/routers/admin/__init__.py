@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from src.routers.admin import (
     ai_service_configs,
     dashboard,
+    feed_ranking_configs,
     llm_models,
     ping,
     playground,
@@ -15,6 +16,7 @@ router = APIRouter(prefix="/v1/admin")
 
 router.include_router(ping.router, tags=["admin"])
 router.include_router(ai_service_configs.router, tags=["admin-ai-service-configs"])
+router.include_router(feed_ranking_configs.router, tags=["admin-feed-ranking-configs"])
 router.include_router(dashboard.router, tags=["admin-dashboard"])
 router.include_router(query_logs.router, tags=["admin-query-logs"])
 router.include_router(system_prompts.router, tags=["admin-system-prompts"])

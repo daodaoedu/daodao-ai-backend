@@ -12,6 +12,7 @@ class FeedReasonType(str, Enum):
     new_release = "new_release"
     checked_in = "checked_in"
     cheered = "cheered"
+    featured = "featured"
 
 
 class SlotType(str, Enum):

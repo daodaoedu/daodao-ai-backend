@@ -104,8 +104,9 @@ class FeedService:
 
         # Personalized ranking: re-sort pools by social + engagement score.
         social_graph = FeedService._fetch_social_graph(db, user_id) if user_id else None
+        weights = FeedService._load_ranking_weights(db)
         practice_rows, checkin_rows = FeedService._apply_ranking(
-            practice_rows, checkin_rows, social_graph
+            practice_rows, checkin_rows, social_graph, weights
         )
 
         # Fetch Slot B activity events with Connection > Follow > Community priority.
@@ -167,7 +168,9 @@ class FeedService:
                 item["reactions"] = reactions_map.get(("practice", item_id), [])
                 comment_data = comments_map.get(("practice", item_id), {})
                 item["comment_count"] = comment_data.get("count", 0)
-                if item.get("is_brewing"):
+                if item.get("is_featured"):
+                    feed_reason = FeedReasonType.featured
+                elif item.get("is_brewing"):
                     feed_reason = FeedReasonType.new_release
                 elif item_id in cheered_practice_ids:
                     feed_reason = FeedReasonType.cheered
@@ -266,7 +269,9 @@ class FeedService:
                     item["reactions"] = reactions_map.get(("practice", row.item_id), [])
                     comment_data = comments_map.get(("practice", row.item_id), {})
                     item["comment_count"] = comment_data.get("count", 0)
-                    if item.get("is_brewing"):
+                    if item.get("is_featured"):
+                        feed_reason = FeedReasonType.featured
+                    elif item.get("is_brewing"):
                         feed_reason = FeedReasonType.new_release
                     elif row.item_id in cheered_practice_ids:
                         feed_reason = FeedReasonType.cheered
@@ -421,6 +426,10 @@ class FeedService:
                 p.created_at AS sort_time,
                 p.user_id,
                 p.updated_at,
+                (COALESCE(p.is_featured, FALSE)
+                    AND (p.featured_start_at IS NULL OR p.featured_start_at <= NOW())
+                    AND (p.featured_end_at IS NULL OR p.featured_end_at > NOW())
+                ) AS is_featured,
                 COUNT(DISTINCT r.id) AS reactions_count,
                 COUNT(DISTINCT cm.id) AS comments_count
             FROM practices p
@@ -429,7 +438,8 @@ class FeedService:
                 ON cm.target_type = 'practice' AND cm.target_id = p.id
                 AND cm.visibility = 'public'
             WHERE {where_sql}
-            GROUP BY p.id, p.created_at, p.user_id, p.updated_at
+            GROUP BY p.id, p.created_at, p.user_id, p.updated_at,
+                p.is_featured, p.featured_start_at, p.featured_end_at
             ORDER BY p.created_at DESC, p.id DESC
             LIMIT :limit
         """
@@ -551,16 +561,58 @@ class FeedService:
         )
 
     @staticmethod
+    def _load_ranking_weights(db: Session):
+        """讀取 admin 後台設定的 active 排序權重；查無或失敗時退回程式碼預設值。"""
+        from src.services.feed.feed_ranking import DEFAULT_WEIGHTS, RankingWeights
+
+        try:
+            from src.models.FeedRankingConfig import FeedRankingConfig
+
+            config = (
+                db.query(FeedRankingConfig)
+                .filter(FeedRankingConfig.is_active.is_(True))
+                .first()
+            )
+            if config:
+                return RankingWeights(
+                    w_social=float(config.w_social),
+                    w_engagement=float(config.w_engagement),
+                    w_content=float(config.w_content),
+                    w_decay=float(config.w_decay),
+                    w_freshness=float(config.w_freshness),
+                    freshness_window_hours=int(config.freshness_window_hours),
+                    w_featured=float(config.w_featured),
+                )
+        except Exception:
+            logger.warning(
+                "failed to load feed_ranking_configs, falling back to defaults",
+                exc_info=True,
+            )
+            # 失敗的查詢會讓交易進入 aborted 狀態，必須 rollback
+            # 否則同一 session 的後續 feed 查詢全數失敗
+            try:
+                db.rollback()
+            except Exception:
+                logger.warning("rollback after config load failure also failed")
+        return DEFAULT_WEIGHTS
+
+    @staticmethod
     def _apply_ranking(
         practice_rows: list,
         checkin_rows: list,
         social_graph,
+        weights=None,
     ) -> tuple[list, list]:
         """Re-score and re-sort practice and checkin pools by personalized score."""
         from datetime import datetime, timezone
 
-        from src.services.feed.feed_ranking import score_checkin, score_practice
+        from src.services.feed.feed_ranking import (
+            DEFAULT_WEIGHTS,
+            score_checkin,
+            score_practice,
+        )
 
+        weights = weights or DEFAULT_WEIGHTS
         now = datetime.now(timezone.utc)
 
         scored_p = [
@@ -573,6 +625,7 @@ class FeedService:
                     social_graph=social_graph,
                     owner_user_id=getattr(row, "user_id", None),
                     practice_internal_id=row.item_id,
+                    weights=weights,
                 ),
                 row,
             )
@@ -589,6 +642,7 @@ class FeedService:
                     now=now,
                     social_graph=social_graph,
                     owner_user_id=getattr(row, "user_id", None),
+                    weights=weights,
                 ),
                 row,
             )
@@ -1091,6 +1145,10 @@ class FeedService:
                     p.title,
                     p.status,
                     p.privacy_status,
+                    (COALESCE(p.is_featured, FALSE)
+                        AND (p.featured_start_at IS NULL OR p.featured_start_at <= NOW())
+                        AND (p.featured_end_at IS NULL OR p.featured_end_at > NOW())
+                    ) AS is_featured,
                     p.practice_action,
                     p.start_date::text AS start_date,
                     p.end_date::text AS end_date,
@@ -1120,6 +1178,7 @@ class FeedService:
                 "status": r.status,
                 "privacy_status": r.privacy_status,
                 "is_brewing": is_brewing,
+                "is_featured": bool(r.is_featured),
                 "practice_action": r.practice_action,
                 "start_date": r.start_date,
                 "end_date": r.end_date,
