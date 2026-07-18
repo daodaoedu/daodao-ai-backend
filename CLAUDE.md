@@ -13,7 +13,7 @@
 
 commit 時必須依序執行：
 
-1. 先執行 `.claude/skills/pre-commit-check/SKILL.md` skill 跑品質檢查（format + lint）
+1. 先執行 `.claude/skills/pre-commit-check/SKILL.md` skill 跑品質檢查（format + lint + 單元測試）
 2. 檢查通過後，執行 `.claude/skills/format-commit/SKILL.md` skill 產生 commit message
 3. 使用者確認後才執行 git commit
 
@@ -23,11 +23,16 @@ commit 時必須依序執行：
 - Yes → 執行 `.claude/skills/code-review/SKILL.md` skill，review 完再 push
 - No → 直接 push
 
+## Merge 後流程
+
+PR merged 後，執行 `.claude/skills/post-merge-wrapup/SKILL.md` skill 收尾：歸檔 openspec change、更新 daodao repo docs/product 的功能狀態、校準地圖文件。
+
 ## 品質檢查指令
 
 - `make check` — Black + Ruff 格式化檢查
 - `make lint` — Pylint + Bandit 靜態分析
 - `make format` — 自動修復格式問題
+- `make test` — pytest 單元測試（需 `.venv`）
 
 ## 工作守則
 
