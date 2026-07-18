@@ -93,9 +93,9 @@ class FeedService:
         # 1:1:1 cycle: each cycle = 1 checkin + 1 activity + 1 practice
         max_cycles = max(1, limit // 3)
 
-        # Rule ③ skips up to 1 practice per cycle → need 2x buffer + 1 to detect has_next.
+        # Rule ③ skips up to 2 practices per cycle → need 3x buffer + 1 to detect has_next.
         practice_rows = FeedService._fetch_practice_pool(
-            db, p_cursor_time, p_cursor_id, max_cycles * 2 + 1, keyword, tags
+            db, p_cursor_time, p_cursor_id, max_cycles * 3 + 1, keyword, tags
         )
         # Extra buffer for checkins so cold-start cycles never starve.
         checkin_rows = FeedService._fetch_checkin_pool_with_counts(

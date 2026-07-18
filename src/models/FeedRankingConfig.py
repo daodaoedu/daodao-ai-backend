@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, Index, Integer, Numeric, String, Text
+from sqlalchemy import Boolean, Column, Index, Integer, Numeric, String, Text, text
 from sqlalchemy.dialects.postgresql import TIMESTAMP
 from sqlalchemy.sql import func
 
@@ -36,7 +36,14 @@ class FeedRankingConfig(Base):
     )
     updated_at = Column(TIMESTAMP(timezone=True), onupdate=func.now(), nullable=True)
 
-    __table_args__ = (Index("idx_feed_ranking_configs_is_active", "is_active"),)
+    __table_args__ = (
+        Index(
+            "idx_feed_ranking_configs_is_active",
+            "is_active",
+            unique=True,
+            postgresql_where=text("is_active IS TRUE"),
+        ),
+    )
 
     def __repr__(self) -> str:
         return (
