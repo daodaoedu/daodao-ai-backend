@@ -90,8 +90,8 @@ class FeedService:
             _,
         ) = FeedService._parse_dual_cursor(cursor)
 
-        # 1:1:1 cycle: each cycle = 1 checkin + 1 activity + 1 practice
-        max_cycles = max(1, limit // 3)
+        # 1:1 cycle: each cycle = 1 checkin + 1 practice
+        max_cycles = max(1, limit // 2)
 
         # Rule ③ skips up to 2 practices per cycle → need 3x buffer + 1 to detect has_next.
         practice_rows = FeedService._fetch_practice_pool(
@@ -109,16 +109,11 @@ class FeedService:
             practice_rows, checkin_rows, social_graph, weights
         )
 
-        # Fetch Slot B activity events with Connection > Follow > Community priority.
-        activity_events = FeedService._fetch_activity_events(
-            db, max_cycles + 1, user_id, keyword, tags
-        )
-
         slot_assignments, p_idx, c_idx, last_consumed_practice = (
             FeedService._assemble_slot_cycles(
                 practice_rows,
                 checkin_rows,
-                activity_events,
+                [],
                 max_cycles,
                 max_items=limit,
             )
@@ -157,11 +152,6 @@ class FeedService:
             item_type = slot["item_type"]
             item_id = slot["item_id"]
             slot_type = slot["slot_type"]
-
-            if item_type == "activity":
-                # Slot B ActivityCard injected directly
-                items.append(slot["card"])
-                continue
 
             if item_type == "practice" and item_id in practices_map:
                 item = practices_map[item_id]
@@ -1012,22 +1002,19 @@ class FeedService:
         max_items: Optional[int] = None,
     ) -> tuple[list[dict], int, int, object]:
         """
-        Assemble A→B→C cycles (1:1:1).
+        Assemble A→C cycles (1:1).
 
         Slot A: checkin(s) — skipped if pool empty.
-        Slot B: ActivityCard for a real interaction event; skipped when no event exists.
         Slot C: 1 practice per cycle — Rule ③: skip practices whose practice_id
                 was already assigned to Slot A on this page.
 
         Returns (slot_assignments, p_idx_consumed, c_idx_consumed, last_consumed_practice_row).
         """
-        # Rule ③: dynamically track which practice_ids have been shown in Slot A
         shown_practice_ids: set[int] = set()
         slots: list[dict] = []
         p_idx = 0
         c_idx = 0
-        ev_idx = 0
-        last_consumed_practice = None  # 最後實際分配到 Slot C 的 practice row
+        last_consumed_practice = None
 
         for _ in range(num_cycles):
             cycle_slots: list[dict] = []
@@ -1039,7 +1026,6 @@ class FeedService:
                     checkin_rows[c_idx:]
                 )
                 for row in a_rows:
-                    # Track this checkin's practice_id for Rule ③
                     if hasattr(row, "practice_id") and row.practice_id is not None:
                         shown_practice_ids.add(row.practice_id)
                     cycle_slots.append(
@@ -1051,23 +1037,6 @@ class FeedService:
                         }
                     )
 
-            # Slot B: only render ActivityCard when a real interaction event exists.
-            activity_event = (
-                activity_events[ev_idx] if ev_idx < len(activity_events) else None
-            )
-            ev_idx += 1
-            if activity_event:
-                activity_card = FeedService._build_activity_card_slot(activity_event)
-                cycle_slots.append(
-                    {
-                        "slot_type": SlotType.B,
-                        "item_type": "activity",
-                        "item_id": 0,
-                        "feed_source": "activity",
-                        "card": activity_card,
-                    }
-                )
-
             # Slot C: advance past practices already shown in Slot A (Rule ③)
             while (
                 p_idx < len(practice_rows)
@@ -1076,7 +1045,6 @@ class FeedService:
                 p_idx += 1
 
             if p_idx < len(practice_rows):
-                # Slot C: 1 practice per cycle (Rule ⑤: 1:1:1)
                 row = practice_rows[p_idx]
                 cycle_slots.append(
                     {
