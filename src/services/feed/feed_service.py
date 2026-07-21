@@ -5,7 +5,7 @@ Feed Service
 沿用 routers/users.py 的 practice 查詢與 enrichment 模式。
 """
 
-from typing import Optional, TypedDict
+from typing import Optional
 
 from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
@@ -13,22 +13,12 @@ from sqlalchemy.orm import Session
 from src.logger import AppLogger
 from src.models.User import User
 from src.schemas.feed import (
-    ActivityEventType,
-    ActivityType,
     FeedReasonType,
     FeedTypeFilter,
     SlotType,
 )
 
 logger = AppLogger(__name__).get_logger()
-
-
-class ActivityEvent(TypedDict, total=False):
-    event_type: str
-    event_id: str
-    event_text: str
-    practice_id: str
-    checkin_id: str
 
 
 class FeedService:
@@ -90,8 +80,8 @@ class FeedService:
             _,
         ) = FeedService._parse_dual_cursor(cursor)
 
-        # 1:1:1 cycle: each cycle = 1 checkin + 1 activity + 1 practice
-        max_cycles = max(1, limit // 3)
+        # 1:1 cycle: each cycle = 1 checkin + 1 practice
+        max_cycles = max(1, limit // 2)
 
         # Rule ③ skips up to 2 practices per cycle → need 3x buffer + 1 to detect has_next.
         practice_rows = FeedService._fetch_practice_pool(
@@ -109,16 +99,10 @@ class FeedService:
             practice_rows, checkin_rows, social_graph, weights
         )
 
-        # Fetch Slot B activity events with Connection > Follow > Community priority.
-        activity_events = FeedService._fetch_activity_events(
-            db, max_cycles + 1, user_id, keyword, tags
-        )
-
         slot_assignments, p_idx, c_idx, last_consumed_practice = (
             FeedService._assemble_slot_cycles(
                 practice_rows,
                 checkin_rows,
-                activity_events,
                 max_cycles,
                 max_items=limit,
             )
@@ -157,11 +141,6 @@ class FeedService:
             item_type = slot["item_type"]
             item_id = slot["item_id"]
             slot_type = slot["slot_type"]
-
-            if item_type == "activity":
-                # Slot B ActivityCard injected directly
-                items.append(slot["card"])
-                continue
 
             if item_type == "practice" and item_id in practices_map:
                 item = practices_map[item_id]
@@ -653,327 +632,6 @@ class FeedService:
         return [r for _, r in scored_p], [r for _, r in scored_c]
 
     # =========================================================================
-    # Activity Events (Slot B)
-    # =========================================================================
-
-    @staticmethod
-    def _fetch_connected_user_ids(db: Session, user_id: int) -> set[int]:
-        rows = db.execute(
-            text(
-                """
-                SELECT CASE WHEN user_a_id = :uid THEN user_b_id ELSE user_a_id END AS user_id
-                FROM connections
-                WHERE user_a_id = :uid OR user_b_id = :uid
-                """
-            ),
-            {"uid": user_id},
-        ).fetchall()
-        return {r.user_id for r in rows}
-
-    @staticmethod
-    def _fetch_following_user_ids(db: Session, user_id: int) -> set[int]:
-        rows = db.execute(
-            text(
-                """
-                SELECT target_id
-                FROM follows
-                WHERE follower_id = :uid AND target_type = 'user'
-                """
-            ),
-            {"uid": user_id},
-        ).fetchall()
-        return {r.target_id for r in rows}
-
-    @staticmethod
-    def _fetch_connection_activity_events(
-        db: Session,
-        user_id: int,
-        limit: int,
-        keyword: Optional[str] = None,
-        tags: Optional[list[str]] = None,
-    ) -> list[ActivityEvent]:
-        """Fetch recent checkin interaction events from connected users."""
-        return FeedService._fetch_interaction_events(
-            db,
-            limit,
-            actor_user_ids=FeedService._fetch_connected_user_ids(db, user_id),
-            keyword=keyword,
-            tags=tags,
-        )
-
-    @staticmethod
-    def _fetch_follow_activity_events(
-        db: Session,
-        user_id: int,
-        limit: int,
-        keyword: Optional[str] = None,
-        tags: Optional[list[str]] = None,
-    ) -> list[ActivityEvent]:
-        """Fetch recent checkin interaction events from followed users."""
-        return FeedService._fetch_interaction_events(
-            db,
-            limit,
-            actor_user_ids=FeedService._fetch_following_user_ids(db, user_id),
-            keyword=keyword,
-            tags=tags,
-        )
-
-    @staticmethod
-    def _select_activity_events_with_priority(
-        connection_events: list[ActivityEvent],
-        follow_events: list[ActivityEvent],
-        community_events: list[ActivityEvent],
-        limit: Optional[int] = None,
-    ) -> list[ActivityEvent]:
-        """Merge events by priority: Connection > Follow > Community fallback."""
-        events: list[ActivityEvent] = []
-        seen: set[tuple[str, str]] = set()
-        for source in (connection_events, follow_events, community_events):
-            for event in source:
-                key = (event.get("event_type", ""), event.get("event_id", ""))
-                if key in seen:
-                    continue
-                seen.add(key)
-                events.append(event)
-                if limit is not None and len(events) >= limit:
-                    return events
-        return events
-
-    _DEFAULT_ACTIVITY_EVENT_TEXT = "社群最近很活躍，快來看看大家在練什麼！"
-
-    _REACTION_LABELS: dict[str, str] = {
-        "encourage": "一起加油",
-        "touched": "很有共鳴",
-        "fire": "很有啟發",
-        "useful": "表達了加油",
-        "sameHere": "表示也有同感",
-        "curious": "表示好奇",
-    }
-
-    @staticmethod
-    def _build_activity_card_slot(event: Optional[ActivityEvent | str] = None) -> dict:
-        """Build a Slot B ActivityCard from a structured interaction event."""
-        if isinstance(event, str):
-            return {
-                "type": "activity",
-                "activity_type": ActivityType.COMMUNITY_EVENT.value,
-                "event_type": ActivityEventType.REACTION.value,
-                "event_id": "",
-                "event_text": event,
-                "label": "學習動態",
-                "slot_type": SlotType.B,
-                "practice_id": "",
-                "checkin_id": "",
-            }
-
-        event = event or {}
-        return {
-            "type": "activity",
-            "activity_type": ActivityType.COMMUNITY_EVENT.value,
-            "event_type": event.get("event_type", ActivityEventType.REACTION.value),
-            "event_id": event.get("event_id", ""),
-            "event_text": event.get(
-                "event_text", FeedService._DEFAULT_ACTIVITY_EVENT_TEXT
-            ),
-            "label": "學習動態",
-            "slot_type": SlotType.B,
-            "practice_id": event.get("practice_id", ""),
-            "checkin_id": event.get("checkin_id", ""),
-        }
-
-    @staticmethod
-    def _fetch_activity_events(
-        db: Session,
-        limit: int,
-        user_id: Optional[int] = None,
-        keyword: Optional[str] = None,
-        tags: Optional[list[str]] = None,
-    ) -> list[ActivityEvent]:
-        """Fetch Slot B activity events: Connection > Follow > Community priority."""
-        conn_events = (
-            FeedService._fetch_connection_activity_events(
-                db, user_id, limit, keyword, tags
-            )
-            if user_id
-            else []
-        )
-        remaining_after_conn = max(limit - len(conn_events), 0)
-        follow_events = (
-            FeedService._fetch_follow_activity_events(
-                db, user_id, remaining_after_conn or limit, keyword, tags
-            )
-            if user_id and remaining_after_conn > 0
-            else []
-        )
-        community_events = FeedService._fetch_community_interaction_events(
-            db, limit, keyword, tags
-        )
-        return FeedService._select_activity_events_with_priority(
-            conn_events, follow_events, community_events, limit
-        )
-
-    @staticmethod
-    def _fetch_community_interaction_events(
-        db: Session,
-        limit: int,
-        keyword: Optional[str] = None,
-        tags: Optional[list[str]] = None,
-    ) -> list[ActivityEvent]:
-        """Fetch global popular interaction events for Slot B ActivityCards."""
-        return FeedService._fetch_interaction_events(
-            db,
-            limit,
-            actor_user_ids=None,
-            keyword=keyword,
-            tags=tags,
-            sort_by_popular=True,
-        )
-
-    @staticmethod
-    def _fetch_community_reaction_events(
-        db: Session,
-        limit: int,
-        keyword: Optional[str] = None,
-        tags: Optional[list[str]] = None,
-    ) -> list[ActivityEvent]:
-        """Backward-compatible alias for community interaction events."""
-        return FeedService._fetch_community_interaction_events(db, limit, keyword, tags)
-
-    @staticmethod
-    def _fetch_interaction_events(
-        db: Session,
-        limit: int,
-        actor_user_ids: Optional[set[int]] = None,
-        keyword: Optional[str] = None,
-        tags: Optional[list[str]] = None,
-        sort_by_popular: bool = False,
-    ) -> list[ActivityEvent]:
-        """Fetch reaction/comment events on public checkins."""
-        if limit <= 0:
-            return []
-        if actor_user_ids is not None and not actor_user_ids:
-            return []
-
-        where_clauses = [
-            "p.privacy_status = 'public'",
-            "p.status IN ('active', 'completed')",
-            "p.deleted_at IS NULL",
-            "actor_u.id != owner_u.id",
-        ]
-        bind_params: dict = {"limit": limit}
-        bind_actor_ids = actor_user_ids is not None
-
-        if actor_user_ids is not None:
-            where_clauses.append("actor_u.id IN :actor_user_ids")
-            bind_params["actor_user_ids"] = list(actor_user_ids)
-
-        if keyword:
-            escaped = (
-                keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-            )
-            where_clauses.append("p.title ILIKE :keyword ESCAPE '\\'")
-            bind_params["keyword"] = f"%{escaped}%"
-
-        if tags:
-            where_clauses.append(
-                "EXISTS (SELECT 1 FROM entity_tags et JOIN tags t ON t.id = et.tag_id"
-                " WHERE et.entity_type = 'practice' AND et.entity_id = p.id"
-                " AND t.name = ANY(:tags))"
-            )
-            bind_params["tags"] = tags
-
-        where_sql = " AND ".join(where_clauses)
-        order_sql = (
-            "interaction_count DESC, created_at DESC"
-            if sort_by_popular
-            else "created_at DESC"
-        )
-        sql = f"""
-            WITH interaction_events AS (
-                SELECT
-                    'reaction' AS event_type,
-                    r.id::text AS event_id,
-                    r.created_at AS created_at,
-                    actor_u.nickname AS actor_name,
-                    owner_u.nickname AS owner_name,
-                    p.title AS practice_title,
-                    p.external_id AS practice_external_id,
-                    c.id AS checkin_id,
-                    r.reaction_type AS reaction_type,
-                    NULL::text AS comment_content,
-                    COUNT(*) OVER (PARTITION BY c.id) AS interaction_count
-                FROM reactions r
-                JOIN users actor_u ON actor_u.id = r.user_id
-                JOIN practice_checkins c ON c.id = r.target_id
-                JOIN practices p ON p.id = c.practice_id
-                JOIN users owner_u ON owner_u.id = c.user_id
-                WHERE r.target_type = 'checkin'
-                  AND {where_sql}
-
-                UNION ALL
-
-                SELECT
-                    'comment' AS event_type,
-                    cm.id::text AS event_id,
-                    cm.created_at AS created_at,
-                    actor_u.nickname AS actor_name,
-                    owner_u.nickname AS owner_name,
-                    p.title AS practice_title,
-                    p.external_id AS practice_external_id,
-                    c.id AS checkin_id,
-                    NULL::text AS reaction_type,
-                    cm.content AS comment_content,
-                    COUNT(*) OVER (PARTITION BY c.id) AS interaction_count
-                FROM comments cm
-                JOIN users actor_u ON actor_u.id = cm.user_id
-                JOIN practice_checkins c ON c.id = cm.target_id
-                JOIN practices p ON p.id = c.practice_id
-                JOIN users owner_u ON owner_u.id = c.user_id
-                WHERE cm.target_type = 'checkin'
-                  AND cm.visibility = 'public'
-                  AND {where_sql}
-            )
-            SELECT *
-            FROM interaction_events
-            ORDER BY {order_sql}
-            LIMIT :limit
-        """
-        query = text(sql)
-        if bind_actor_ids:
-            query = query.bindparams(bindparam("actor_user_ids", expanding=True))
-        rows = db.execute(query, bind_params).fetchall()
-
-        events: list[ActivityEvent] = []
-        for r in rows:
-            actor = r.actor_name or "某位學習者"
-            owner = r.owner_name or "另一位學習者"
-            title = r.practice_title or ""
-            practice_id = str(r.practice_external_id) if r.practice_external_id else ""
-            checkin_id = str(r.checkin_id) if r.checkin_id is not None else ""
-            if r.event_type == ActivityEventType.COMMENT.value:
-                content = (r.comment_content or "").strip()
-                event_text = (
-                    f"{actor} 在 {owner} 的《{title}》打卡留言：{content}"
-                    if title
-                    else f"{actor} 在 {owner} 的打卡留言：{content}"
-                )
-            else:
-                label = FeedService._REACTION_LABELS.get(r.reaction_type, "互動")
-                event_text = (
-                    f"{actor} 對 {owner} 在《{title}》的打卡{label}"
-                    if title
-                    else f"{actor} 對 {owner} 的打卡{label}"
-                )
-            events.append(
-                {
-                    "event_type": r.event_type,
-                    "event_id": r.event_id,
-                    "event_text": event_text,
-                    "practice_id": practice_id,
-                    "checkin_id": checkin_id,
-                }
-            )
-        return events
 
     @staticmethod
     def _select_slot_a(available: list) -> tuple[list, int]:
@@ -1007,27 +665,23 @@ class FeedService:
     def _assemble_slot_cycles(
         practice_rows: list,
         checkin_rows: list,
-        activity_events: list[ActivityEvent],
         num_cycles: int,
         max_items: Optional[int] = None,
     ) -> tuple[list[dict], int, int, object]:
         """
-        Assemble A→B→C cycles (1:1:1).
+        Assemble A→C cycles (1:1).
 
         Slot A: checkin(s) — skipped if pool empty.
-        Slot B: ActivityCard for a real interaction event; skipped when no event exists.
         Slot C: 1 practice per cycle — Rule ③: skip practices whose practice_id
                 was already assigned to Slot A on this page.
 
         Returns (slot_assignments, p_idx_consumed, c_idx_consumed, last_consumed_practice_row).
         """
-        # Rule ③: dynamically track which practice_ids have been shown in Slot A
         shown_practice_ids: set[int] = set()
         slots: list[dict] = []
         p_idx = 0
         c_idx = 0
-        ev_idx = 0
-        last_consumed_practice = None  # 最後實際分配到 Slot C 的 practice row
+        last_consumed_practice = None
 
         for _ in range(num_cycles):
             cycle_slots: list[dict] = []
@@ -1039,7 +693,6 @@ class FeedService:
                     checkin_rows[c_idx:]
                 )
                 for row in a_rows:
-                    # Track this checkin's practice_id for Rule ③
                     if hasattr(row, "practice_id") and row.practice_id is not None:
                         shown_practice_ids.add(row.practice_id)
                     cycle_slots.append(
@@ -1051,23 +704,6 @@ class FeedService:
                         }
                     )
 
-            # Slot B: only render ActivityCard when a real interaction event exists.
-            activity_event = (
-                activity_events[ev_idx] if ev_idx < len(activity_events) else None
-            )
-            ev_idx += 1
-            if activity_event:
-                activity_card = FeedService._build_activity_card_slot(activity_event)
-                cycle_slots.append(
-                    {
-                        "slot_type": SlotType.B,
-                        "item_type": "activity",
-                        "item_id": 0,
-                        "feed_source": "activity",
-                        "card": activity_card,
-                    }
-                )
-
             # Slot C: advance past practices already shown in Slot A (Rule ③)
             while (
                 p_idx < len(practice_rows)
@@ -1076,7 +712,6 @@ class FeedService:
                 p_idx += 1
 
             if p_idx < len(practice_rows):
-                # Slot C: 1 practice per cycle (Rule ⑤: 1:1:1)
                 row = practice_rows[p_idx]
                 cycle_slots.append(
                     {
