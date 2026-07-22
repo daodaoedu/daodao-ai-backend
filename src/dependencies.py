@@ -74,9 +74,11 @@ def get_cache_client(request: Request) -> CacheClient:
     return request.app.state.cache_client
 
 
-def get_llm_client(request: Request) -> LLMClient:
-    """Get Ollama client from the request state."""
-    return request.app.state.llm_client
+def get_llm_client(
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> LLMClient:
+    """建立 LLM client（使用 insight 預設 backend）。"""
+    return LLMClient(settings, settings.insight.llm_backend)
 
 
 def get_qdrant_client(request: Request) -> QdrantClient:
@@ -150,7 +152,7 @@ def get_admin_user(
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 
-# LLMDep = Annotated[LLMClient, Depends(get_llm_client)]
+LLMDep = Annotated[LLMClient, Depends(get_llm_client)]
 
 # QdrantDep = Annotated[QdrantClient, Depends(get_qdrant_client)]
 CacheDep = Annotated[CacheClient, Depends(get_cache_client)]
