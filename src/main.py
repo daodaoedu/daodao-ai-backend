@@ -8,7 +8,7 @@ from src.config import get_settings
 from src.db.factory import make_database
 from src.logger import AppLogger
 from src.middleware.middleware import setup_middlewares
-from src.routers import feed, insight, ping, recommendation, users
+from src.routers import encouragement, feed, insight, ping, recommendation, users
 from src.routers.admin import router as admin_router
 from src.services.cache.factory import make_cache_client
 from src.services.admin.llm_model_service import seed_llm_models
@@ -117,6 +117,7 @@ app.include_router(recommendation.router, prefix="/api", tags=["recommendation"]
 app.include_router(users.router, prefix="/api", tags=["users"])
 app.include_router(feed.router, prefix="/api", tags=["feed"])
 app.include_router(insight.router, prefix="/api", tags=["insights"])
+app.include_router(encouragement.router, prefix="/api", tags=["encouragement"])
 
 app.include_router(ping.router, prefix="/api", tags=["Health"])
 app.include_router(admin_router, prefix="/api", tags=["admin"])
