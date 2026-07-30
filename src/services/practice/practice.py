@@ -225,7 +225,17 @@ class PracticeService:
         # ── 5. PracticeCheckIn.note（長文截斷）──────────────────────
         note_rows = (
             db.query(PracticeCheckIn.note)
-            .filter(PracticeCheckIn.note.ilike(pattern))
+            .join(Practice, Practice.id == PracticeCheckIn.practice_id)
+            .filter(
+                PracticeCheckIn.note.ilike(pattern),
+                Practice.privacy_status != PracticePrivacyStatus.PRIVATE.value,
+                Practice.deleted_at.is_(None),
+                # Exclude brewing practices (delayed + not completed)
+                ~(
+                    (Practice.privacy_status == PracticePrivacyStatus.DELAYED.value)
+                    & (Practice.status == PracticeStatus.ACTIVE.value)
+                ),
+            )
             .distinct()
             .limit(limit)
             .all()
@@ -282,6 +292,12 @@ class PracticeService:
                 Practice.deleted_at.is_(None),
                 Practice.status.notin_(
                     [PracticeStatus.DRAFT.value, PracticeStatus.ARCHIVED.value]
+                ),
+                Practice.privacy_status != PracticePrivacyStatus.PRIVATE.value,
+                # Exclude brewing practices (delayed + not completed)
+                ~(
+                    (Practice.privacy_status == PracticePrivacyStatus.DELAYED.value)
+                    & (Practice.status == PracticeStatus.ACTIVE.value)
                 ),
                 or_(
                     Practice.title.ilike(pattern),

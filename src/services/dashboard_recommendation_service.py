@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import HTTPException
-from sqlalchemy import String
+from sqlalchemy import String, or_
 from sqlalchemy.orm import Session
 
 from src.logger import AppLogger
@@ -166,8 +166,16 @@ def get_topic_cards(
     all_exclude = set(hidden_ids) | set(exclude_ids or [])
 
     query = session.query(Practice).filter(
-        Practice.privacy_status == PracticePrivacyStatus.PUBLIC.value,
-        Practice.status == PracticeStatus.ACTIVE.value,
+        or_(
+            Practice.privacy_status == PracticePrivacyStatus.PUBLIC.value,
+            (
+                (Practice.privacy_status == PracticePrivacyStatus.DELAYED.value)
+                & (Practice.status == PracticeStatus.COMPLETED.value)
+            ),
+        ),
+        Practice.status.in_(
+            [PracticeStatus.ACTIVE.value, PracticeStatus.COMPLETED.value]
+        ),
         Practice.user_id != user.id,
         Practice.deleted_at.is_(None),
     )
