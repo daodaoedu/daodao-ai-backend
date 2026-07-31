@@ -182,6 +182,11 @@ class PracticeService:
                     [PracticeStatus.DRAFT.value, PracticeStatus.ARCHIVED.value]
                 ),
                 Practice.deleted_at.is_(None),
+                or_(
+                    Practice.privacy_status == PracticePrivacyStatus.PUBLIC.value,
+                    (Practice.privacy_status == PracticePrivacyStatus.DELAYED.value)
+                    & (Practice.status == PracticeStatus.COMPLETED.value),
+                ),
             )
             .distinct()
             .limit(limit)
@@ -214,6 +219,11 @@ class PracticeService:
                     [PracticeStatus.DRAFT.value, PracticeStatus.ARCHIVED.value]
                 ),
                 Practice.deleted_at.is_(None),
+                or_(
+                    Practice.privacy_status == PracticePrivacyStatus.PUBLIC.value,
+                    (Practice.privacy_status == PracticePrivacyStatus.DELAYED.value)
+                    & (Practice.status == PracticeStatus.COMPLETED.value),
+                ),
             )
             .distinct()
             .limit(limit)
@@ -225,7 +235,16 @@ class PracticeService:
         # ── 5. PracticeCheckIn.note（長文截斷）──────────────────────
         note_rows = (
             db.query(PracticeCheckIn.note)
-            .filter(PracticeCheckIn.note.ilike(pattern))
+            .join(Practice, Practice.id == PracticeCheckIn.practice_id)
+            .filter(
+                PracticeCheckIn.note.ilike(pattern),
+                Practice.deleted_at.is_(None),
+                or_(
+                    Practice.privacy_status == PracticePrivacyStatus.PUBLIC.value,
+                    (Practice.privacy_status == PracticePrivacyStatus.DELAYED.value)
+                    & (Practice.status == PracticeStatus.COMPLETED.value),
+                ),
+            )
             .distinct()
             .limit(limit)
             .all()
@@ -282,6 +301,11 @@ class PracticeService:
                 Practice.deleted_at.is_(None),
                 Practice.status.notin_(
                     [PracticeStatus.DRAFT.value, PracticeStatus.ARCHIVED.value]
+                ),
+                or_(
+                    Practice.privacy_status == PracticePrivacyStatus.PUBLIC.value,
+                    (Practice.privacy_status == PracticePrivacyStatus.DELAYED.value)
+                    & (Practice.status == PracticeStatus.COMPLETED.value),
                 ),
                 or_(
                     Practice.title.ilike(pattern),
