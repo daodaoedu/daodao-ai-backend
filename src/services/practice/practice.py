@@ -182,6 +182,11 @@ class PracticeService:
                     [PracticeStatus.DRAFT.value, PracticeStatus.ARCHIVED.value]
                 ),
                 Practice.deleted_at.is_(None),
+                or_(
+                    Practice.privacy_status == PracticePrivacyStatus.PUBLIC.value,
+                    (Practice.privacy_status == PracticePrivacyStatus.DELAYED.value)
+                    & (Practice.status == PracticeStatus.COMPLETED.value),
+                ),
             )
             .distinct()
             .limit(limit)
@@ -214,6 +219,11 @@ class PracticeService:
                     [PracticeStatus.DRAFT.value, PracticeStatus.ARCHIVED.value]
                 ),
                 Practice.deleted_at.is_(None),
+                or_(
+                    Practice.privacy_status == PracticePrivacyStatus.PUBLIC.value,
+                    (Practice.privacy_status == PracticePrivacyStatus.DELAYED.value)
+                    & (Practice.status == PracticeStatus.COMPLETED.value),
+                ),
             )
             .distinct()
             .limit(limit)
@@ -228,12 +238,11 @@ class PracticeService:
             .join(Practice, Practice.id == PracticeCheckIn.practice_id)
             .filter(
                 PracticeCheckIn.note.ilike(pattern),
-                Practice.privacy_status != PracticePrivacyStatus.PRIVATE.value,
                 Practice.deleted_at.is_(None),
-                # Exclude brewing practices (delayed + not completed)
-                ~(
+                or_(
+                    Practice.privacy_status == PracticePrivacyStatus.PUBLIC.value,
                     (Practice.privacy_status == PracticePrivacyStatus.DELAYED.value)
-                    & (Practice.status == PracticeStatus.ACTIVE.value)
+                    & (Practice.status == PracticeStatus.COMPLETED.value),
                 ),
             )
             .distinct()
@@ -293,11 +302,10 @@ class PracticeService:
                 Practice.status.notin_(
                     [PracticeStatus.DRAFT.value, PracticeStatus.ARCHIVED.value]
                 ),
-                Practice.privacy_status != PracticePrivacyStatus.PRIVATE.value,
-                # Exclude brewing practices (delayed + not completed)
-                ~(
+                or_(
+                    Practice.privacy_status == PracticePrivacyStatus.PUBLIC.value,
                     (Practice.privacy_status == PracticePrivacyStatus.DELAYED.value)
-                    & (Practice.status == PracticeStatus.ACTIVE.value)
+                    & (Practice.status == PracticeStatus.COMPLETED.value),
                 ),
                 or_(
                     Practice.title.ilike(pattern),
