@@ -29,7 +29,7 @@ def api_response_decorator(func: Callable[..., Coroutine[Any, Any, Any]]):
 
             # case 1: 已經是 APIResponse
             if isinstance(result, APIResponse):
-                return result.dict()
+                return result.model_dump()
 
             # case 2: 已經是完整的 response 格式
             # if isinstance(result, dict) and "success" in result:
