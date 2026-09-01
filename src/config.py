@@ -151,7 +151,7 @@ class Settings(BaseConfigSettings):
     )
 
     app_version: str = "0.1.0"
-    debug: bool = True
+    debug: bool = False
     environment: Literal["development", "staging", "production"] = "development"
     service_name: str = "daodao-ai-backend-api"
 
