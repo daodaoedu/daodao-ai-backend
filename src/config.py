@@ -217,6 +217,19 @@ class Settings(BaseConfigSettings):
                 )
         return self
 
+    @model_validator(mode="after")
+    def _validate_secrets(self) -> "Settings":
+        if self.environment in ("production", "staging"):
+            if self.jwt_security == "xxxxxxxxxxxxxxxx":
+                raise ValueError(
+                    "JWT_SECURITY must be configured (currently using placeholder)"
+                )
+            if self.api_secret_key == "xxxxxxxxxxxxxxxx":
+                raise ValueError(
+                    "API_SECRET_KEY must be configured (currently using placeholder)"
+                )
+        return self
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
