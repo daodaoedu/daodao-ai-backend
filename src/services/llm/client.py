@@ -1,6 +1,6 @@
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
 
-from src.config import Settings
+from src.config import _LLM_BACKEND_DEFAULTS, Settings
 from src.logger import AppLogger
 from src.services.llm.anthropic_backend import AnthropicBackend
 from src.services.llm.base import BaseLLMBackend
@@ -29,7 +29,13 @@ _BACKEND_MAP: Dict[str, type] = {
 
 
 class LLMClient:
-    def __init__(self, settings: Settings, backend: str, enable_guardrail: bool = True):
+    def __init__(
+        self,
+        settings: Settings,
+        backend: str,
+        enable_guardrail: bool = True,
+        api_key_override: Optional[str] = None,
+    ):
         if backend not in settings.llm_backend:
             raise ValueError(f"LLM backend '{backend}' 未在設定中定義")
 
@@ -39,11 +45,12 @@ class LLMClient:
             raise ValueError(f"不支援的 LLM backend: {backend}")
 
         self.backend = backend
+        self.model = backend_cfg.model
         self._backend: BaseLLMBackend = backend_cls(
             {
                 "url": backend_cfg.url,
                 "model": backend_cfg.model,
-                "api_key": backend_cfg.api_key,
+                "api_key": api_key_override or backend_cfg.api_key,
                 "backend_name": backend,
             }
         )
@@ -51,6 +58,37 @@ class LLMClient:
         # 保留給外部服務使用的 prompt 工具
         self.prompt_builder = RAGPromptBuilder()
         self.response_parser = ResponseParser()
+
+    @classmethod
+    def with_credentials(
+        cls, settings: Settings, backend: str, api_key: str
+    ) -> "LLMClient":
+        """
+        用呼叫端提供的 API key 建 client（燈塔組織自帶 key）：
+        url / model 沿設定檔（沒設定就用預設表），只換 key；key 不落地、不快取。
+        """
+        if backend not in _BACKEND_MAP:
+            raise ValueError(f"不支援的 LLM backend: {backend}")
+        if backend in settings.llm_backend:
+            return cls(settings, backend, api_key_override=api_key)
+        defaults = _LLM_BACKEND_DEFAULTS.get(backend)
+        if defaults is None:
+            raise ValueError(f"LLM backend '{backend}' 沒有預設設定")
+        client = cls.__new__(cls)
+        client.backend = backend
+        client.model = defaults["model"]
+        client._backend = _BACKEND_MAP[backend](
+            {
+                "url": defaults["url"],
+                "model": defaults["model"],
+                "api_key": api_key,
+                "backend_name": backend,
+            }
+        )
+        client._enable_guardrail = True
+        client.prompt_builder = RAGPromptBuilder()
+        client.response_parser = ResponseParser()
+        return client
 
     async def generate(
         self,

@@ -19,13 +19,30 @@ from src.verify_jwt import verify
 security = HTTPBearer(auto_error=False)
 
 
+SERVICE_TOKEN_HEADER = "X-Service-Token"
+SERVICE_PRINCIPAL = "service:daodao-server"
+
+
+def _service_token_matches(request: Request) -> bool:
+    """daodao-server 服務間呼叫：X-Service-Token 與 API_SECRET_KEY 相同即視為已認證"""
+    provided = request.headers.get(SERVICE_TOKEN_HEADER)
+    if not provided:
+        return False
+    expected = get_settings().api_secret_key
+    if not expected or expected == "xxxxxxxxxxxxxxxx":
+        return False
+    return provided == expected
+
+
 def get_current_user(
     request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
 ) -> Optional[str]:
     """
-    FastAPI Dependency: 驗證 JWT 並回傳 payload
-    優先讀 Authorization Bearer header，fallback 讀 auth_token cookie
+    FastAPI Dependency: 驗證 JWT 並回傳使用者識別
+    優先讀 Authorization Bearer header，fallback 讀 auth_token cookie；
+    daodao-server 轉發的 JWT 只有 PostgreSQL `id`（沒有 mongo `_id`），兩者都接受；
+    帶正確 X-Service-Token 的服務間呼叫回固定的 service principal。
     """
 
     token: Optional[str] = None
@@ -36,16 +53,20 @@ def get_current_user(
         # Fallback: 從 cookie 讀取（與 daodao-server 共用 auth_token）
         token = request.cookies.get("auth_token")
 
-    if not token:
-        return None
+    if token:
+        try:
+            decoded = verify(token)
+            if decoded:
+                identity = decoded.get("_id") or decoded.get("id")
+                if identity is not None:
+                    return str(identity)
+        except Exception:
+            pass
 
-    try:
-        decoded = verify(token)
-        if not decoded:
-            return None
-        return decoded.get("_id")
-    except Exception:
-        return None
+    if _service_token_matches(request):
+        return SERVICE_PRINCIPAL
+
+    return None
 
 
 def get_database(request: Request) -> BaseDatabase:
