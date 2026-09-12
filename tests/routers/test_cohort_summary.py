@@ -2,7 +2,8 @@
 Router-level tests for POST /api/v1/cohort-summary/generate
 
 Strategy:
-  - override get_current_user / get_settings
+  - use dependency overrides for handler-specific checks
+  - keep real auth dependencies for the dual-auth regression matrix
   - patch LLMClient so no provider is called; assert prompt content and key routing
 """
 
@@ -14,6 +15,7 @@ from fastapi.testclient import TestClient
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
+from src import dependencies
 from src.config import get_settings
 from src.dependencies import get_current_user, require_service_caller
 from src.routers import cohort_summary
@@ -133,6 +135,66 @@ def test_requires_service_token_not_just_user_jwt():
         )
     assert res.status_code == 403
     llm_cls.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("authorization", "verify_result", "verify_error"),
+    [
+        (None, None, None),
+        ("Bearer invalid", None, ValueError("expired")),
+        ("Bearer identityless", {"scope": "user"}, None),
+    ],
+)
+def test_service_token_cannot_replace_user_jwt(
+    authorization, verify_result, verify_error
+):
+    """服務 token 只證明 caller；缺少有效使用者 JWT 時仍必須回 401。"""
+    settings = _settings()
+    settings.api_secret_key = "service-secret"
+    app.dependency_overrides[get_settings] = lambda: settings
+    headers = {"X-Service-Token": "service-secret"}
+    if authorization:
+        headers["Authorization"] = authorization
+
+    verify_patch = (
+        patch.object(dependencies, "verify", side_effect=verify_error)
+        if verify_error
+        else patch.object(dependencies, "verify", return_value=verify_result)
+    )
+    with (
+        patch.object(dependencies, "get_settings", return_value=settings),
+        verify_patch,
+        patch.object(cohort_summary, "LLMClient") as llm_cls,
+    ):
+        res = TestClient(app).post(
+            "/api/v1/cohort-summary/generate", json=PAYLOAD, headers=headers
+        )
+
+    assert res.status_code == 401
+    llm_cls.assert_not_called()
+
+
+def test_valid_user_jwt_and_service_token_are_both_accepted():
+    settings = _settings()
+    settings.api_secret_key = "service-secret"
+    app.dependency_overrides[get_settings] = lambda: settings
+    with (
+        patch.object(dependencies, "get_settings", return_value=settings),
+        patch.object(dependencies, "verify", return_value={"id": 42}),
+        patch.object(cohort_summary, "LLMClient") as llm_cls,
+    ):
+        llm_cls.return_value = _fake_llm()
+        res = TestClient(app).post(
+            "/api/v1/cohort-summary/generate",
+            json=PAYLOAD,
+            headers={
+                "Authorization": "Bearer valid-user-jwt",
+                "X-Service-Token": "service-secret",
+            },
+        )
+
+    assert res.status_code == 200, res.text
+    llm_cls.assert_called_once()
 
 
 def test_injection_like_entry_is_skipped_and_data_is_delimited():

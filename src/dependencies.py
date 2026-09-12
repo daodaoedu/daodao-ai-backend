@@ -49,8 +49,8 @@ def get_current_user(
     """
     FastAPI Dependency: 驗證 JWT 並回傳使用者識別
     優先讀 Authorization Bearer header，fallback 讀 auth_token cookie；
-    daodao-server 轉發的 JWT 只有 PostgreSQL `id`（沒有 mongo `_id`），兩者都接受；
-    帶正確 X-Service-Token 的服務間呼叫回固定的 service principal。
+    daodao-server 轉發的 JWT 只有 PostgreSQL `id`（沒有 mongo `_id`），兩者都接受。
+    服務間身份由 require_service_caller 另行驗證，不得取代使用者 JWT。
     """
 
     token: Optional[str] = None
@@ -70,9 +70,6 @@ def get_current_user(
                     return str(identity)
         except Exception:
             pass
-
-    if _service_token_matches(request):
-        return SERVICE_PRINCIPAL
 
     return None
 

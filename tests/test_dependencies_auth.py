@@ -1,6 +1,9 @@
-"""get_current_user：接受 server JWT 的數字 id、mongo _id，以及 X-Service-Token 服務間認證"""
+"""JWT 使用者身份與 X-Service-Token 服務身份必須分開驗證。"""
 
 from unittest.mock import MagicMock, patch
+
+import pytest
+from fastapi import HTTPException
 
 from src import dependencies
 
@@ -33,14 +36,40 @@ def test_service_token_matches_api_secret_key():
     with patch.object(dependencies, "get_settings", return_value=settings):
         req = _request(headers={"X-Service-Token": "super-secret-token"})
         assert (
-            dependencies.get_current_user(req, None) == dependencies.SERVICE_PRINCIPAL
+            dependencies.require_service_caller(req) == dependencies.SERVICE_PRINCIPAL
         )
-        assert (
-            dependencies.get_current_user(
-                _request(headers={"X-Service-Token": "wrong"}), None
+        with pytest.raises(HTTPException) as exc_info:
+            dependencies.require_service_caller(
+                _request(headers={"X-Service-Token": "wrong"})
             )
-            is None
-        )
+        assert exc_info.value.status_code == 403
+
+
+def test_service_token_does_not_replace_missing_user_jwt():
+    settings = MagicMock(api_secret_key="super-secret-token")
+    request = _request(headers={"X-Service-Token": "super-secret-token"})
+    with patch.object(dependencies, "get_settings", return_value=settings):
+        assert dependencies.get_current_user(request, None) is None
+
+
+def test_service_token_does_not_replace_invalid_user_jwt():
+    settings = MagicMock(api_secret_key="super-secret-token")
+    request = _request(headers={"X-Service-Token": "super-secret-token"})
+    with (
+        patch.object(dependencies, "get_settings", return_value=settings),
+        patch.object(dependencies, "verify", side_effect=ValueError("expired")),
+    ):
+        assert dependencies.get_current_user(request, _creds("bad")) is None
+
+
+def test_service_token_does_not_replace_identityless_user_jwt():
+    settings = MagicMock(api_secret_key="super-secret-token")
+    request = _request(headers={"X-Service-Token": "super-secret-token"})
+    with (
+        patch.object(dependencies, "get_settings", return_value=settings),
+        patch.object(dependencies, "verify", return_value={"scope": "user"}),
+    ):
+        assert dependencies.get_current_user(request, _creds("identityless")) is None
 
 
 def test_placeholder_secret_never_authenticates():
