@@ -1,3 +1,4 @@
+import hmac
 from typing import Annotated, Generator, Optional
 
 from fastapi import Depends, HTTPException, Request
@@ -31,7 +32,14 @@ def _service_token_matches(request: Request) -> bool:
     expected = get_settings().api_secret_key
     if not expected or expected == "xxxxxxxxxxxxxxxx":
         return False
-    return provided == expected
+    return hmac.compare_digest(provided, expected)
+
+
+def require_service_caller(request: Request) -> str:
+    """只允許帶正確 X-Service-Token 的服務間呼叫（daodao-server）；一般使用者 JWT 不足以呼叫"""
+    if not _service_token_matches(request):
+        raise HTTPException(status_code=403, detail="僅限 daodao-server 服務間呼叫")
+    return SERVICE_PRINCIPAL
 
 
 def get_current_user(
