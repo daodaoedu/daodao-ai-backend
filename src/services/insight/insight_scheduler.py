@@ -77,7 +77,13 @@ class InsightScheduler:
                     logger.warning(
                         f"[InsightScheduler] 從 ai_service_configs 建立 client 失敗: {exc}，使用 fallback"
                     )
-                    llm_client = self._build_fallback_client()
+                    try:
+                        llm_client = self._build_fallback_client()
+                    except Exception as fallback_exc:
+                        logger.warning(
+                            f"[InsightScheduler] fallback 初始化失敗，本次任務跳過: {fallback_exc}"
+                        )
+                        return
 
                 generate_kwargs: dict = {}
                 if config.max_tokens is not None:

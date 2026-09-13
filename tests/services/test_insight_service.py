@@ -294,14 +294,14 @@ class TestGenerateForPractice:
     # ── LLM 回傳錯誤 ──────────────────────────────────────────
 
     @pytest.mark.asyncio
-    async def test_returns_none_on_llm_error(self):
-        """LLM 回傳 '錯誤：...' 前綴時，不儲存，回傳 None"""
+    async def test_llm_error_propagates_without_database_write(self):
+        """Provider failures propagate without writing an insight."""
         practice = _make_practice(1, insight=None)
         db = MagicMock()
 
         llm_client = MagicMock()
         llm_client.generate = AsyncMock(
-            return_value=("錯誤：API rate limit", 0.0, {}, "anthropic")
+            side_effect=RuntimeError("API rate limit")
         )
 
         with (
@@ -314,9 +314,10 @@ class TestGenerateForPractice:
                 return_value="mocked prompt",
             ),
         ):
-            result = await generate_for_practice(db, llm_client, practice)
+            with pytest.raises(RuntimeError, match="API rate limit"):
+                await generate_for_practice(db, llm_client, practice)
 
-        assert result is None
+        db.execute.assert_not_called()
         assert practice.insight is None  # 不應被改動
         db.commit.assert_not_called()
 
