@@ -13,6 +13,27 @@ on:
   workflow_dispatch:
 
 jobs:
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install locked dependencies
+        run: |
+          python -m pip install uv==0.9.27
+          uv sync --frozen --python 3.12
+
+      - name: Run all unit tests
+        run: make test
+
   format:
     name: Format & Lint
     runs-on: ubuntu-latest
@@ -21,7 +42,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip

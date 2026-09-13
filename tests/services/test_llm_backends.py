@@ -70,18 +70,14 @@ class TestAnthropicBackend:
     # ── 錯誤處理 ──────────────────────────────────────────────
 
     @pytest.mark.asyncio
-    async def test_generate_api_error_returns_error_prefix(self):
+    async def test_generate_api_error_propagates(self):
         backend = self._make_backend()
         backend._client.messages.create = AsyncMock(
             side_effect=Exception("API rate limit")
         )
 
-        output, cost, usage, name = await backend.generate("prompt")
-
-        assert output.startswith("錯誤：")
-        assert cost == 0.0
-        assert usage == {}
-        assert name == "anthropic"
+        with pytest.raises(Exception, match="API rate limit"):
+            await backend.generate("prompt")
 
     # ── Cost 計算 ─────────────────────────────────────────────
 
@@ -166,17 +162,14 @@ class TestOpenAIBackend:
     # ── 錯誤處理 ──────────────────────────────────────────────
 
     @pytest.mark.asyncio
-    async def test_generate_api_error_returns_error_prefix(self):
+    async def test_generate_api_error_propagates(self):
         backend = self._make_backend()
         backend._client.responses.create = AsyncMock(
             side_effect=Exception("Connection timeout")
         )
 
-        output, cost, usage, name = await backend.generate("prompt")
-
-        assert output.startswith("錯誤：")
-        assert cost == 0.0
-        assert name == "openai"
+        with pytest.raises(Exception, match="Connection timeout"):
+            await backend.generate("prompt")
 
     # ── Cost 計算 ─────────────────────────────────────────────
 
@@ -243,18 +236,14 @@ class TestGeminiBackend:
     # ── 錯誤處理 ──────────────────────────────────────────────
 
     @pytest.mark.asyncio
-    async def test_generate_api_error_returns_error_prefix(self):
+    async def test_generate_api_error_propagates(self):
         backend = self._make_backend()
         backend._client.aio.models.generate_content = AsyncMock(
             side_effect=Exception("Quota exceeded")
         )
 
-        output, cost, usage, name = await backend.generate("prompt")
-
-        assert output.startswith("錯誤：")
-        assert cost == 0.0
-        assert usage == {}
-        assert name == "gemini"
+        with pytest.raises(Exception, match="Quota exceeded"):
+            await backend.generate("prompt")
 
     # ── Token 估算 ────────────────────────────────────────────
 
