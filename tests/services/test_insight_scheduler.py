@@ -161,22 +161,36 @@ class TestInsightSchedulerRunJob:
             await scheduler._run_job()  # 不 raise 即通過
 
     @pytest.mark.asyncio
-    async def test_llm_client_init_failure_skips_job(self):
+    @pytest.mark.parametrize("has_active_config", [False, True])
+    async def test_llm_client_init_failure_skips_job(self, has_active_config):
         """LLM client 初始化失敗時，任務應跳過且不往外拋例外"""
         scheduler = _make_scheduler()
+        db = scheduler._database.get_session.return_value.__enter__.return_value
+        db.query.return_value.filter.return_value.first.return_value = (
+            MagicMock(model_id=17) if has_active_config else None
+        )
+        db.get.return_value = MagicMock(provider="anthropic", model_name="test-model")
 
         with (
             patch(
                 "src.services.insight.insight_scheduler.LLMClient",
                 side_effect=RuntimeError("missing api key"),
-            ),
+            ) as mock_client,
             patch(
                 "src.services.insight.insight_scheduler.insight_service.get_pending_practices",
             ) as mock_get_pending,
+            patch(
+                "src.services.insight.insight_scheduler.insight_service.generate_for_practice",
+            ) as mock_generate,
         ):
             await scheduler._run_job()
 
         mock_get_pending.assert_not_called()
+        mock_generate.assert_not_called()
+        assert mock_client.call_count == (2 if has_active_config else 1)
+        scheduler._database.get_session.return_value.__exit__.assert_called_once_with(
+            None, None, None
+        )
 
 
 # ─────────────────────────────────────────────────────────────

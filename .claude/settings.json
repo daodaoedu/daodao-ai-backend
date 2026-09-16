@@ -75,6 +75,10 @@
           {
             "type": "command",
             "command": ".claude/hooks/pre-write-guard.sh"
+          },
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/test-integrity-guard.py\""
           }
         ]
       }
@@ -86,6 +90,27 @@
           {
             "type": "command",
             "command": ".claude/hooks/post-write-format.sh"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/session-start.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/stop-quality-gate.sh",
+            "timeout": 10000
           }
         ]
       }
