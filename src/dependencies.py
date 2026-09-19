@@ -1,3 +1,4 @@
+import hmac
 from typing import Annotated, Generator, Optional
 
 from fastapi import Depends, HTTPException, Request
@@ -19,13 +20,37 @@ from src.verify_jwt import verify
 security = HTTPBearer(auto_error=False)
 
 
+SERVICE_TOKEN_HEADER = "X-Service-Token"
+SERVICE_PRINCIPAL = "service:daodao-server"
+
+
+def _service_token_matches(request: Request) -> bool:
+    """daodao-server 服務間呼叫：X-Service-Token 與 API_SECRET_KEY 相同即視為已認證"""
+    provided = request.headers.get(SERVICE_TOKEN_HEADER)
+    if not provided:
+        return False
+    expected = get_settings().api_secret_key
+    if not expected or expected == "xxxxxxxxxxxxxxxx":
+        return False
+    return hmac.compare_digest(provided, expected)
+
+
+def require_service_caller(request: Request) -> str:
+    """只允許帶正確 X-Service-Token 的服務間呼叫（daodao-server）；一般使用者 JWT 不足以呼叫"""
+    if not _service_token_matches(request):
+        raise HTTPException(status_code=403, detail="僅限 daodao-server 服務間呼叫")
+    return SERVICE_PRINCIPAL
+
+
 def get_current_user(
     request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
 ) -> Optional[str]:
     """
-    FastAPI Dependency: 驗證 JWT 並回傳 payload
-    優先讀 Authorization Bearer header，fallback 讀 auth_token cookie
+    FastAPI Dependency: 驗證 JWT 並回傳使用者識別
+    優先讀 Authorization Bearer header，fallback 讀 auth_token cookie；
+    daodao-server 轉發的 JWT 只有 PostgreSQL `id`（沒有 mongo `_id`），兩者都接受。
+    服務間身份由 require_service_caller 另行驗證，不得取代使用者 JWT。
     """
 
     token: Optional[str] = None
@@ -36,16 +61,17 @@ def get_current_user(
         # Fallback: 從 cookie 讀取（與 daodao-server 共用 auth_token）
         token = request.cookies.get("auth_token")
 
-    if not token:
-        return None
+    if token:
+        try:
+            decoded = verify(token)
+            if decoded:
+                identity = decoded.get("_id") or decoded.get("id")
+                if identity is not None:
+                    return str(identity)
+        except Exception:
+            pass
 
-    try:
-        decoded = verify(token)
-        if not decoded:
-            return None
-        return decoded.get("_id")
-    except Exception:
-        return None
+    return None
 
 
 def get_database(request: Request) -> BaseDatabase:

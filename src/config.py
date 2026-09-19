@@ -99,7 +99,9 @@ class InsightSettings(BaseConfigSettings):
     )
 
     schedule_cron: str = "0 1 * * *"  # 預設每天 01:00 UTC
-    llm_backend: str = "groq"  # 預設使用 Groq
+    # 預設 cloudflare：groq 免費層的 llama-3.3-70b-versatile 已下架（404），dev env 沒設 INSIGHT__LLM_BACKEND
+    # 時平台 AI（精選洞察、場次成果摘要）一定失敗；cloudflare 只需 CLOUDFLARE_ACCOUNT_ID + LLM_BACKEND__CLOUDFLARE__API_KEY
+    llm_backend: str = "cloudflare"
 
 
 _LLM_BACKEND_DEFAULTS: Dict[str, Dict[str, str]] = {

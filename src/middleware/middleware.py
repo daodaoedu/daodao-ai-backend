@@ -1,7 +1,9 @@
+import hmac
 import time
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from prometheus_fastapi_instrumentator import Instrumentator, metrics
 from slowapi import _rate_limit_exceeded_handler
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -71,8 +73,6 @@ def setup_middlewares(app: FastAPI):
 
     app.add_middleware(LoggingMiddleware)
 
-    from fastapi import HTTPException
-
     class ApiKeyMiddleware(BaseHTTPMiddleware):
         def __init__(self, app, api_key: str, environment: str):
             super().__init__(app)
@@ -101,10 +101,14 @@ def setup_middlewares(app: FastAPI):
             if not expected_key:
                 return await call_next(request)
 
-            api_key = request.headers.get("x-api-key")
-            if not api_key or api_key != expected_key:
-                raise HTTPException(
-                    status_code=403, detail="Forbidden: Invalid API Key"
+            # x-api-key（mobile／舊 client）或 X-Service-Token（daodao-server 服務間呼叫）擇一，皆為 API_SECRET_KEY
+            provided = request.headers.get("x-api-key") or request.headers.get(
+                "x-service-token"
+            )
+            if not provided or not hmac.compare_digest(provided, expected_key):
+                # BaseHTTPMiddleware 在 ExceptionMiddleware 之外，raise HTTPException 會變 500；直接回 403
+                return JSONResponse(
+                    status_code=403, content={"detail": "Forbidden: Invalid API Key"}
                 )
             return await call_next(request)
 
