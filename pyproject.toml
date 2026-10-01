@@ -47,7 +47,7 @@ dependencies = [
     # 向量資料庫 / Embeddings
     "qdrant-client",
     "fastembed",
-    "sentence-transformers==5.1.0",
+    "sentence-transformers==5.6.0",
     "clickhouse-connect",
     "clickhouse_driver",
     "openai>=2.30.0",
