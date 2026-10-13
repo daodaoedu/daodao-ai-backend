@@ -54,6 +54,7 @@ def get_feed(
         list[Annotated[str, StringConstraints(pattern=SPACE_VALUE_PATTERN)]]
     ] = Query(
         None,
+        max_length=20,
         description="空間篩選，可多選取聯集: personal | challenge | cohort:<cohort id>",
     ),
 ):

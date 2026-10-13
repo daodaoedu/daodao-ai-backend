@@ -52,10 +52,23 @@ def parse_space_filter(values: Optional[list[str]]) -> Optional[SpaceFilter]:
     )
 
 
+def restrict_to_joined_cohorts(
+    space_filter: Optional[SpaceFilter], joined_cohort_ids: set[int]
+) -> Optional[SpaceFilter]:
+    """活動課程只能篩使用者已參加（joined）的 cohort，其餘 cohort id 移除；未登入時集合為空。"""
+    if space_filter is None:
+        return None
+    return SpaceFilter(
+        personal=space_filter.personal,
+        challenge=space_filter.challenge,
+        cohort_ids=tuple(c for c in space_filter.cohort_ids if c in joined_cohort_ids),
+    )
+
+
 def build_space_clause(
     space_filter: Optional[SpaceFilter], practice_alias: str
 ) -> tuple[str, dict]:
-    """回傳 (WHERE 子句, bind params)；沒有篩選回 ("", {})。"""
+    """回傳 (WHERE 子句, bind params)；None 代表不篩選回 ("", {})，空的篩選不符合任何資料。"""
     if space_filter is None:
         return "", {}
 
@@ -77,7 +90,7 @@ def build_space_clause(
         params["space_cohort_ids"] = list(space_filter.cohort_ids)
 
     if not conditions:
-        return "", {}
+        return "FALSE", {}
     return "(" + " OR ".join(conditions) + ")", params
 
 

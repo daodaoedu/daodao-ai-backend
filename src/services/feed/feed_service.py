@@ -17,7 +17,11 @@ from src.schemas.feed import (
     FeedTypeFilter,
     SlotType,
 )
-from src.services.feed.space_filter import SpaceFilter, build_space_clause
+from src.services.feed.space_filter import (
+    SpaceFilter,
+    build_space_clause,
+    restrict_to_joined_cohorts,
+)
 
 logger = AppLogger(__name__).get_logger()
 
@@ -51,6 +55,12 @@ class FeedService:
                 .first()
             )
             user_id = _user.id if _user else None
+
+        if space_filter is not None and space_filter.cohort_ids:
+            joined = (
+                FeedService._fetch_joined_cohort_ids(db, user_id) if user_id else set()
+            )
+            space_filter = restrict_to_joined_cohorts(space_filter, joined)
 
         if type_filter == FeedTypeFilter.ALL:
             return FeedService._get_feed_slot_pattern(
@@ -514,6 +524,18 @@ class FeedService:
             LIMIT :limit
         """
         return db.execute(text(sql), bind_params).fetchall()
+
+    @staticmethod
+    def _fetch_joined_cohort_ids(db: Session, user_id: int) -> set[int]:
+        """使用者已參加（status = joined）的 cohort，供活動課程篩選限縮範圍。"""
+        rows = db.execute(
+            text(
+                "SELECT cohort_id FROM cohort_enrollments"
+                " WHERE user_id = :user_id AND status = 'joined'"
+            ),
+            {"user_id": user_id},
+        ).fetchall()
+        return {row.cohort_id for row in rows}
 
     # =========================================================================
     # Social Graph

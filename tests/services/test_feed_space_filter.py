@@ -11,6 +11,7 @@ from src.services.feed.space_filter import (
     SpaceFilter,
     build_space_clause,
     parse_space_filter,
+    restrict_to_joined_cohorts,
     space_cache_token,
 )
 
@@ -68,6 +69,52 @@ class TestBuildSpaceClause:
         assert clause.startswith("(") and clause.endswith(")")
         assert clause.count(" OR ") == 2
         assert params == {"space_challenge_kind": "challenge", "space_cohort_ids": [7]}
+
+
+class TestEmptyFilterMatchesNothing:
+
+    def test_filter_without_any_space_matches_nothing(self):
+        # 例如只選了未參加的活動課程、被 restrict 後清空：不可退化成「不篩選」
+        assert build_space_clause(SpaceFilter(), "p") == ("FALSE", {})
+
+
+class TestRestrictToJoinedCohorts:
+
+    def test_drops_cohorts_user_has_not_joined(self):
+        restricted = restrict_to_joined_cohorts(
+            SpaceFilter(personal=True, cohort_ids=(2, 7)), joined_cohort_ids={2}
+        )
+        assert restricted == SpaceFilter(personal=True, cohort_ids=(2,))
+
+    def test_guest_keeps_only_fixed_spaces(self):
+        restricted = restrict_to_joined_cohorts(
+            SpaceFilter(challenge=True, cohort_ids=(2,)), joined_cohort_ids=set()
+        )
+        assert restricted == SpaceFilter(challenge=True)
+
+    def test_none_stays_none(self):
+        assert restrict_to_joined_cohorts(None, joined_cohort_ids={1}) is None
+
+
+class TestGetFeedRestrictsCohorts:
+
+    def test_unjoined_cohort_only_filter_returns_empty_clause(self, monkeypatch):
+        captured = {}
+
+        def fake_slot_pattern(db, user_id, cursor, limit, keyword, tags, space_filter):
+            captured["space_filter"] = space_filter
+            return {"data": [], "next_cursor": None}
+
+        monkeypatch.setattr(
+            FeedService, "_get_feed_slot_pattern", staticmethod(fake_slot_pattern)
+        )
+        monkeypatch.setattr(
+            FeedService, "_fetch_joined_cohort_ids", staticmethod(lambda db, uid: set())
+        )
+        db = MagicMock()
+        db.query.return_value.filter.return_value.first.return_value = None
+        FeedService.get_feed(db, space_filter=SpaceFilter(cohort_ids=(9,)))
+        assert captured["space_filter"] == SpaceFilter()
 
 
 class TestSpaceCacheToken:
