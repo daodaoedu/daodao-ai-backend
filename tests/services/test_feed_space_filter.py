@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from src.schemas.feed import FeedTypeFilter
 from src.services.feed.feed_service import FeedService
 from src.services.feed.space_filter import (
     SpaceFilter,
@@ -128,6 +129,60 @@ class TestGetFeedRestrictsCohorts:
             space_filter=SpaceFilter(personal=True, cohort_ids=(2, 9)),
         )
         assert captured["space_filter"] == SpaceFilter(personal=True, cohort_ids=(2,))
+
+    def test_combination_keeps_fixed_spaces_and_joined_cohorts_only(self, monkeypatch):
+        captured = {}
+
+        def fake_single_type(*args):
+            space_filter = args[-1]
+            captured["space_filter"] = space_filter
+            captured["clause"] = build_space_clause(space_filter, "p")
+            return {"data": [], "next_cursor": None}
+
+        monkeypatch.setattr(
+            FeedService, "_get_feed_single_type", staticmethod(fake_single_type)
+        )
+        monkeypatch.setattr(
+            FeedService, "_fetch_joined_cohort_ids", staticmethod(lambda db, uid: {3})
+        )
+        db = MagicMock()
+        db.query.return_value.filter.return_value.first.return_value = MagicMock(id=7)
+        FeedService.get_feed(
+            db,
+            current_user_external_id="u-7",
+            type_filter=FeedTypeFilter.CHECKIN,
+            space_filter=parse_space_filter(
+                ["personal", "challenge", "cohort:3", "cohort:99"]
+            ),
+        )
+        assert captured["space_filter"] == SpaceFilter(
+            personal=True, challenge=True, cohort_ids=(3,)
+        )
+        clause, params = captured["clause"]
+        assert clause.count(" OR ") == 2
+        assert params["space_cohort_ids"] == [3]
+
+    def test_logged_in_user_cannot_read_unjoined_cohort(self, monkeypatch):
+        """未參加的 cohort id 不能拿到任何資料（不洩漏私人 cohort 的動態歸屬）。"""
+
+        def fail(*_args, **_kwargs):
+            raise AssertionError("pool query should not run")
+
+        monkeypatch.setattr(FeedService, "_fetch_practice_pool", staticmethod(fail))
+        monkeypatch.setattr(
+            FeedService, "_fetch_checkin_pool_with_counts", staticmethod(fail)
+        )
+        db = MagicMock()
+        db.query.return_value.filter.return_value.first.return_value = MagicMock(id=7)
+        db.execute.return_value.fetchall.return_value = []  # 沒有任何 joined cohort
+        result = FeedService.get_feed(
+            db,
+            current_user_external_id="u-7",
+            space_filter=SpaceFilter(cohort_ids=(42,)),
+        )
+        assert result == {"data": [], "next_cursor": None}
+        sql = str(db.execute.call_args[0][0])
+        assert "cohort_enrollments" in sql and "status = 'joined'" in sql
 
     def test_filter_matching_nothing_skips_queries(self, monkeypatch):
         def fail(*_args, **_kwargs):
