@@ -1,7 +1,8 @@
 import json
-from typing import Optional
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Query
+from pydantic import StringConstraints
 
 from src.dependencies import SessionDep, UserDep, CacheDep
 from src.logger import AppLogger
@@ -11,6 +12,11 @@ from src.auto_metrics import observe_api
 from src.schemas.feed import FeedTypeFilter
 from src.schemas.pageInfo import CursorPaginationInfo
 from src.services.feed.feed_service import FeedService
+from src.services.feed.space_filter import (
+    SPACE_VALUE_PATTERN,
+    parse_space_filter,
+    space_cache_token,
+)
 
 logger = AppLogger(__name__).get_logger()
 
@@ -44,7 +50,15 @@ def get_feed(
         alias="type",
         description="篩選類型: all | practice | checkin",
     ),
+    spaces: Optional[
+        list[Annotated[str, StringConstraints(pattern=SPACE_VALUE_PATTERN)]]
+    ] = Query(
+        None,
+        description="空間篩選，可多選取聯集: personal | challenge | cohort:<cohort id>",
+    ),
 ):
+    space_filter = parse_space_filter(spaces)
+
     # ── 解析 user_id（沿用 /v1/users/practices pattern）──
     user_id: Optional[int] = None
     if current_user:
@@ -59,6 +73,7 @@ def get_feed(
             f":kw:{keyword if keyword is not None else '__none__'}"
             f":tags:{tags_str}"
             f":type:{type_filter.value}"
+            f":spaces:{space_cache_token(space_filter)}"
             f":limit:{limit}:cursor:{cursor or '0'}"
         )
         cached = cache.client.get(cache_key)
@@ -80,6 +95,7 @@ def get_feed(
         keyword=keyword,
         tags=tags,
         type_filter=type_filter,
+        space_filter=space_filter,
     )
 
     next_cursor = result.get("next_cursor")

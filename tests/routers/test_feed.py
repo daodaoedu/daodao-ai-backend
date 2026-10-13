@@ -289,6 +289,59 @@ class TestGetFeed:
         assert item["feed_reason"] == "checked_in"
 
 
+class TestSpaceFilterParam:
+    """daodao#213 FR-D3：spaces 參數（personal / challenge / cohort:<id>）"""
+
+    def test_spaces_forwarded_as_parsed_filter(self, client):
+        mock_return = {"data": [], "next_cursor": None}
+        with patch(SERVICE_PATH, return_value=mock_return) as mock_svc:
+            resp = client.get("/api/v1/feed?spaces=personal&spaces=cohort:42")
+
+        assert resp.status_code == 200
+        _, kwargs = mock_svc.call_args
+        space_filter = kwargs["space_filter"]
+        assert space_filter.personal is True
+        assert space_filter.challenge is False
+        assert space_filter.cohort_ids == (42,)
+
+    def test_no_spaces_forwards_none(self, client):
+        mock_return = {"data": [], "next_cursor": None}
+        with patch(SERVICE_PATH, return_value=mock_return) as mock_svc:
+            resp = client.get("/api/v1/feed")
+
+        assert resp.status_code == 200
+        _, kwargs = mock_svc.call_args
+        assert kwargs["space_filter"] is None
+
+    def test_invalid_space_returns_422(self, client):
+        with patch(SERVICE_PATH) as mock_svc:
+            resp = client.get("/api/v1/feed?spaces=cohort:abc")
+
+        assert resp.status_code == 422
+        mock_svc.assert_not_called()
+
+    def test_cache_key_includes_spaces(self, client):
+        cache = _make_cache()
+        db = _make_db()
+        db.query.return_value.filter.return_value.first.return_value = MagicMock(id=123)
+        orig_cache = app.dependency_overrides.get(get_cache_client)
+        orig_db = app.dependency_overrides.get(get_db_session)
+        app.dependency_overrides[get_cache_client] = lambda: cache
+        app.dependency_overrides[get_db_session] = lambda: db
+        try:
+            with patch(SERVICE_PATH, return_value={"data": [], "next_cursor": None}):
+                client.get("/api/v1/feed?spaces=challenge&spaces=personal")
+                client.get("/api/v1/feed")
+        finally:
+            app.dependency_overrides[get_cache_client] = orig_cache
+            app.dependency_overrides[get_db_session] = orig_db
+
+        keys = [c[0][0] for c in cache.client.get.call_args_list]
+        filtered_key, unfiltered_key = keys
+        assert ":spaces:personal,challenge" in filtered_key
+        assert ":spaces:__all__" in unfiltered_key
+
+
 # ─────────────────────────────────────────────────────────────
 # Helper namedtuples for service-level unit tests
 # ─────────────────────────────────────────────────────────────

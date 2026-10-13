@@ -17,6 +17,7 @@ from src.schemas.feed import (
     FeedTypeFilter,
     SlotType,
 )
+from src.services.feed.space_filter import SpaceFilter, build_space_clause
 
 logger = AppLogger(__name__).get_logger()
 
@@ -31,12 +32,14 @@ class FeedService:
         keyword: Optional[str] = None,
         tags: Optional[list[str]] = None,
         type_filter: FeedTypeFilter = FeedTypeFilter.ALL,
+        space_filter: Optional[SpaceFilter] = None,
     ) -> dict:
         """
         統一 feed 查詢：混合 practice + checkin。
 
         type_filter=ALL → Slot Pattern (A→B→C→C→C 循環)
         type_filter=PRACTICE|CHECKIN → 單類型時序回傳
+        space_filter → 依空間（個人實踐／共同挑戰／活動課程）縮小 practice 與 checkin pool
 
         current_user_external_id 用於 Router 層 per-user cache key。
         """
@@ -51,10 +54,10 @@ class FeedService:
 
         if type_filter == FeedTypeFilter.ALL:
             return FeedService._get_feed_slot_pattern(
-                db, user_id, cursor, limit, keyword, tags
+                db, user_id, cursor, limit, keyword, tags, space_filter
             )
         return FeedService._get_feed_single_type(
-            db, user_id, cursor, limit, keyword, tags, type_filter
+            db, user_id, cursor, limit, keyword, tags, type_filter, space_filter
         )
 
     # =========================================================================
@@ -69,6 +72,7 @@ class FeedService:
         limit: int,
         keyword: Optional[str],
         tags: Optional[list[str]],
+        space_filter: Optional[SpaceFilter] = None,
     ) -> dict:
         """Assemble feed in A→B→C slot cycles (1:1:1 ratio)."""
         (
@@ -85,11 +89,23 @@ class FeedService:
 
         # Rule ③ skips up to 2 practices per cycle → need 3x buffer + 1 to detect has_next.
         practice_rows = FeedService._fetch_practice_pool(
-            db, p_cursor_time, p_cursor_id, max_cycles * 3 + 1, keyword, tags
+            db,
+            p_cursor_time,
+            p_cursor_id,
+            max_cycles * 3 + 1,
+            keyword,
+            tags,
+            space_filter,
         )
         # Extra buffer for checkins so cold-start cycles never starve.
         checkin_rows = FeedService._fetch_checkin_pool_with_counts(
-            db, c_cursor_time, c_cursor_id, max_cycles * 2 + 4, keyword, tags
+            db,
+            c_cursor_time,
+            c_cursor_id,
+            max_cycles * 2 + 4,
+            keyword,
+            tags,
+            space_filter,
         )
 
         # Personalized ranking: re-sort pools by social + engagement score.
@@ -212,12 +228,13 @@ class FeedService:
         keyword: Optional[str],
         tags: Optional[list[str]],
         type_filter: FeedTypeFilter,
+        space_filter: Optional[SpaceFilter] = None,
     ) -> dict:
         cursor_time, cursor_id = FeedService._parse_cursor_part(cursor or "")
 
         if type_filter == FeedTypeFilter.PRACTICE:
             rows = FeedService._fetch_practice_pool(
-                db, cursor_time, cursor_id, limit + 1, keyword, tags
+                db, cursor_time, cursor_id, limit + 1, keyword, tags, space_filter
             )
             has_next = len(rows) > limit
             rows = rows[:limit]
@@ -267,7 +284,7 @@ class FeedService:
 
         else:  # CHECKIN
             rows = FeedService._fetch_checkin_pool_with_counts(
-                db, cursor_time, cursor_id, limit + 1, keyword, tags
+                db, cursor_time, cursor_id, limit + 1, keyword, tags, space_filter
             )
             has_next = len(rows) > limit
             rows = rows[:limit]
@@ -359,6 +376,7 @@ class FeedService:
         limit: int,
         keyword: Optional[str] = None,
         tags: Optional[list[str]] = None,
+        space_filter: Optional[SpaceFilter] = None,
     ) -> list:
         where_clauses = [
             "(p.privacy_status = 'public' OR (p.privacy_status = 'delayed' AND p.status = 'completed'))",
@@ -398,6 +416,11 @@ class FeedService:
             )
             bind_params["tags"] = tags
 
+        space_clause, space_params = build_space_clause(space_filter, "p")
+        if space_clause:
+            where_clauses.append(space_clause)
+            bind_params.update(space_params)
+
         where_sql = " AND ".join(where_clauses)
         sql = f"""
             SELECT
@@ -432,6 +455,7 @@ class FeedService:
         limit: int,
         keyword: Optional[str] = None,
         tags: Optional[list[str]] = None,
+        space_filter: Optional[SpaceFilter] = None,
     ) -> list:
         """Fetch checkins with reactions_count + comments_count for Slot A count logic."""
         where_clauses = [
@@ -463,6 +487,11 @@ class FeedService:
                 " AND t.name = ANY(:tags))"
             )
             bind_params["tags"] = tags
+
+        space_clause, space_params = build_space_clause(space_filter, "p")
+        if space_clause:
+            where_clauses.append(space_clause)
+            bind_params.update(space_params)
 
         where_sql = " AND ".join(where_clauses)
         sql = f"""
