@@ -16,8 +16,8 @@ from typing import Optional
 PERSONAL = "personal"
 CHALLENGE = "challenge"
 # Router 以此做 query 驗證（不合法回 422）
-SPACE_VALUE_PATTERN = r"^(personal|challenge|cohort:[1-9][0-9]*)$"
-_COHORT_PATTERN = re.compile(r"^cohort:([1-9][0-9]*)$")
+SPACE_VALUE_PATTERN = r"^(personal|challenge|cohort:[1-9][0-9]{0,18})$"
+_COHORT_PATTERN = re.compile(r"^cohort:([1-9][0-9]{0,18})$")
 _CHALLENGE_KIND = "challenge"
 
 
@@ -63,6 +63,11 @@ def restrict_to_joined_cohorts(
         challenge=space_filter.challenge,
         cohort_ids=tuple(c for c in space_filter.cohort_ids if c in joined_cohort_ids),
     )
+
+
+def matches_nothing(space_filter: Optional[SpaceFilter]) -> bool:
+    """有篩選但沒有任何空間（例如只選了未參加的活動課程）。"""
+    return space_filter is not None and space_filter == SpaceFilter()
 
 
 def build_space_clause(

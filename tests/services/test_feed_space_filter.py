@@ -33,7 +33,16 @@ class TestParseSpaceFilter:
 
     @pytest.mark.parametrize(
         "bad",
-        ["", "all", "cohort:", "cohort:abc", "cohort:-1", "cohort:0", "Personal"],
+        [
+            "",
+            "all",
+            "cohort:",
+            "cohort:abc",
+            "cohort:-1",
+            "cohort:0",
+            "Personal",
+            "cohort:" + "9" * 20,
+        ],
     )
     def test_invalid_value_raises(self, bad):
         with pytest.raises(ValueError):
@@ -98,7 +107,7 @@ class TestRestrictToJoinedCohorts:
 
 class TestGetFeedRestrictsCohorts:
 
-    def test_unjoined_cohort_only_filter_returns_empty_clause(self, monkeypatch):
+    def test_unjoined_cohorts_are_dropped_before_querying(self, monkeypatch):
         captured = {}
 
         def fake_slot_pattern(db, user_id, cursor, limit, keyword, tags, space_filter):
@@ -109,12 +118,29 @@ class TestGetFeedRestrictsCohorts:
             FeedService, "_get_feed_slot_pattern", staticmethod(fake_slot_pattern)
         )
         monkeypatch.setattr(
-            FeedService, "_fetch_joined_cohort_ids", staticmethod(lambda db, uid: set())
+            FeedService, "_fetch_joined_cohort_ids", staticmethod(lambda db, uid: {2})
+        )
+        db = MagicMock()
+        db.query.return_value.filter.return_value.first.return_value = MagicMock(id=7)
+        FeedService.get_feed(
+            db,
+            current_user_external_id="u-7",
+            space_filter=SpaceFilter(personal=True, cohort_ids=(2, 9)),
+        )
+        assert captured["space_filter"] == SpaceFilter(personal=True, cohort_ids=(2,))
+
+    def test_filter_matching_nothing_skips_queries(self, monkeypatch):
+        def fail(*_args, **_kwargs):
+            raise AssertionError("pool query should not run")
+
+        monkeypatch.setattr(FeedService, "_fetch_practice_pool", staticmethod(fail))
+        monkeypatch.setattr(
+            FeedService, "_fetch_checkin_pool_with_counts", staticmethod(fail)
         )
         db = MagicMock()
         db.query.return_value.filter.return_value.first.return_value = None
-        FeedService.get_feed(db, space_filter=SpaceFilter(cohort_ids=(9,)))
-        assert captured["space_filter"] == SpaceFilter()
+        result = FeedService.get_feed(db, space_filter=SpaceFilter(cohort_ids=(9,)))
+        assert result == {"data": [], "next_cursor": None}
 
 
 class TestSpaceCacheToken:

@@ -20,6 +20,7 @@ from src.schemas.feed import (
 from src.services.feed.space_filter import (
     SpaceFilter,
     build_space_clause,
+    matches_nothing,
     restrict_to_joined_cohorts,
 )
 
@@ -61,6 +62,8 @@ class FeedService:
                 FeedService._fetch_joined_cohort_ids(db, user_id) if user_id else set()
             )
             space_filter = restrict_to_joined_cohorts(space_filter, joined)
+        if matches_nothing(space_filter):
+            return {"data": [], "next_cursor": None}
 
         if type_filter == FeedTypeFilter.ALL:
             return FeedService._get_feed_slot_pattern(

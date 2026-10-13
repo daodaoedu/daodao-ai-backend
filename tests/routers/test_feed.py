@@ -320,6 +320,13 @@ class TestSpaceFilterParam:
         assert resp.status_code == 422
         mock_svc.assert_not_called()
 
+    def test_oversized_cohort_id_returns_422(self, client):
+        with patch(SERVICE_PATH) as mock_svc:
+            resp = client.get(f"/api/v1/feed?spaces=cohort:{'9' * 4301}")
+
+        assert resp.status_code == 422
+        mock_svc.assert_not_called()
+
     def test_too_many_spaces_returns_422(self, client):
         qs = "&".join(f"spaces=cohort:{i}" for i in range(1, 22))
         with patch(SERVICE_PATH) as mock_svc:
