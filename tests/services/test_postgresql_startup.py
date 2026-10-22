@@ -10,6 +10,7 @@ Unit tests for src.db.postgresql.PostgreSQLDatabase
 from unittest.mock import MagicMock, call, patch
 
 import pytest
+from sqlalchemy.exc import OperationalError
 
 from src.db.postgresql import PostgreSQLDatabase, _REQUIRED_TABLES
 
@@ -29,6 +30,8 @@ def _make_config(**overrides) -> MagicMock:
     cfg.echo_sql = False
     cfg.pool_size = 5
     cfg.max_overflow = 10
+    cfg.connect_max_attempts = 3
+    cfg.connect_retry_interval_seconds = 0
     for k, v in overrides.items():
         setattr(cfg, k, v)
     return cfg
@@ -96,6 +99,93 @@ class TestPostgreSQLStartup:
         ):
             with pytest.raises(Exception, match="Connection refused"):
                 db.startup()
+
+
+# ─────────────────────────────────────────────────────────────
+# startup：DB 晚起來時重試（daodao#362）
+# ─────────────────────────────────────────────────────────────
+
+
+def _db_down_error() -> OperationalError:
+    return OperationalError(
+        "SELECT 1",
+        {},
+        Exception('could not translate host name "pg-dev" to address'),
+    )
+
+
+def _engine_with_connect_results(results: list) -> MagicMock:
+    """依序回傳 connect() 的結果：Exception 代表連線失敗，其他代表成功"""
+    engine_instance = MagicMock()
+    engine_instance.url.database = "testdb"
+
+    def _connect():
+        outcome = results.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        ctx = MagicMock()
+        ctx.__enter__ = MagicMock(return_value=MagicMock())
+        ctx.__exit__ = MagicMock(return_value=False)
+        return ctx
+
+    engine_instance.connect.side_effect = _connect
+    return engine_instance
+
+
+class TestPostgreSQLStartupRetry:
+
+    def test_startup_waits_for_db_that_comes_up_late(self):
+        """重開機情境：前兩次 pg-dev 還解析不到，第三次連上 → 啟動成功、不拋錯"""
+        db = PostgreSQLDatabase(_make_config(connect_max_attempts=5))
+        engine_instance = _engine_with_connect_results(
+            [_db_down_error(), _db_down_error(), "ok"]
+        )
+
+        with (
+            patch("src.db.postgresql.create_engine", return_value=engine_instance),
+            patch("src.db.postgresql.sessionmaker"),
+            patch.object(db, "_verify_required_tables") as mock_verify,
+            patch("src.db.postgresql.time.sleep") as mock_sleep,
+        ):
+            db.startup()
+
+        assert engine_instance.connect.call_count == 3
+        assert mock_sleep.call_count == 2
+        mock_verify.assert_called_once()
+
+    def test_startup_gives_up_after_max_attempts(self):
+        """DB 一直起不來 → 用完次數後拋出 OperationalError，不會無限等待"""
+        db = PostgreSQLDatabase(_make_config(connect_max_attempts=3))
+        engine_instance = _engine_with_connect_results([_db_down_error()] * 3)
+
+        with (
+            patch("src.db.postgresql.create_engine", return_value=engine_instance),
+            patch("src.db.postgresql.sessionmaker"),
+            patch.object(db, "_verify_required_tables") as mock_verify,
+            patch("src.db.postgresql.time.sleep") as mock_sleep,
+        ):
+            with pytest.raises(OperationalError):
+                db.startup()
+
+        assert engine_instance.connect.call_count == 3
+        assert mock_sleep.call_count == 2
+        mock_verify.assert_not_called()
+
+    def test_startup_does_not_retry_non_connection_errors(self):
+        """非連線類錯誤（例如程式錯誤）不重試，直接拋出"""
+        db = PostgreSQLDatabase(_make_config(connect_max_attempts=5))
+        engine_instance = _engine_with_connect_results([ValueError("bad config")])
+
+        with (
+            patch("src.db.postgresql.create_engine", return_value=engine_instance),
+            patch("src.db.postgresql.sessionmaker"),
+            patch("src.db.postgresql.time.sleep") as mock_sleep,
+        ):
+            with pytest.raises(ValueError, match="bad config"):
+                db.startup()
+
+        assert engine_instance.connect.call_count == 1
+        mock_sleep.assert_not_called()
 
 
 # ─────────────────────────────────────────────────────────────
