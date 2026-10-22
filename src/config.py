@@ -71,6 +71,15 @@ class PostgreSQLSettings(BaseSettings):
     pool_size: int = Field(default=20, description="Database connection pool size")
     max_overflow: int = Field(default=0, description="Maximum pool overflow")
 
+    # 啟動時等 DB 起來（daodao#362）：主機重開機時 pg 容器在另一個 compose project，
+    # 無法用 depends_on 等待，DB 晚幾秒起來就會讓整個 app 啟動失敗
+    connect_max_attempts: int = Field(
+        default=30, ge=1, description="啟動時連線 DB 的最多嘗試次數"
+    )
+    connect_retry_interval_seconds: float = Field(
+        default=2.0, ge=0, description="啟動時連線 DB 失敗後的重試間隔（秒）"
+    )
+
 
 class ClickHouseSettings(BaseSettings):
     model_config = SettingsConfigDict(
