@@ -66,8 +66,14 @@ def get_feed(
         _user = db.query(User).filter(User.external_id == current_user).first()
         user_id = _user.id if _user else None
 
-    # ── cache（登入用戶才 cache）──
-    if user_id:
+    # Cohort selections may contain private content. Recheck current membership and
+    # retention on every request, including after a member exits; never use stale cache.
+    use_cache = user_id is not None and not (
+        space_filter is not None and space_filter.cohort_ids
+    )
+
+    # ── cache（公開 feed 的登入用戶才 cache）──
+    if use_cache:
         tags_str = ",".join(sorted(tags)) if tags else ""
         cache_key = (
             f"feed:user:{user_id}"
@@ -115,7 +121,7 @@ def get_feed(
     }
 
     # ── 寫入 cache ──
-    if user_id:
+    if use_cache:
         try:
             cache.client.set(
                 cache_key, json.dumps(payload, default=str), ex=FEED_CACHE_TTL

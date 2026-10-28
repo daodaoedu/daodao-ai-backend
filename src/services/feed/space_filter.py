@@ -6,7 +6,7 @@ Feed 空間篩選（daodao#213 FR-D3）
 - personal：不屬任何 cohort 的實踐
 - challenge：所屬 cohort 的 program.kind = 'challenge'
 - cohort:<id>：屬指定 cohort 的實踐
-多選時取聯集。只縮小結果，不改變 feed 既有的隱私條件。
+多選時取聯集。私人燈塔內容僅於明確選取場次且仍為 joined 成員時可讀。
 """
 
 import re
@@ -110,3 +110,31 @@ def space_cache_token(space_filter: Optional[SpaceFilter]) -> str:
         parts.append(CHALLENGE)
     parts.extend(f"cohort:{cohort_id}" for cohort_id in space_filter.cohort_ids)
     return ",".join(parts)
+
+
+def build_feed_visibility_clause(
+    space_filter: Optional[SpaceFilter], requester_id: Optional[int]
+) -> tuple[str, dict]:
+    """Public feed by default; selected private Lighthouse content needs live membership."""
+    public_clause = (
+        "p.privacy_status = 'public'"
+        " OR (p.privacy_status = 'delayed' AND p.status = 'completed')"
+    )
+    if requester_id is None or space_filter is None or not space_filter.cohort_ids:
+        return f"({public_clause})", {}
+    private_clause = (
+        "p.privacy_status = 'private'"
+        " AND p.cohort_id = ANY(:visibility_cohort_ids)"
+        " AND EXISTS (SELECT 1 FROM cohorts co"
+        " JOIN programs pr ON pr.id = co.program_id"
+        " JOIN cohort_enrollments ce ON ce.cohort_id = co.id"
+        " WHERE co.id = p.cohort_id"
+        " AND pr.kind = :visibility_program_kind"
+        " AND ce.user_id = :visibility_requester_id AND ce.status = 'joined'"
+        " AND co.end_date >= (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date - 90)"
+    )
+    return f"({public_clause} OR ({private_clause}))", {
+        "visibility_cohort_ids": list(space_filter.cohort_ids),
+        "visibility_requester_id": requester_id,
+        "visibility_program_kind": "lighthouse",
+    }
