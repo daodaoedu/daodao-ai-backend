@@ -20,6 +20,7 @@ from src.schemas.feed import (
 from src.services.feed.space_filter import (
     SpaceFilter,
     build_space_clause,
+    build_feed_visibility_clause,
     matches_nothing,
     restrict_to_joined_cohorts,
 )
@@ -109,6 +110,7 @@ class FeedService:
             keyword,
             tags,
             space_filter,
+            requester_id=user_id,
         )
         # Extra buffer for checkins so cold-start cycles never starve.
         checkin_rows = FeedService._fetch_checkin_pool_with_counts(
@@ -119,6 +121,7 @@ class FeedService:
             keyword,
             tags,
             space_filter,
+            requester_id=user_id,
         )
 
         # Personalized ranking: re-sort pools by social + engagement score.
@@ -247,7 +250,14 @@ class FeedService:
 
         if type_filter == FeedTypeFilter.PRACTICE:
             rows = FeedService._fetch_practice_pool(
-                db, cursor_time, cursor_id, limit + 1, keyword, tags, space_filter
+                db,
+                cursor_time,
+                cursor_id,
+                limit + 1,
+                keyword,
+                tags,
+                space_filter,
+                requester_id=user_id,
             )
             has_next = len(rows) > limit
             rows = rows[:limit]
@@ -297,7 +307,14 @@ class FeedService:
 
         else:  # CHECKIN
             rows = FeedService._fetch_checkin_pool_with_counts(
-                db, cursor_time, cursor_id, limit + 1, keyword, tags, space_filter
+                db,
+                cursor_time,
+                cursor_id,
+                limit + 1,
+                keyword,
+                tags,
+                space_filter,
+                requester_id=user_id,
             )
             has_next = len(rows) > limit
             rows = rows[:limit]
@@ -390,9 +407,13 @@ class FeedService:
         keyword: Optional[str] = None,
         tags: Optional[list[str]] = None,
         space_filter: Optional[SpaceFilter] = None,
+        requester_id: Optional[int] = None,
     ) -> list:
+        visibility_clause, visibility_params = build_feed_visibility_clause(
+            space_filter, requester_id
+        )
         where_clauses = [
-            "(p.privacy_status = 'public' OR (p.privacy_status = 'delayed' AND p.status = 'completed'))",
+            visibility_clause,
             "p.status IN ('active', 'completed')",
             "p.deleted_at IS NULL",
             # Rule ④: 主題實踐需在 30 天內有打卡紀錄才出現
@@ -402,7 +423,7 @@ class FeedService:
             "    AND pc.created_at >= NOW() - INTERVAL '30 days'"
             ")",
         ]
-        bind_params: dict = {"limit": limit}
+        bind_params: dict = {"limit": limit, **visibility_params}
 
         if cursor_time and cursor_id is not None:
             where_clauses.append(
@@ -469,14 +490,18 @@ class FeedService:
         keyword: Optional[str] = None,
         tags: Optional[list[str]] = None,
         space_filter: Optional[SpaceFilter] = None,
+        requester_id: Optional[int] = None,
     ) -> list:
         """Fetch checkins with reactions_count + comments_count for Slot A count logic."""
+        visibility_clause, visibility_params = build_feed_visibility_clause(
+            space_filter, requester_id
+        )
         where_clauses = [
-            "(p.privacy_status = 'public' OR (p.privacy_status = 'delayed' AND p.status = 'completed'))",
+            visibility_clause,
             "p.status IN ('active', 'completed')",
             "p.deleted_at IS NULL",
         ]
-        bind_params: dict = {"limit": limit}
+        bind_params: dict = {"limit": limit, **visibility_params}
 
         if cursor_time and cursor_id is not None:
             where_clauses.append(
