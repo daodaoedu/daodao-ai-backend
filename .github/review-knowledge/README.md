@@ -1,12 +1,12 @@
 # Review Knowledge — code review 誤判知識庫
 
-AI code review 有兩個來源：**CI**（`code-review.yml`，Workers AI）與**本機**（`code-review` skill，Codex／OMP／OpenCode／Haiku 四引擎）。兩邊的誤判都記在同一份 `false-positives.jsonl`，兩邊也都用同一支 `.github/scripts/review-knowledge.cjs` 消費它——記錄一次，兩處受益。
+AI code review 有兩個來源：**CI**（`code-review.yml`，Workers AI）與**本機**（`review-change` skill，Codex／OMP／OpenCode／Haiku 四引擎）。兩邊的誤判都記在同一份 `false-positives.jsonl`，兩邊也都用同一支 `.github/scripts/review-knowledge.cjs` 消費它——記錄一次，兩處受益。
 
 ```
 記錄（record）                          消費
-  本機 skill 步驟 8 查證為誤判 ──┐        ┌─ CI  ：prompt-block 進模型輸入 → filter 在 strict validator 前
+  本機 skill 步驟 8 查證為誤判 ──┐        ┌─ CI  ：prompt-block 進模型輸入 → verify 標註 absent-claim（不刪 finding）
   PR 作者回覆 /fp（collect-pr-  ├─→ jsonl ─┤
-  feedback 步驟 3 收割）       ─┘        └─ 本機：prompt-block 進 review-input.md → filter 套各引擎表格
+  feedback 步驟 3 收割）       ─┘        └─ 本機：prompt-block 進 review-input.md → filter → verify 套各引擎表格
 ```
 
 單一來源在 daodao monorepo；`sync-claude-config.yml` 把 jsonl 與腳本同步到各 sub-repo，CI 從 **base ref** 讀取（與 `retrieve-context.sh` 相同的信任邊界，PR head 改不到）。
@@ -15,14 +15,17 @@ AI code review 有兩個來源：**CI**（`code-review.yml`，Workers AI）與**
 
 | 代號 | 樣態 | 確定性對策 |
 |---|---|---|
-| A | absent-claim：對 diff 外的程式碼做「找不到／缺少／未實作」否定斷言，但實作存在 | Context Pack 補脈絡（route middleware、schema）；prompt-block 提醒 |
+| A | absent-claim：對 diff 外的程式碼做「找不到／缺少／未實作」否定斷言，但實作存在 | Context Pack 補脈絡（route middleware、schema）；prompt-block 提醒；**verify 到 head tree `git grep` 查反證**（本機 drop、CI 只標註） |
 | B | deletion：舊碼被刪就報回歸，替代實作在同 PR 別的檔案 | prompt-block 提醒；Context Pack 列替代者（待做） |
 | C | unverifiable：自己寫「無法確認／被截斷／不確定」卻列成問題 | **filter 直接 drop** |
 | D | hypothetical：「若未來／萬一／可能會」的假設風險，無具體證據 | **filter：High/Medium 降為 Low** |
 | E | format：漏行號、括號說明、簡體 | `code-review.yml` normalize 修復器 |
 | F | misattribution：path:line 指到別的函式 | 只記錄；回覆時指正 |
+| G | reminder：「請確認／需同步／記得更新」的提醒，沒指出哪個位置還是舊的 | **filter 直接 drop**；有指出另一個 `path:line` 就保留。CI prompt 也要求不報這類提醒 |
 
-規則寫在 `review-knowledge.cjs` 裡（`UNVERIFIABLE_RE`／`HYPOTHETICAL_RE`）。**改規則必須同時加一筆帶 `sample` + `expected` 的紀錄**，`node .github/scripts/review-knowledge.cjs test` 會把每筆當 fixture 跑。
+**高風險類別不套用 C／D／G**：問題或建議欄提到 auth、權限、個資、migration／schema、金流、資料刪除、併發時，filter 一律保留原樣（記在 report 的 `exempted`），交人判斷。歷史上類似的 finding 被放過，不構成自動略過的理由。
+
+規則寫在 `review-knowledge.cjs` 裡（`UNVERIFIABLE_RE`／`HYPOTHETICAL_RE`／`REMINDER_RE`／`HIGH_RISK_RE`；verify 用 `ABSENT_EXIST_RE`／`ABSENT_CHECK_RE`）。**改規則必須同時加一筆帶 `sample` + `expected` 的紀錄**，`node .github/scripts/review-knowledge.cjs test` 會把每筆當 fixture 跑。`expected: "verify-drop"` 表示 filter 保留、verify 要移除，這種紀錄另外帶 `verify_tree`（`{路徑: 內容}`），test 會用它建暫存 git repo 跑 verify（例：FP-0001、FP-0010）；腳本內建的反例（真正缺少的東西）必須保留。
 
 ## 怎麼記一筆
 
@@ -45,7 +48,7 @@ node .github/scripts/review-knowledge.cjs record \
 
 ### CI 來源：PR 留言收割
 
-PR 作者回覆 bot 的 Code Review 留言時，用一行 `/fp <第幾條> <A-F> <一句為什麼>`，例如：
+PR 作者回覆 bot 的 Code Review 留言時，用一行 `/fp <第幾條> <A-G> <一句為什麼>`，例如：
 
 ```
 /fp 1 A route 已掛 authenticate，引用行號指到別的函式
@@ -56,7 +59,7 @@ PR 作者回覆 bot 的 Code Review 留言時，用一行 `/fp <第幾條> <A-F>
 
 ## 每筆欄位
 
-`id`、`date`、`source`、`engine`、`repo`、`pr`、`pattern`、`severity`、`file`、`finding`（原文摘要）、`why`（為什麼錯，附證據）、`evidence`、`action`、可選 `sample`／`expected`。
+`id`、`date`、`source`、`engine`、`repo`、`pr`、`pattern`、`severity`、`file`、`finding`（原文摘要）、`why`（為什麼錯，附證據）、`evidence`、`action`、可選 `sample`／`expected`／`verify_tree`。
 
 ## 延伸閱讀
 
