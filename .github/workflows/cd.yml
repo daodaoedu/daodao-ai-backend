@@ -53,6 +53,7 @@ jobs:
   # ===============================
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: [continuous_integration]
     # 當 CI 成功、手動強制部署、或沒有執行 CI 時執行
     if: ${{ always() && (needs.continuous_integration.result == 'success' || inputs.force_deploy || needs.continuous_integration.result == 'skipped') }}
@@ -288,6 +289,7 @@ jobs:
   # ============================
   notify:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     needs: [continuous_integration, build, deploy]
     if: always()
     steps:
