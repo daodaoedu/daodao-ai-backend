@@ -86,8 +86,18 @@ def database() -> Iterator[Connection]:
                     );
                     CREATE TABLE comments (
                         id integer PRIMARY KEY, target_type text NOT NULL,
-                        target_id integer NOT NULL, visibility text NOT NULL
+                        target_id integer NOT NULL, visibility text NOT NULL,
+                        parent_id integer, user_id integer DEFAULT 1,
+                        content text DEFAULT 'Public fixture comment',
+                        created_at timestamptz DEFAULT NOW()
                     );
+                    CREATE TABLE contacts (id integer PRIMARY KEY, photo_url text);
+                    CREATE TABLE users (
+                        id integer PRIMARY KEY, external_id text, nickname text,
+                        custom_id text, contact_id integer
+                    );
+                    INSERT INTO users (id, external_id, nickname)
+                        VALUES (1, 'fixture-owner', 'Owner');
                     INSERT INTO programs VALUES (1, 'lighthouse'), (2, 'challenge');
                     INSERT INTO cohorts VALUES
                         (100, 1, CURRENT_DATE + 7),
@@ -115,7 +125,7 @@ def database() -> Iterator[Connection]:
                     UPDATE practices SET deleted_at = NOW() WHERE id = 1010;
                     INSERT INTO practice_checkins (id, practice_id, user_id)
                         SELECT id + 10000, id, user_id FROM practices;
-                    INSERT INTO comments VALUES
+                    INSERT INTO comments (id, target_type, target_id, visibility) VALUES
                         (1, 'practice', 1000, 'public'),
                         (2, 'practice', 1000, 'private'),
                         (3, 'checkin', 11000, 'public'),
@@ -227,3 +237,58 @@ def test_membership_revocation_takes_effect_on_next_query(database, pool):
             ),
             {"user": PEER},
         )
+
+
+@pytest.fixture
+def comment_thread(database, pool):
+    """A public thread and a newer private thread on the same feed target."""
+    target_type = "practice" if pool[1] == 0 else "checkin"
+    target_id = PRIVATE_PRACTICE + pool[1]
+    savepoint = database.begin_nested()
+    try:
+        database.execute(
+            text(
+                """
+                INSERT INTO comments
+                    (id, target_type, target_id, visibility, parent_id, content, created_at)
+                VALUES
+                    (7010, :kind, :target, 'public', NULL, 'VISIBLE_ROOT', NOW() + INTERVAL '1 minute'),
+                    (7011, :kind, :target, 'public', 7010, 'VISIBLE_REPLY', NOW() + INTERVAL '2 minutes'),
+                    (7012, :kind, :target, 'private', NULL, 'PRIVATE_PARENT', NOW() + INTERVAL '3 minutes'),
+                    (7013, :kind, :target, 'public', 7012, 'HIDDEN_REPLY_TO_PRIVATE', NOW() + INTERVAL '4 minutes'),
+                    (7014, :kind, :target, 'private', 7010, 'PRIVATE_REPLY', NOW() + INTERVAL '5 minutes'),
+                    (7015, :kind, :target, 'public', 999999, 'ORPHAN_REPLY', NOW() + INTERVAL '6 minutes')
+                """
+            ),
+            {"kind": target_type, "target": target_id},
+        )
+        yield target_type, target_id
+    finally:
+        savepoint.rollback()
+
+
+def test_pool_counts_only_comments_in_public_threads(database, pool, comment_thread):
+    # Existing public root + new public root/reply; private-thread replies do not count.
+    rows = rows_for(database, pool, PEER)
+    assert rows[PRIVATE_PRACTICE].comments_count == 3
+
+
+def test_comment_preview_excludes_private_threads_but_keeps_public_replies(
+    database, comment_thread
+):
+    target_type, target_id = comment_thread
+    comments = FeedService._batch_fetch_comments(database, {target_type: [target_id]})
+    item = comments[(target_type, target_id)]
+    assert item["count"] == 3
+    assert [entry["content"] for entry in item["preview"]] == [
+        "VISIBLE_REPLY",
+        "VISIBLE_ROOT",
+    ]
+    serialized = str(item)
+    for marker in (
+        "PRIVATE_PARENT",
+        "HIDDEN_REPLY_TO_PRIVATE",
+        "PRIVATE_REPLY",
+        "ORPHAN_REPLY",
+    ):
+        assert marker not in serialized

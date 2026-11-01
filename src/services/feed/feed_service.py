@@ -27,6 +27,19 @@ from src.services.feed.space_filter import (
 
 logger = AppLogger(__name__).get_logger()
 
+# Replies are at most one level deep. Public replies to private/missing parents
+# must not reveal a thread the comment API would omit from its visible tree.
+_PUBLIC_COMMENT_THREAD_SQL = """
+    cm.visibility = 'public'
+    AND (cm.parent_id IS NULL OR EXISTS (
+        SELECT 1 FROM comments parent
+        WHERE parent.id = cm.parent_id
+          AND parent.visibility = 'public'
+          AND parent.target_type = cm.target_type
+          AND parent.target_id = cm.target_id
+    ))
+"""
+
 
 class FeedService:
     @staticmethod
@@ -472,7 +485,7 @@ class FeedService:
             LEFT JOIN reactions r ON r.target_type = 'practice' AND r.target_id = p.id
             LEFT JOIN comments cm
                 ON cm.target_type = 'practice' AND cm.target_id = p.id
-                AND cm.visibility = 'public'
+                AND {_PUBLIC_COMMENT_THREAD_SQL}
             WHERE {where_sql}
             GROUP BY p.id, p.created_at, p.user_id, p.updated_at,
                 p.is_featured, p.featured_start_at, p.featured_end_at
@@ -545,7 +558,7 @@ class FeedService:
             LEFT JOIN reactions r ON r.target_type = 'checkin' AND r.target_id = c.id
             LEFT JOIN comments cm
                 ON cm.target_type = 'checkin' AND cm.target_id = c.id
-                AND cm.visibility = 'public'
+                AND {_PUBLIC_COMMENT_THREAD_SQL}
             WHERE {where_sql}
             GROUP BY c.id, c.created_at, c.user_id, c.practice_id
             ORDER BY c.created_at DESC, c.id DESC
@@ -1021,13 +1034,13 @@ class FeedService:
             # 1. Counts
             count_rows = db.execute(
                 text(
-                    """
-                    SELECT target_id, COUNT(*) AS cnt
-                    FROM comments
-                    WHERE target_type = :target_type
-                      AND target_id IN :ids
-                      AND visibility = 'public'
-                    GROUP BY target_id
+                    f"""
+                    SELECT cm.target_id, COUNT(*) AS cnt
+                    FROM comments cm
+                    WHERE cm.target_type = :target_type
+                      AND cm.target_id IN :ids
+                      AND {_PUBLIC_COMMENT_THREAD_SQL}
+                    GROUP BY cm.target_id
                 """
                 ).bindparams(bindparam("ids", expanding=True)),
                 {"target_type": target_type, "ids": ids},
@@ -1039,26 +1052,26 @@ class FeedService:
             # 2. Preview (latest 2 per target) using LATERAL join
             preview_rows = db.execute(
                 text(
-                    """
+                    f"""
                     SELECT sub.target_id, sub.id, sub.content, sub.created_at,
                            u.external_id AS user_external_id,
                            u.nickname AS user_name,
                            ct.photo_url AS user_photo_url,
                            u.custom_id AS user_custom_id
                     FROM (
-                        SELECT DISTINCT target_id AS target_id
-                        FROM comments
-                        WHERE target_type = :target_type
-                          AND target_id IN :ids
-                          AND visibility = 'public'
+                        SELECT DISTINCT cm.target_id AS target_id
+                        FROM comments cm
+                        WHERE cm.target_type = :target_type
+                          AND cm.target_id IN :ids
+                          AND {_PUBLIC_COMMENT_THREAD_SQL}
                     ) targets
                     CROSS JOIN LATERAL (
-                        SELECT id, content, created_at, user_id, target_id
-                        FROM comments
-                        WHERE target_type = :target_type
-                          AND target_id = targets.target_id
-                          AND visibility = 'public'
-                        ORDER BY created_at DESC
+                        SELECT cm.id, cm.content, cm.created_at, cm.user_id, cm.target_id
+                        FROM comments cm
+                        WHERE cm.target_type = :target_type
+                          AND cm.target_id = targets.target_id
+                          AND {_PUBLIC_COMMENT_THREAD_SQL}
+                        ORDER BY cm.created_at DESC
                         LIMIT 2
                     ) sub
                     JOIN users u ON u.id = sub.user_id
