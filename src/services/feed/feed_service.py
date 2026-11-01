@@ -20,11 +20,25 @@ from src.schemas.feed import (
 from src.services.feed.space_filter import (
     SpaceFilter,
     build_space_clause,
+    build_feed_visibility_clause,
     matches_nothing,
     restrict_to_joined_cohorts,
 )
 
 logger = AppLogger(__name__).get_logger()
+
+# Replies are at most one level deep. Public replies to private/missing parents
+# must not reveal a thread the comment API would omit from its visible tree.
+_PUBLIC_COMMENT_THREAD_SQL = """
+    cm.visibility = 'public'
+    AND (cm.parent_id IS NULL OR EXISTS (
+        SELECT 1 FROM comments parent
+        WHERE parent.id = cm.parent_id
+          AND parent.visibility = 'public'
+          AND parent.target_type = cm.target_type
+          AND parent.target_id = cm.target_id
+    ))
+"""
 
 
 class FeedService:
@@ -109,6 +123,7 @@ class FeedService:
             keyword,
             tags,
             space_filter,
+            requester_id=user_id,
         )
         # Extra buffer for checkins so cold-start cycles never starve.
         checkin_rows = FeedService._fetch_checkin_pool_with_counts(
@@ -119,6 +134,7 @@ class FeedService:
             keyword,
             tags,
             space_filter,
+            requester_id=user_id,
         )
 
         # Personalized ranking: re-sort pools by social + engagement score.
@@ -247,7 +263,14 @@ class FeedService:
 
         if type_filter == FeedTypeFilter.PRACTICE:
             rows = FeedService._fetch_practice_pool(
-                db, cursor_time, cursor_id, limit + 1, keyword, tags, space_filter
+                db,
+                cursor_time,
+                cursor_id,
+                limit + 1,
+                keyword,
+                tags,
+                space_filter,
+                requester_id=user_id,
             )
             has_next = len(rows) > limit
             rows = rows[:limit]
@@ -297,7 +320,14 @@ class FeedService:
 
         else:  # CHECKIN
             rows = FeedService._fetch_checkin_pool_with_counts(
-                db, cursor_time, cursor_id, limit + 1, keyword, tags, space_filter
+                db,
+                cursor_time,
+                cursor_id,
+                limit + 1,
+                keyword,
+                tags,
+                space_filter,
+                requester_id=user_id,
             )
             has_next = len(rows) > limit
             rows = rows[:limit]
@@ -390,9 +420,13 @@ class FeedService:
         keyword: Optional[str] = None,
         tags: Optional[list[str]] = None,
         space_filter: Optional[SpaceFilter] = None,
+        requester_id: Optional[int] = None,
     ) -> list:
+        visibility_clause, visibility_params = build_feed_visibility_clause(
+            space_filter, requester_id
+        )
         where_clauses = [
-            "(p.privacy_status = 'public' OR (p.privacy_status = 'delayed' AND p.status = 'completed'))",
+            visibility_clause,
             "p.status IN ('active', 'completed')",
             "p.deleted_at IS NULL",
             # Rule ④: 主題實踐需在 30 天內有打卡紀錄才出現
@@ -402,7 +436,7 @@ class FeedService:
             "    AND pc.created_at >= NOW() - INTERVAL '30 days'"
             ")",
         ]
-        bind_params: dict = {"limit": limit}
+        bind_params: dict = {"limit": limit, **visibility_params}
 
         if cursor_time and cursor_id is not None:
             where_clauses.append(
@@ -451,7 +485,7 @@ class FeedService:
             LEFT JOIN reactions r ON r.target_type = 'practice' AND r.target_id = p.id
             LEFT JOIN comments cm
                 ON cm.target_type = 'practice' AND cm.target_id = p.id
-                AND cm.visibility = 'public'
+                AND {_PUBLIC_COMMENT_THREAD_SQL}
             WHERE {where_sql}
             GROUP BY p.id, p.created_at, p.user_id, p.updated_at,
                 p.is_featured, p.featured_start_at, p.featured_end_at
@@ -469,14 +503,18 @@ class FeedService:
         keyword: Optional[str] = None,
         tags: Optional[list[str]] = None,
         space_filter: Optional[SpaceFilter] = None,
+        requester_id: Optional[int] = None,
     ) -> list:
         """Fetch checkins with reactions_count + comments_count for Slot A count logic."""
+        visibility_clause, visibility_params = build_feed_visibility_clause(
+            space_filter, requester_id
+        )
         where_clauses = [
-            "(p.privacy_status = 'public' OR (p.privacy_status = 'delayed' AND p.status = 'completed'))",
+            visibility_clause,
             "p.status IN ('active', 'completed')",
             "p.deleted_at IS NULL",
         ]
-        bind_params: dict = {"limit": limit}
+        bind_params: dict = {"limit": limit, **visibility_params}
 
         if cursor_time and cursor_id is not None:
             where_clauses.append(
@@ -520,7 +558,7 @@ class FeedService:
             LEFT JOIN reactions r ON r.target_type = 'checkin' AND r.target_id = c.id
             LEFT JOIN comments cm
                 ON cm.target_type = 'checkin' AND cm.target_id = c.id
-                AND cm.visibility = 'public'
+                AND {_PUBLIC_COMMENT_THREAD_SQL}
             WHERE {where_sql}
             GROUP BY c.id, c.created_at, c.user_id, c.practice_id
             ORDER BY c.created_at DESC, c.id DESC
@@ -996,13 +1034,13 @@ class FeedService:
             # 1. Counts
             count_rows = db.execute(
                 text(
-                    """
-                    SELECT target_id, COUNT(*) AS cnt
-                    FROM comments
-                    WHERE target_type = :target_type
-                      AND target_id IN :ids
-                      AND visibility = 'public'
-                    GROUP BY target_id
+                    f"""
+                    SELECT cm.target_id, COUNT(*) AS cnt
+                    FROM comments cm
+                    WHERE cm.target_type = :target_type
+                      AND cm.target_id IN :ids
+                      AND {_PUBLIC_COMMENT_THREAD_SQL}
+                    GROUP BY cm.target_id
                 """
                 ).bindparams(bindparam("ids", expanding=True)),
                 {"target_type": target_type, "ids": ids},
@@ -1014,26 +1052,26 @@ class FeedService:
             # 2. Preview (latest 2 per target) using LATERAL join
             preview_rows = db.execute(
                 text(
-                    """
+                    f"""
                     SELECT sub.target_id, sub.id, sub.content, sub.created_at,
                            u.external_id AS user_external_id,
                            u.nickname AS user_name,
                            ct.photo_url AS user_photo_url,
                            u.custom_id AS user_custom_id
                     FROM (
-                        SELECT DISTINCT target_id AS target_id
-                        FROM comments
-                        WHERE target_type = :target_type
-                          AND target_id IN :ids
-                          AND visibility = 'public'
+                        SELECT DISTINCT cm.target_id AS target_id
+                        FROM comments cm
+                        WHERE cm.target_type = :target_type
+                          AND cm.target_id IN :ids
+                          AND {_PUBLIC_COMMENT_THREAD_SQL}
                     ) targets
                     CROSS JOIN LATERAL (
-                        SELECT id, content, created_at, user_id, target_id
-                        FROM comments
-                        WHERE target_type = :target_type
-                          AND target_id = targets.target_id
-                          AND visibility = 'public'
-                        ORDER BY created_at DESC
+                        SELECT cm.id, cm.content, cm.created_at, cm.user_id, cm.target_id
+                        FROM comments cm
+                        WHERE cm.target_type = :target_type
+                          AND cm.target_id = targets.target_id
+                          AND {_PUBLIC_COMMENT_THREAD_SQL}
+                        ORDER BY cm.created_at DESC
                         LIMIT 2
                     ) sub
                     JOIN users u ON u.id = sub.user_id
