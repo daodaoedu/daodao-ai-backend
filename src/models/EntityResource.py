@@ -70,6 +70,12 @@ class EntityResource(Base):
     )
     note = Column(Text, nullable=True, comment="使用者對此資源關聯的個人備註")
 
+    day_number = Column(
+        Integer,
+        nullable=True,
+        comment="指定資源於實踐第幾天使用（1–91）；NULL代表整段期間",
+    )
+
     # 系統欄位
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), comment="關聯建立時間"
@@ -81,9 +87,12 @@ class EntityResource(Base):
     resource = relationship("Resource", back_populates="entity_links")
     creator = relationship("User", back_populates="created_entity_resources")
 
-    # 唯一性約束：同一實體不能重複關聯同一資源
+    # 唯一性約束及資源使用天數範圍
     __table_args__ = (
         UniqueConstraint(
             "resource_id", "entity_type", "entity_id", name="uq_resource_entity"
+        ),
+        CheckConstraint(
+            "day_number BETWEEN 1 AND 91", name="entity_resources_day_number_check"
         ),
     )
