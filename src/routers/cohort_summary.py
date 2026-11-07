@@ -133,9 +133,12 @@ async def generate_cohort_summary(
 
     client, mode = _resolve_client(settings, req.provider, req.apiKey)
     prompt = _build_prompt(req)
+    # Gemini's output cap includes thinking tokens; retain the configured model/key
+    # while leaving bounded room for reasoning and the requested three paragraphs.
+    max_tokens = 8192 if client.backend == "gemini" else 1200
     try:
         output, _cost, usage, backend_name = await client.generate(
-            prompt, max_tokens=1200, temperature=0.5
+            prompt, max_tokens=max_tokens, temperature=0.5
         )
     except Exception as exc:  # LLM provider 錯誤（key 無效、額度、逾時…）
         # 只記錯誤型別，不把 provider 回應原文（可能含 key 片段）寫進 log
@@ -145,8 +148,18 @@ async def generate_cohort_summary(
         ) from exc
 
     summary = (output or "").strip()
-    if not summary:
+    if not summary or (backend_name == "gemini" and summary == "未提供回應"):
         raise HTTPException(status_code=502, detail="AI 沒有回傳摘要內容")
+
+    # Nonempty provider text can still be cut mid-sentence. Do not let server
+    # persist it as a new current version or retry a potentially paid call here.
+    finish_reason = (
+        str((usage or {}).get("finish_reason") or "").strip().rsplit(".", 1)[-1].lower()
+    )
+    if finish_reason in {"max_tokens", "length", "max_output_tokens", "incomplete"} or (
+        backend_name == "gemini" and finish_reason != "stop"
+    ):
+        raise HTTPException(status_code=502, detail="AI 摘要未完整產生，請稍後再試")
 
     return GenerateCohortSummaryResponse(
         summary=summary,
