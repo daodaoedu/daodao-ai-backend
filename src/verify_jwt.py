@@ -3,7 +3,7 @@ import os
 import jwt
 from jwt import ExpiredSignatureError, InvalidTokenError
 
-from src.config import get_settings
+from src.config import JWT_SECRET_PLACEHOLDERS, get_settings, is_unconfigured_secret
 from src.logger import AppLogger
 
 logger = AppLogger(__name__).get_logger()
@@ -11,7 +11,7 @@ logger = AppLogger(__name__).get_logger()
 
 def verify(token: str):
     secret = get_settings().jwt_security
-    if not secret.strip() or secret.strip() == "xxxxxxxxxxxxxxxx":
+    if is_unconfigured_secret(secret, JWT_SECRET_PLACEHOLDERS):
         logger.warning("JWT verification is unavailable: signing secret not configured")
         return None
     try:
