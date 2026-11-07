@@ -1,8 +1,12 @@
 from fastapi import APIRouter, HTTPException, Request
+from sqlalchemy import String, select
 
-from src.dependencies import LLMDep, UserDep
+from src.dependencies import DatabaseDep, LLMDep, UserDep
 from src.logger import AppLogger
 from src.middleware.limiter import limiter
+from src.models.User import User
+from src.services.llm.logging_client import LoggingLLMClient
+from src.services.quota_service import QuotaExceededError
 from src.schemas.encouragement import (
     GenerateEncouragementRequest,
     GenerateEncouragementResponse,
@@ -45,12 +49,43 @@ async def generate_encouragement(
     current_user: UserDep,
     req: GenerateEncouragementRequest,
     llm_client: LLMDep,
+    database: DatabaseDep,
 ):
     """依打卡內容生成一段個人化鼓勵訊息（繁體中文）。"""
     if current_user is None:
         raise HTTPException(status_code=401, detail="未通過身份驗證")
 
+    # JWT identities may be PostgreSQL ids or legacy Mongo/external ids.
+    # Quotas and query logs always use the canonical PostgreSQL users.id.
+    with database.get_session() as db:
+        user_id = None
+        if (
+            current_user.isascii()
+            and current_user.isdecimal()
+            and len(current_user) <= 10
+            and int(current_user) <= 2**31 - 1
+        ):
+            # users.id is a PostgreSQL INTEGER; longer numeric Mongo ids fall back.
+            user_id = db.scalar(select(User.id).where(User.id == int(current_user)))
+        if user_id is None:
+            user_id = db.scalar(select(User.id).where(User.mongo_id == current_user))
+        if user_id is None:
+            user_id = db.scalar(
+                select(User.id).where(User.external_id.cast(String) == current_user)
+            )
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="未通過身份驗證")
+
+    logging_client = LoggingLLMClient(
+        llm_client=llm_client,
+        db_session_factory=database.get_session,
+        context="encouragement",
+        user_id=str(user_id),
+    )
     prompt = _build_prompt(req)
-    output, _cost, _usage, _backend_name = await llm_client.generate(prompt)
+    try:
+        output, _cost, _usage, _backend_name = await logging_client.generate(prompt)
+    except QuotaExceededError as exc:
+        raise HTTPException(status_code=429, detail="Token 配額已用盡") from exc
 
     return GenerateEncouragementResponse(draft=output.strip())
