@@ -11,7 +11,12 @@ from fastapi.security import HTTPAuthorizationCredentials
 from starlette.requests import Request
 
 from src import verify_jwt
-from src.config import Settings, get_settings
+from src.config import (
+    BaseConfigSettings,
+    ClickHouseSettings,
+    PostgreSQLSettings,
+    get_settings,
+)
 from src.dependencies import get_admin_user, get_current_user
 
 
@@ -22,13 +27,20 @@ def configured_env_file(tmp_path, monkeypatch):
     monkeypatch.delenv("API_SECRET_KEY", raising=False)
     monkeypatch.setenv("ENVIRONMENT", "staging")
     env_file = tmp_path / ".env"
-    monkeypatch.setitem(Settings.model_config, "env_file", str(env_file))
+    settings_classes = (
+        BaseConfigSettings,
+        *BaseConfigSettings.__subclasses__(),
+        PostgreSQLSettings,
+        ClickHouseSettings,
+    )
+    for settings_class in settings_classes:
+        monkeypatch.setitem(settings_class.model_config, "env_file", str(env_file))
 
     def configure(secret):
         env_file.write_text(
             "JWT_SECURITY="
             + json.dumps(secret)
-            + "\nAPI_SECRET_KEY=synthetic-api-config\n"
+            + "\nAPI_SECRET_KEY=synthetic-api-config\nPOSTGRES_DB_NAME=jwt-fixture-db\n"
         )
         get_settings.cache_clear()
 
@@ -139,3 +151,9 @@ def test_real_callers_reject_invalid_jwt(configured_env_file, kind):
     with pytest.raises(HTTPException) as error:
         get_admin_user(request, credentials, db=None)
     assert error.value.status_code == 403
+
+
+def test_nested_settings_use_fixture_dotenv(configured_env_file, monkeypatch):
+    monkeypatch.delenv("POSTGRES_DB_NAME", raising=False)
+    get_settings.cache_clear()
+    assert get_settings().postgresql.db_name == "jwt-fixture-db"
