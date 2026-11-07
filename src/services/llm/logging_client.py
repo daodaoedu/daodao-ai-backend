@@ -12,15 +12,15 @@ LoggingLLMClient — 包裝 LLMClient，在每次 generate() 後同步寫入 AIQ
 """
 
 import asyncio
-import threading
 import time
 import uuid
-from concurrent.futures import Future, ThreadPoolExecutor
-from contextlib import AbstractContextManager
-from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import AbstractContextManager, nullcontext
+from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional, Tuple
 
-from sqlalchemy import text
+from sqlalchemy import func, text
+from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
 from sqlalchemy.orm import Session
 
 from src.logger import AppLogger
@@ -28,16 +28,29 @@ from src.services.llm.client import LLMClient
 
 logger = AppLogger(__name__).get_logger()
 
-# Keep blocking DB workers separate from the loop's DNS/default executor.
-# Threads start lazily, are reused, and are joined by concurrent.futures at exit.
+# Short DB operations never occupy a worker while a provider runs. Cleanup has
+# reserved capacity and only touches an already-held connection, so saturated
+# pool checkouts cannot prevent a completed generation releasing its connection.
 _DB_EXECUTOR = ThreadPoolExecutor(max_workers=8, thread_name_prefix="llm-quota-db")
+_CLEANUP_EXECUTOR = ThreadPoolExecutor(
+    max_workers=2, thread_name_prefix="llm-quota-cleanup"
+)
+_LOG_EXECUTOR = ThreadPoolExecutor(
+    max_workers=2, thread_name_prefix="llm-unrestricted-log"
+)
+
+
+@dataclass
+class _Admission:
+    manager: Optional[AbstractContextManager] = None
+    db: Optional[Session] = None
 
 
 class LoggingLLMClient:
     """
     包裝 LLMClient，所有 generate() 呼叫完後同步寫入 AIQueryLog。
     DB session 不共用 request session；受限使用者的 lock、check、log commit
-    由同一 DB worker/session 完成，因此 scheduler 也可使用。
+    使用同一 Session 的循序操作完成（不並行共用），因此 scheduler 也可使用。
     """
 
     def __init__(
@@ -47,9 +60,11 @@ class LoggingLLMClient:
         context: str = "unknown",
         user_id: Optional[str] = None,
         service_config_id: Optional[int] = None,
+        quota_session_factory: Optional[Callable[[], AbstractContextManager]] = None,
     ):
         self._client = llm_client
         self._session_factory = db_session_factory
+        self._quota_session_factory = quota_session_factory or db_session_factory
         self.context = context
         self.user_id = user_id
         self.service_config_id = service_config_id
@@ -69,23 +84,23 @@ class LoggingLLMClient:
         QuotaExceededError 向上拋出，由呼叫端決定如何處理。
         """
         loop = asyncio.get_running_loop()
-        admitted = loop.create_future()
-        outcome = Future()
-        cancelled = threading.Event()
-        worker = loop.run_in_executor(
-            _DB_EXECUTOR, self._admit_and_log, loop, admitted, outcome, cancelled
-        )
-        try:
-            await asyncio.shield(admitted)
-        except BaseException:
-            cancelled.set()
-            outcome.set_result(None)
-            try:
-                await self._finish_worker(worker)
-            finally:
-                if admitted.done() and not admitted.cancelled():
-                    admitted.exception()
-            raise
+        guard = _Admission()
+        while self.user_id is not None:
+            guard, cancellation = await self._settle(
+                loop.run_in_executor(_DB_EXECUTOR, self._try_admit)
+            )
+            if cancellation is not None:
+                if guard is not None and guard.db is not None:
+                    await self._settle(
+                        loop.run_in_executor(
+                            _CLEANUP_EXECUTOR, self._finish_admission, guard, None
+                        )
+                    )
+                raise cancellation
+            if guard is not None:
+                break
+            # A lock waiter owns neither a worker nor a DB connection.
+            await asyncio.sleep(0.05)
 
         start_ms = time.monotonic()
         status = "success"
@@ -108,9 +123,10 @@ class LoggingLLMClient:
             error_message = str(exc)
             raise
         finally:
-            latency_ms = int((time.monotonic() - start_ms) * 1000)
-            outcome.set_result(
-                dict(
+            entry = None
+            try:
+                latency_ms = int((time.monotonic() - start_ms) * 1000)
+                entry = dict(
                     backend_name=backend_name,
                     cost=cost,
                     usage=usage,
@@ -120,100 +136,98 @@ class LoggingLLMClient:
                     prompt_chars=len(prompt),
                     output_chars=len(output),
                 )
-            )
-            await self._finish_worker(worker)
+            finally:
+                # Even malformed provider data that fails before log creation
+                # must close the held transaction/lock without coercing output.
+                executor = _CLEANUP_EXECUTOR if guard.db is not None else _LOG_EXECUTOR
+                _, cancellation = await self._settle(
+                    loop.run_in_executor(executor, self._finish_admission, guard, entry)
+                )
+                if cancellation is not None:
+                    raise cancellation
 
         return output, cost, usage, backend_name
 
     @staticmethod
-    async def _finish_worker(worker: asyncio.Future) -> None:
-        """Cancellation must not return a connection before its owner cleans up."""
+    async def _settle(
+        operation: asyncio.Future,
+    ) -> Tuple[Any, Optional[asyncio.CancelledError]]:
+        """Finish a short DB operation despite cancellation; always retrieve errors."""
         cancellation = None
-        while not worker.done():
+        while True:
             try:
-                await asyncio.shield(worker)
+                result = await asyncio.shield(operation)
+                return result, cancellation
             except asyncio.CancelledError as exc:
                 cancellation = exc
-        worker.result()
-        if cancellation is not None:
-            raise cancellation
+            except Exception:
+                if cancellation is not None:
+                    raise cancellation
+                raise
 
-    def _admit_and_log(
-        self,
-        loop: asyncio.AbstractEventLoop,
-        admitted: asyncio.Future,
-        outcome: Future,
-        cancelled: threading.Event,
-    ) -> None:
-        """Own the synchronous Session entirely in one worker, never on the loop.
+    def _try_admit(self) -> Optional[_Admission]:
+        """One nonblocking admission attempt; Session operations are sequential.
 
-        The lock covers fresh admission through committed usage. The provider
-        runs on the caller's loop; its result is handed back to this worker.
+        psycopg2 connections support sequential use across threads. A held guard
+        is touched only by its finish operation after provider completion; no
+        Session is used concurrently or through a scoped/thread-local factory.
         """
         from src.services.quota_service import (  # noqa: PLC0415
             check_user_quota,
             get_user_quota,
         )
 
-        admission_sent = False
+        if self.user_id is None:
+            return _Admission()
+        user_id = int(self.user_id)
+        # Metadata lookup and unrestricted logs use the ordinary pool. A full
+        # quota guard pool must not turn an unconfigured user into a waiter.
+        with self._session_factory() as metadata:
+            if get_user_quota(metadata, user_id) is None:
+                return _Admission()
 
-        def notify(error: Optional[Exception] = None) -> None:
-            nonlocal admission_sent
-            if error is None:
-                admission_sent = True
-
-            def complete() -> None:
-                if not admitted.done():
-                    if error is None:
-                        admitted.set_result(None)
-                    else:
-                        admitted.set_exception(error)
-
-            loop.call_soon_threadsafe(complete)
-
+        manager = self._quota_session_factory()
+        manager_open = False
         try:
-            if self.user_id is not None:
-                with self._session_factory() as db:
-                    user_id = int(self.user_id)
-                    if get_user_quota(db, user_id) is not None:
-                        if db.get_bind().dialect.name == "postgresql":
-                            # A transaction-scoped lock also releases on rollback,
-                            # disconnect, or process exit; no pooled lock leaks.
-                            while not cancelled.is_set():
-                                locked = db.scalar(
-                                    text(
-                                        "SELECT pg_try_advisory_xact_lock(:namespace, :user_id)"
-                                    ),
-                                    {"namespace": 160, "user_id": user_id},
-                                )
-                                if locked:
-                                    break
-                                cancelled.wait(0.05)
-                            if cancelled.is_set():
-                                return
-                        # READ COMMITTED plus expire_all observes changes made
-                        # while waiting instead of reusing an ORM cached quota.
-                        db.expire_all()
-                        check_user_quota(db, user_id)
-                        if cancelled.is_set():
-                            return
-                        notify()
-                        entry = outcome.result()
-                        if entry is not None:
-                            self._write_log(**entry, db=db)
-                        return
-            # No quota remains unrestricted and holds no pool connection while
-            # the provider runs (including scheduler calls with user_id=None).
-            if cancelled.is_set():
-                return
-            notify()
-            entry = outcome.result()
+            db = manager.__enter__()
+            manager_open = True
+            if db.get_bind().dialect.name == "postgresql":
+                locked = db.scalar(
+                    text("SELECT pg_try_advisory_xact_lock(:namespace, :user_id)"),
+                    {"namespace": 160, "user_id": user_id},
+                )
+                if not locked:
+                    manager_open = False
+                    manager.__exit__(None, None, None)
+                    return None
+            db.expire_all()
+            check_user_quota(db, user_id)
+            return _Admission(manager, db)
+        except SQLAlchemyTimeoutError as exc:
+            # Only the isolated guard attempt is retryable. Ordinary metadata
+            # lookup errors above still propagate; exhaustion is not a denial.
+            if manager_open:
+                manager.__exit__(type(exc), exc, exc.__traceback__)
+            return None
+        except BaseException as exc:
+            if manager_open:
+                manager.__exit__(type(exc), exc, exc.__traceback__)
+            raise
+
+    def _finish_admission(
+        self, guard: _Admission, entry: Optional[Dict[str, Any]]
+    ) -> None:
+        """Reserved cleanup never checks out another connection for held guards."""
+        try:
             if entry is not None:
-                self._write_log(**entry)
-        except Exception as exc:
-            if admission_sent:
-                raise
-            notify(exc)
+                self._write_log(**entry, db=guard.db)
+        except BaseException as exc:
+            if guard.manager is not None:
+                guard.manager.__exit__(type(exc), exc, exc.__traceback__)
+            raise
+        else:
+            if guard.manager is not None:
+                guard.manager.__exit__(None, None, None)
 
     def _write_log(
         self,
@@ -243,7 +257,6 @@ class LoggingLLMClient:
 
         log_entry = AIQueryLog(
             request_id=uuid.uuid4(),
-            created_at=datetime.now(timezone.utc),
             backend=backend_name,
             model_name=model_name,
             context=self.context,
@@ -263,13 +276,18 @@ class LoggingLLMClient:
         )
 
         try:
-            if db is not None:
-                db.add(log_entry)
-                db.commit()
-            else:
-                with self._session_factory() as session:
-                    session.add(log_entry)
-                    session.commit()
+            manager = nullcontext(db) if db is not None else self._session_factory()
+            with manager as session:
+                # PostgreSQL transaction NOW() predates lock/provider waits.
+                # Attribute usage to completion using the database clock, not
+                # an application host whose clock may be skewed.
+                log_entry.created_at = (
+                    func.clock_timestamp()
+                    if session.get_bind().dialect.name == "postgresql"
+                    else func.current_timestamp()
+                )
+                session.add(log_entry)
+                session.commit()
         except Exception as exc:
             if db is not None:
                 db.rollback()

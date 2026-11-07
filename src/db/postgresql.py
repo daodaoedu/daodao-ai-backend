@@ -31,6 +31,8 @@ class PostgreSQLDatabase(BaseDatabase):
         self.config = config
         self.engine: Optional[Engine] = None
         self.session_factory: Optional[sessionmaker] = None
+        self.quota_engine: Optional[Engine] = None
+        self.quota_session_factory: Optional[sessionmaker] = None
 
     def startup(self) -> None:
         """Initialize the database connection."""
@@ -64,6 +66,23 @@ class PostgreSQLDatabase(BaseDatabase):
             # 驗證必要資料表已存在（唯讀，不執行 DDL）
             # Schema 應由 Alembic migration 管理，AI 後端不負責建表
             self._verify_required_tables()
+
+            # Generation guards hold transactions across network calls. A
+            # separate bounded pool leaves ordinary API queries free to run.
+            # create_engine is lazy: this adds no startup connection or DDL.
+            self.quota_engine = create_engine(
+                db_url,
+                echo=self.config.echo_sql,
+                pool_size=self.config.quota_pool_size,
+                max_overflow=0,
+                # Admission retries asynchronously instead of occupying a
+                # worker while another generation holds the bounded pool.
+                pool_timeout=0,
+                pool_pre_ping=True,
+            )
+            self.quota_session_factory = sessionmaker(
+                bind=self.quota_engine, expire_on_commit=False
+            )
 
             logger.info("PostgreSQL database initialized successfully")
             logger.info(f"Database: {self.engine.url.database}")
@@ -128,9 +147,13 @@ class PostgreSQLDatabase(BaseDatabase):
 
     def teardown(self) -> None:
         """Close the database connection."""
-        if self.engine:
-            self.engine.dispose()
-            logger.info("PostgreSQL database connections closed")
+        try:
+            if self.engine:
+                self.engine.dispose()
+        finally:
+            if self.quota_engine:
+                self.quota_engine.dispose()
+        logger.info("PostgreSQL database connections closed")
 
     @contextmanager
     def get_session(self) -> Generator[Session, None, None]:
@@ -139,6 +162,20 @@ class PostgreSQLDatabase(BaseDatabase):
             raise RuntimeError("Database not initialized. Call startup() first.")
 
         session = self.session_factory()
+        try:
+            yield session
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+    @contextmanager
+    def get_quota_session(self) -> Generator[Session, None, None]:
+        """Use the isolated pool for generation admission and its usage commit."""
+        if not self.quota_session_factory:
+            raise RuntimeError("Database not initialized. Call startup() first.")
+        session = self.quota_session_factory()
         try:
             yield session
         except Exception:

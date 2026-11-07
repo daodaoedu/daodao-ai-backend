@@ -70,12 +70,45 @@ def sessions(request):
                 yield session
 
         factory.engine = engine
+        factory.schema = schema
         yield factory
     finally:
         engine.dispose()
         with admin.begin() as connection:
             connection.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
         admin.dispose()
+
+
+@pytest.fixture
+def main_sessions(sessions):
+    """Exercise actual startup and independent factories against local PostgreSQL."""
+    from src.config import PostgreSQLSettings
+    from src.db.postgresql import PostgreSQLDatabase
+
+    url = sessions.engine.url
+    config = PostgreSQLSettings(
+        db_host=url.host,
+        db_port=url.port,
+        db_user=url.username,
+        db_password=url.password,
+        # Test-owned UUID schema, passed as a standard libpq connection option.
+        db_name=f"{url.database}?options=-csearch_path%3D{sessions.schema}",
+        pool_size=2,
+        max_overflow=0,
+    )
+    database = PostgreSQLDatabase(config)
+    database.startup()
+
+    @contextmanager
+    def factory():
+        with database.get_session() as session:
+            yield session
+
+    factory.database = database
+    try:
+        yield factory
+    finally:
+        database.teardown()
 
 
 @pytest.mark.parametrize("kind", ["monthly", "daily"])
@@ -446,17 +479,557 @@ async def test_database_error_after_lock_releases_transaction(sessions, monkeypa
 async def test_usage_timestamp_is_generation_completion_not_lock_transaction_start(
     sessions,
 ):
-    from datetime import datetime, timezone
 
     completed_at = None
 
     async def generate(_prompt):
         nonlocal completed_at
         await asyncio.sleep(0.1)
-        completed_at = datetime.now(timezone.utc)
+        with sessions() as session:
+            completed_at = session.scalar(text("SELECT clock_timestamp()"))
         return success()
 
     await client(sessions, generate).generate("timestamp")
     with sessions() as session:
         log = session.scalars(select(AIQueryLog)).one()
     assert log.created_at >= completed_at
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("sessions", [12], indirect=True)
+async def test_same_user_waiters_do_not_starve_another_user(sessions):
+    with sessions() as session:
+        session.execute(
+            text(
+                "INSERT INTO user_token_quotas (user_id,monthly_token_limit) VALUES (43,50)"
+            )
+        )
+        session.commit()
+    owner_entered = asyncio.Event()
+    other_entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def generate(prompt):
+        if prompt.startswith("owner"):
+            owner_entered.set()
+            await release.wait()
+        else:
+            other_entered.set()
+        return success()
+
+    owner = asyncio.create_task(client(sessions, generate, 42).generate("owner-first"))
+    await asyncio.wait_for(owner_entered.wait(), 2)
+    waiters = [
+        asyncio.create_task(client(sessions, generate, 42).generate(f"owner-{i}"))
+        for i in range(7)
+    ]
+    await asyncio.sleep(0.15)
+    other = asyncio.create_task(client(sessions, generate, 43).generate("other"))
+    try:
+        await asyncio.wait_for(other_entered.wait(), 1)
+        assert not owner.done(), "other user must progress before owner completes"
+    finally:
+        for task in waiters:
+            task.cancel()
+        release.set()
+        await asyncio.gather(owner, other, *waiters, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("sessions", [16], indirect=True)
+@pytest.mark.parametrize("limited", [False, True])
+async def test_unrestricted_provider_concurrency_is_not_limited_by_db_workers(
+    sessions, limited
+):
+    if limited:
+        with sessions() as session:
+            session.execute(
+                text(
+                    "INSERT INTO user_token_quotas (user_id,monthly_token_limit) SELECT generate_series(43,53),50"
+                )
+            )
+            session.commit()
+    started = set()
+    all_entered = asyncio.Event()
+
+    async def generate(prompt):
+        started.add(prompt)
+        if len(started) == 12:
+            all_entered.set()
+        await asyncio.wait_for(all_entered.wait(), 1)
+        return success()
+
+    await asyncio.wait_for(
+        asyncio.gather(
+            *(
+                client(sessions, generate, 42 + i if limited else 99).generate(str(i))
+                for i in range(12)
+            )
+        ),
+        3,
+    )
+    assert len(started) == 12
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("sessions", [1], indirect=True)
+async def test_playground_releases_read_session_before_generation(
+    sessions, monkeypatch
+):
+    from src.models.LLMModel import LLMModel
+    from src.routers.admin import playground
+    from src.schemas.admin.playground import PlaygroundChatRequest
+
+    LLMModel.__table__.create(sessions.engine)
+    with sessions() as session:
+        session.add(LLMModel(id=1, provider="test", model_name="test-model"))
+        session.commit()
+    calls = []
+
+    async def generate(_prompt, **_kwargs):
+        calls.append("provider")
+        return success()
+
+    backend = SimpleNamespace(
+        backend="test",
+        _backend=SimpleNamespace(config={"model": "test-model"}),
+        generate=generate,
+    )
+    monkeypatch.setattr(playground, "LLMClient", lambda *_args: backend)
+    with sessions() as session:
+        result = await asyncio.wait_for(
+            playground.playground_chat.__wrapped__(
+                body=PlaygroundChatRequest(model_id=1, message="hello"),
+                admin=SimpleNamespace(id=42),
+                db=session,
+                database=SimpleNamespace(
+                    get_session=sessions, get_quota_session=sessions
+                ),
+                settings=None,
+            ),
+            2,
+        )
+    assert calls == ["provider"]
+    assert result["data"]["model_used"] == "test/test-model"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("sessions", [1], indirect=True)
+@pytest.mark.parametrize("save", [False, True])
+async def test_playground_insight_keeps_profile_and_optional_save_after_read_close(
+    sessions, monkeypatch, save
+):
+    from sqlalchemy import ARRAY, Enum
+    from sqlalchemy.schema import CreateTable
+    from src.models.BasicInfo import BasicInfo
+    from src.models.LLMModel import LLMModel
+    from src.models.Practice import Practice
+    from src.models.PracticeCheckIn import PracticeCheckIn
+    from src.models.User import User
+    from src.routers.admin import playground
+    from src.schemas.admin.playground import PlaygroundInsightRequest
+
+    # Use the actual ORM column definitions; foreign keys to unrelated product
+    # tables are omitted only inside this disposable minimal schema.
+    with sessions.engine.begin() as connection:
+        for table in [
+            LLMModel.__table__,
+            BasicInfo.__table__,
+            User.__table__,
+            Practice.__table__,
+            PracticeCheckIn.__table__,
+        ]:
+            for column in table.columns:
+                column_type = (
+                    column.type.item_type
+                    if isinstance(column.type, ARRAY)
+                    else column.type
+                )
+                if isinstance(column_type, Enum):
+                    column_type.create(connection, checkfirst=True)
+            connection.execute(CreateTable(table, include_foreign_key_constraints=[]))
+    with sessions.engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+            CREATE TABLE user_preferences (user_id integer, preference_option_id integer, is_selected boolean);
+            CREATE TABLE preference_options (id integer, preference_type_id integer, name text, display_order integer);
+            CREATE TABLE preference_types (id integer, name text, display_order integer);
+        """
+            )
+        )
+    with sessions() as session:
+        session.execute(
+            LLMModel.__table__.insert().values(
+                id=1, provider="test", model_name="test-model"
+            )
+        )
+        session.execute(
+            BasicInfo.__table__.insert().values(
+                id=1, self_introduction="  QA profile  "
+            )
+        )
+        session.execute(
+            User.__table__.insert().values(
+                id=42,
+                mongo_id="qa42",
+                role_id=1,
+                nickname="QA",
+                basic_info_id=1,
+                tag_list=["reading"],
+            )
+        )
+        session.execute(
+            Practice.__table__.insert().values(
+                id=10, user_id=42, title="QA reading", insight="old insight"
+            )
+        )
+        session.commit()
+
+    async def generate(prompt, **_kwargs):
+        assert "QA profile" in prompt
+        return (
+            "<think>reason</think>New insight",
+            0.002,
+            {"input_tokens": 30, "output_tokens": 20},
+            "test",
+        )
+
+    backend = SimpleNamespace(
+        backend="test",
+        _backend=SimpleNamespace(config={"model": "test-model"}),
+        generate=generate,
+    )
+    monkeypatch.setattr(playground, "LLMClient", lambda *_args: backend)
+    with sessions() as session:
+        result = await asyncio.wait_for(
+            playground.playground_insight.__wrapped__(
+                body=PlaygroundInsightRequest(
+                    model_id=1,
+                    practice_id=10,
+                    save=save,
+                    system_prompt_override="Test prompt",
+                ),
+                admin=SimpleNamespace(id=42),
+                db=session,
+                database=SimpleNamespace(
+                    get_session=sessions, get_quota_session=sessions
+                ),
+                settings=None,
+            ),
+            2,
+        )
+    data = result["data"]
+    assert data["insight"] == "New insight"
+    assert data["thinking"] == "reason"
+    assert data["model_used"] == "test/test-model"
+    assert data["user_profile_used"]["self_introduction"] == "QA profile"
+    assert data["user_profile_used"]["tag_list"] == ["reading"]
+    assert data["saved"] is save
+    with sessions() as session:
+        assert session.get(Practice, 10).insight == (
+            "New insight" if save else "old insight"
+        )
+
+
+@pytest.mark.asyncio
+async def test_malformed_provider_output_still_releases_admission_guard(sessions):
+    opened = []
+
+    @contextmanager
+    def tracked_sessions():
+        with sessions() as session:
+            opened.append(session)
+            yield session
+
+    async def generate(prompt):
+        if prompt == "malformed":
+            return None, 0.002, {"input_tokens": 30, "output_tokens": 20}, "test"
+        return success()
+
+    try:
+        with pytest.raises(TypeError) as failure:
+            await client(tracked_sessions, generate).generate("malformed")
+        # Error reporting can retain the traceback and its guard; cleanup must
+        # be explicit rather than depend on generator garbage collection.
+        assert failure.type is TypeError
+        assert (
+            await asyncio.wait_for(
+                client(tracked_sessions, generate).generate("next"), 1
+            )
+            == success()
+        )
+    finally:
+        # Keep the RED baseline safe: its leaked guard must not leave a lock or
+        # connection behind and block random-schema cleanup after test failure.
+        for session in opened:
+            session.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("sessions", [2], indirect=True)
+async def test_encouragement_identity_lookup_keeps_loop_live_when_pool_is_full(
+    sessions,
+    main_sessions,
+):
+    import inspect
+    from src.routers.encouragement import generate_encouragement
+    from src.schemas.encouragement import GenerateEncouragementRequest
+
+    with sessions() as session:
+        session.execute(
+            text(
+                "CREATE TABLE users (id integer PRIMARY KEY,mongo_id text,external_id text); INSERT INTO users VALUES (99,'qa99','external99'); INSERT INTO user_token_quotas (user_id,monthly_token_limit) VALUES (43,50)"
+            )
+        )
+        session.commit()
+    both_started = asyncio.Event()
+    release = asyncio.Event()
+    heartbeat = asyncio.Event()
+    owners_started = []
+
+    async def generate(prompt):
+        if prompt.startswith("owner"):
+            owners_started.append(prompt)
+            if len(owners_started) == 2:
+                both_started.set()
+            await release.wait()
+        return success()
+
+    owners = [
+        asyncio.create_task(
+            client(main_sessions.database.get_quota_session, generate, u).generate(
+                f"owner-{u}"
+            )
+        )
+        for u in [42, 43]
+    ]
+    await asyncio.wait_for(both_started.wait(), 2)
+
+    async def release_on_loop():
+        await asyncio.sleep(0.05)
+        with main_sessions.database.get_session() as db:
+            assert db.scalar(text("SELECT 1")) == 1
+        assert main_sessions.database.engine is not main_sessions.database.quota_engine
+        heartbeat.set()
+        release.set()
+
+    beat = asyncio.create_task(release_on_loop())
+    backend = SimpleNamespace(
+        backend="test",
+        _backend=SimpleNamespace(config={"model": "test"}),
+        generate=generate,
+    )
+    try:
+        response = await asyncio.wait_for(
+            inspect.unwrap(generate_encouragement)(
+                request=None,
+                current_user="99",
+                req=GenerateEncouragementRequest(practiceTitle="reading"),
+                llm_client=backend,
+                database=main_sessions.database,
+            ),
+            2,
+        )
+        assert response.draft == "generated"
+        await asyncio.wait_for(beat, 1)
+        assert heartbeat.is_set()
+    finally:
+        release.set()
+        await asyncio.gather(*owners, beat, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("sessions", [2], indirect=True)
+async def test_scheduler_provider_bypasses_saturated_admission_executor(
+    sessions, main_sessions
+):
+    with sessions() as session:
+        session.execute(
+            text(
+                "INSERT INTO user_token_quotas (user_id,monthly_token_limit) VALUES (43,50)"
+            )
+        )
+        session.commit()
+    release = asyncio.Event()
+    owners_ready = asyncio.Event()
+    scheduler_started = asyncio.Event()
+    started = []
+
+    async def generate(prompt):
+        if prompt.startswith("owner"):
+            started.append(prompt)
+            if len(started) == 2:
+                owners_ready.set()
+            await release.wait()
+        elif prompt == "scheduler":
+            scheduler_started.set()
+        return success()
+
+    entered = threading.Event()
+    count_lock = threading.Lock()
+    checkout_count = 0
+
+    blocking_engine = create_engine(
+        sessions.engine.url,
+        connect_args={"options": f"-csearch_path={sessions.schema} -ctimezone=UTC"},
+        pool_size=8,
+        max_overflow=0,
+        pool_timeout=1,
+    )
+
+    @contextmanager
+    def blocked_sessions():
+        nonlocal checkout_count
+        with Session(blocking_engine) as session:
+            with count_lock:
+                checkout_count += 1
+                initial_lookup = checkout_count <= 8
+                if checkout_count >= 8:
+                    entered.set()
+            if initial_lookup:
+                session.execute(text("SELECT pg_sleep(1)"))
+            yield session
+
+    owners = [
+        asyncio.create_task(
+            client(main_sessions.database.get_quota_session, generate, u).generate(
+                f"owner-{u}"
+            )
+        )
+        for u in [42, 43]
+    ]
+    await asyncio.wait_for(owners_ready.wait(), 2)
+    blocked = [
+        asyncio.create_task(
+            client(blocked_sessions, generate, 99).generate(f"blocked-{i}")
+        )
+        for i in range(8)
+    ]
+    assert await asyncio.to_thread(entered.wait, 2)
+    backend = SimpleNamespace(
+        backend="test",
+        _backend=SimpleNamespace(config={"model": "test"}),
+        generate=generate,
+    )
+    scheduler = asyncio.create_task(
+        LoggingLLMClient(backend, main_sessions, user_id=None).generate("scheduler")
+    )
+    try:
+        await asyncio.wait_for(scheduler_started.wait(), 0.5)
+        await asyncio.wait_for(scheduler, 0.5)
+        assert not release.is_set()
+        assert all(not task.done() for task in blocked)
+    finally:
+        release.set()
+        await asyncio.gather(*owners, *blocked, scheduler, return_exceptions=True)
+        blocking_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_usage_attribution_uses_database_clock_despite_application_clock_skew(
+    sessions, monkeypatch
+):
+    from datetime import datetime, timezone
+    from src.services.llm import logging_client as logging_module
+
+    class SkewedClock:
+        @staticmethod
+        def now(_timezone):
+            return datetime(1970, 1, 1, tzinfo=timezone.utc)
+
+    monkeypatch.setattr(logging_module, "datetime", SkewedClock, raising=False)
+
+    async def generate(_prompt):
+        return success()
+
+    await client(sessions, generate).generate("clock")
+    with pytest.raises(QuotaExceededError):
+        await client(sessions, generate).generate("must be rejected in current month")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("sessions", [2], indirect=True)
+@pytest.mark.parametrize("waiter_count", [0, 8])
+async def test_no_quota_user_progresses_and_logs_while_guard_pool_is_saturated(
+    sessions, main_sessions, waiter_count
+):
+    import inspect
+    from src.routers.encouragement import generate_encouragement
+    from src.schemas.encouragement import GenerateEncouragementRequest
+
+    database = main_sessions.database
+    with database.get_session() as db:
+        db.execute(
+            text(
+                "CREATE TABLE users (id integer PRIMARY KEY,mongo_id text,external_id text); INSERT INTO users VALUES (42,'qa42','external42'),(99,'qa99','external99'); INSERT INTO user_token_quotas (user_id,monthly_token_limit) VALUES (43,50)"
+            )
+        )
+        db.commit()
+    ready = asyncio.Event()
+    release = asyncio.Event()
+    owners_started = []
+    unlimited_started = asyncio.Event()
+
+    async def owner_provider(prompt):
+        owners_started.append(prompt)
+        if len(owners_started) == 2:
+            ready.set()
+        await release.wait()
+        return success()
+
+    async def unlimited_provider(_prompt):
+        unlimited_started.set()
+        return success()
+
+    async def waiter_provider(_prompt):
+        pytest.fail(
+            "configured waiter must not call provider while owner holds admission"
+        )
+
+    def backend(generate):
+        return SimpleNamespace(
+            backend="test",
+            _backend=SimpleNamespace(config={"model": "test"}),
+            generate=generate,
+        )
+
+    async def route(identity, generate):
+        return await inspect.unwrap(generate_encouragement)(
+            request=None,
+            current_user=identity,
+            req=GenerateEncouragementRequest(practiceTitle="reading"),
+            llm_client=backend(generate),
+            database=database,
+        )
+
+    owners = [
+        asyncio.create_task(
+            client(database.get_quota_session, owner_provider, u).generate(str(u))
+        )
+        for u in [42, 43]
+    ]
+    await asyncio.wait_for(ready.wait(), 2)
+    waiters = [
+        asyncio.create_task(route("42", waiter_provider)) for _ in range(waiter_count)
+    ]
+    await asyncio.sleep(0.1)
+    try:
+        result = await asyncio.wait_for(route("99", unlimited_provider), 1)
+        assert result.draft == "generated"
+        assert unlimited_started.is_set()
+        assert all(not task.done() for task in owners)
+        assert all(not task.done() for task in waiters)
+        with database.get_session() as db:
+            log = db.scalars(select(AIQueryLog).where(AIQueryLog.user_id == 99)).one()
+            assert (log.status, log.total_tokens, log.context) == (
+                "success",
+                50,
+                "encouragement",
+            )
+    finally:
+        for task in waiters:
+            task.cancel()
+        await asyncio.gather(*waiters, return_exceptions=True)
+        release.set()
+        await asyncio.gather(*owners, return_exceptions=True)

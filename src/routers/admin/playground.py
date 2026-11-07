@@ -3,6 +3,8 @@ import time
 
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import select, update
+from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from src.dependencies import AdminDep, DatabaseDep, SessionDep, SettingsDep
 from src.models.LLMModel import LLMModel
@@ -39,6 +41,157 @@ def _split_thinking(output: str) -> tuple[str, str]:
 router = APIRouter()
 
 
+def _prepare_chat(
+    body: PlaygroundChatRequest, admin: User, db: Session
+) -> tuple[str, str, str, str]:
+    try:
+        # 1. 查詢 LLM 模型
+        model = db.query(LLMModel).filter(LLMModel.id == body.model_id).first()
+        if model is None:
+            raise HTTPException(
+                status_code=404, detail=f"LLM model {body.model_id} not found"
+            )
+
+        # 2. 組合 prompt
+        try:
+            safe_message = GuardrailLayer.sanitize_user_input(body.message)
+        except GuardrailViolationError as exc:
+            raise HTTPException(
+                status_code=400, detail=f"訊息內容違反安全規則：{exc}"
+            ) from exc
+
+        system_content = ""
+        if body.system_prompt_id is not None:
+            sp = (
+                db.query(SystemPrompt)
+                .filter(SystemPrompt.id == body.system_prompt_id)
+                .first()
+            )
+            if sp:
+                system_content = sp.content
+
+        full_prompt = (
+            f"{system_content}\n\n---\n{safe_message}"
+            if system_content
+            else safe_message
+        )
+
+        return full_prompt, model.provider, model.model_name, str(admin.id)
+    finally:
+        db.close()
+
+
+def _prepare_insight(
+    body: PlaygroundInsightRequest, admin: User, db: Session
+) -> tuple[str, str, str, str, int, dict, dict]:
+    try:
+        # 1. 查模型
+        model = db.query(LLMModel).filter(LLMModel.id == body.model_id).first()
+        if model is None:
+            raise HTTPException(
+                status_code=404, detail=f"LLM model {body.model_id} not found"
+            )
+
+        # 2. 查 practice
+        practice = (
+            db.query(Practice)
+            .filter(
+                Practice.id == body.practice_id,
+                Practice.deleted_at.is_(None),
+            )
+            .first()
+        )
+        if practice is None:
+            raise HTTPException(
+                status_code=404, detail=f"Practice {body.practice_id} not found"
+            )
+
+        # 3. 查 user
+        user = db.query(User).filter(User.id == practice.user_id).first()
+
+        # 4. 取打卡記錄
+        checkins = get_checkins_for_practice(db, practice.id)
+
+        # 5. 計算統計
+        stats = _analyze_checkins(checkins)
+
+        # 6. 解析 system prompt override（system_prompt_id 優先於 system_prompt_override）
+        system_prompt_override = body.system_prompt_override
+        if body.system_prompt_id is not None:
+            sp = (
+                db.query(SystemPrompt)
+                .filter(SystemPrompt.id == body.system_prompt_id)
+                .first()
+            )
+            if sp is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"SystemPrompt {body.system_prompt_id} not found",
+                )
+            system_prompt_override = sp.content
+
+        # 7. 組 prompt
+        prompt = _build_prompt(
+            practice=practice,
+            checkins=checkins,
+            db=db,
+            user=user,
+            include_user_profile=body.include_user_profile,
+            include_practice_info=body.include_practice_info,
+            include_checkin_stats=body.include_checkin_stats,
+            include_notable_notes=body.include_notable_notes,
+            system_prompt_override=system_prompt_override,
+        )
+
+        # 10. 組 user_profile_used
+        user_profile_used = {}
+        if user:
+            for field in (
+                "nickname",
+                "personal_slogan",
+                "professional_field",
+                "custom_position",
+                "education_stage",
+            ):
+                val = getattr(user, field, None)
+                if val is not None:
+                    user_profile_used[field] = val
+            if user.tag_list:
+                user_profile_used["tag_list"] = user.tag_list
+            if user.birth_date:
+                from datetime import date as _date
+
+                age = (_date.today() - user.birth_date).days // 365
+                bracket = (age // 5) * 5
+                user_profile_used["age_range"] = f"{bracket}-{bracket + 4} 歲"
+            if user.basic_info and user.basic_info.self_introduction:
+                user_profile_used["self_introduction"] = (
+                    user.basic_info.self_introduction.strip()
+                )
+
+        return (
+            prompt,
+            model.provider,
+            model.model_name,
+            str(admin.id),
+            practice.id,
+            {
+                key: stats[key]
+                for key in ("total", "max_streak", "top_weekdays", "mood_summary")
+            },
+            user_profile_used,
+        )
+    finally:
+        db.close()
+
+
+def _save_generated_insight(db: Session, practice_id: int, clean_output: str) -> None:
+    db.execute(
+        update(Practice).where(Practice.id == practice_id).values(insight=clean_output)
+    )
+    db.commit()
+
+
 @router.post("/playground/chat")
 @api_response_decorator
 async def playground_chat(
@@ -52,44 +205,20 @@ async def playground_chat(
     Playground：使用指定 LLM 模型與 system prompt 進行單次對話。
     每次呼叫都記錄到 ai_query_logs（context='playground'）。
     """
-    # 1. 查詢 LLM 模型
-    model = db.query(LLMModel).filter(LLMModel.id == body.model_id).first()
-    if model is None:
-        raise HTTPException(
-            status_code=404, detail=f"LLM model {body.model_id} not found"
-        )
-
-    # 2. 組合 prompt
-    try:
-        safe_message = GuardrailLayer.sanitize_user_input(body.message)
-    except GuardrailViolationError as exc:
-        raise HTTPException(
-            status_code=400, detail=f"訊息內容違反安全規則：{exc}"
-        ) from exc
-
-    system_content = ""
-    if body.system_prompt_id is not None:
-        sp = (
-            db.query(SystemPrompt)
-            .filter(SystemPrompt.id == body.system_prompt_id)
-            .first()
-        )
-        if sp:
-            system_content = sp.content
-
-    full_prompt = (
-        f"{system_content}\n\n---\n{safe_message}" if system_content else safe_message
+    full_prompt, provider, model_name, user_id = await run_in_threadpool(
+        _prepare_chat, body, admin, db
     )
-
-    # 3. 建立 LLM client（使用 model.provider 對應的 backend，覆寫 model_name）
-    llm_client = LLMClient(settings, model.provider)
-    llm_client._backend.config["model"] = model.model_name
+    # SDK clients are constructed and used on the original request event loop.
+    llm_client = LLMClient(settings, provider)
+    llm_client._backend.config["model"] = model_name
     logging_client = LoggingLLMClient(
         llm_client=llm_client,
         db_session_factory=database.get_session,
+        quota_session_factory=database.get_quota_session,
         context="playground",
-        user_id=str(admin.id),
+        user_id=user_id,
     )
+    model_used = f"{provider}/{model_name}"
 
     # 4. 呼叫 LLM（quota 超限時拋 QuotaExceededError）
     start_ms = time.monotonic()
@@ -120,7 +249,7 @@ async def playground_chat(
     return {
         "data": {
             "response": output,
-            "model_used": f"{model.provider}/{model.model_name}",
+            "model_used": model_used,
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
             "cost_usd": cost,
@@ -194,73 +323,19 @@ async def playground_insight(
     settings: SettingsDep,
 ) -> dict:
     """Playground：使用指定模型與設定生成 insight，可選擇是否儲存。"""
-    # 1. 查模型
-    model = db.query(LLMModel).filter(LLMModel.id == body.model_id).first()
-    if model is None:
-        raise HTTPException(
-            status_code=404, detail=f"LLM model {body.model_id} not found"
-        )
-
-    # 2. 查 practice
-    practice = (
-        db.query(Practice)
-        .filter(
-            Practice.id == body.practice_id,
-            Practice.deleted_at.is_(None),
-        )
-        .first()
+    (prompt, provider, model_name, user_id, practice_id, stats, user_profile_used) = (
+        await run_in_threadpool(_prepare_insight, body, admin, db)
     )
-    if practice is None:
-        raise HTTPException(
-            status_code=404, detail=f"Practice {body.practice_id} not found"
-        )
-
-    # 3. 查 user
-    user = db.query(User).filter(User.id == practice.user_id).first()
-
-    # 4. 取打卡記錄
-    checkins = get_checkins_for_practice(db, practice.id)
-
-    # 5. 計算統計
-    stats = _analyze_checkins(checkins)
-
-    # 6. 解析 system prompt override（system_prompt_id 優先於 system_prompt_override）
-    system_prompt_override = body.system_prompt_override
-    if body.system_prompt_id is not None:
-        sp = (
-            db.query(SystemPrompt)
-            .filter(SystemPrompt.id == body.system_prompt_id)
-            .first()
-        )
-        if sp is None:
-            raise HTTPException(
-                status_code=404,
-                detail=f"SystemPrompt {body.system_prompt_id} not found",
-            )
-        system_prompt_override = sp.content
-
-    # 7. 組 prompt
-    prompt = _build_prompt(
-        practice=practice,
-        checkins=checkins,
-        db=db,
-        user=user,
-        include_user_profile=body.include_user_profile,
-        include_practice_info=body.include_practice_info,
-        include_checkin_stats=body.include_checkin_stats,
-        include_notable_notes=body.include_notable_notes,
-        system_prompt_override=system_prompt_override,
-    )
-
-    # 8. 建立 LLM client（覆寫 model 為 DB 紀錄的 model_name）
-    llm_client = LLMClient(settings, model.provider)
-    llm_client._backend.config["model"] = model.model_name
+    llm_client = LLMClient(settings, provider)
+    llm_client._backend.config["model"] = model_name
     logging_client = LoggingLLMClient(
         llm_client=llm_client,
         db_session_factory=database.get_session,
+        quota_session_factory=database.get_quota_session,
         context="playground_insight",
-        user_id=str(admin.id),
+        user_id=user_id,
     )
+    model_used = f"{provider}/{model_name}"
 
     # 8. 呼叫 LLM
     start_ms = time.monotonic()
@@ -291,39 +366,8 @@ async def playground_insight(
     # 9. 可選儲存（只存不含 <think> 的內容）
     saved = False
     if body.save:
-        db.execute(
-            update(Practice)
-            .where(Practice.id == practice.id)
-            .values(insight=clean_output)
-        )
-        db.commit()
+        await run_in_threadpool(_save_generated_insight, db, practice_id, clean_output)
         saved = True
-
-    # 10. 組 user_profile_used
-    user_profile_used = {}
-    if user:
-        for field in (
-            "nickname",
-            "personal_slogan",
-            "professional_field",
-            "custom_position",
-            "education_stage",
-        ):
-            val = getattr(user, field, None)
-            if val is not None:
-                user_profile_used[field] = val
-        if user.tag_list:
-            user_profile_used["tag_list"] = user.tag_list
-        if user.birth_date:
-            from datetime import date as _date
-
-            age = (_date.today() - user.birth_date).days // 365
-            bracket = (age // 5) * 5
-            user_profile_used["age_range"] = f"{bracket}-{bracket + 4} 歲"
-        if user.basic_info and user.basic_info.self_introduction:
-            user_profile_used["self_introduction"] = (
-                user.basic_info.self_introduction.strip()
-            )
 
     return {
         "data": {
@@ -337,7 +381,7 @@ async def playground_insight(
                 "mood_summary": stats["mood_summary"],
             },
             "user_profile_used": user_profile_used,
-            "model_used": f"{model.provider}/{model.model_name}",
+            "model_used": model_used,
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
             "cost_usd": cost,
