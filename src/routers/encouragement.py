@@ -6,6 +6,7 @@ from src.dependencies import DatabaseDep, LLMDep, UserDep
 from src.logger import AppLogger
 from src.middleware.limiter import limiter
 from src.models.User import User
+from src.services.llm.guardrail import GuardrailLayer, GuardrailViolationError
 from src.services.llm.logging_client import LoggingLLMClient
 from src.services.quota_service import QuotaExceededError
 from src.schemas.encouragement import (
@@ -19,11 +20,22 @@ router = APIRouter(prefix="/v1/encouragement", tags=["encouragement"])
 
 
 def _build_prompt(req: GenerateEncouragementRequest) -> str:
-    nickname = req.learnerNickname or "這位學員"
+    title = GuardrailLayer.sanitize_user_input(req.practiceTitle)
+    mood = (
+        GuardrailLayer.sanitize_user_input(req.mood) if req.mood is not None else None
+    )
+    note = (
+        GuardrailLayer.sanitize_user_input(req.note) if req.note is not None else None
+    )
+    nickname = (
+        GuardrailLayer.sanitize_user_input(req.learnerNickname)
+        if req.learnerNickname is not None
+        else None
+    ) or "這位學員"
 
-    mood_line = f"- 目前心情：{req.mood}" if req.mood else "- 目前心情：未填寫"
-    if req.note:
-        note_line = f"- 打卡心得：{req.note}"
+    mood_line = f"- 目前心情：{mood}" if mood else "- 目前心情：未填寫"
+    if note:
+        note_line = f"- 打卡心得：{note}"
     else:
         note_line = "- 打卡心得：未填寫（請把焦點放在練習本身）"
 
@@ -31,7 +43,7 @@ def _build_prompt(req: GenerateEncouragementRequest) -> str:
 
 學員資訊：
 - 暱稱：{nickname}
-- 正在進行的練習：{req.practiceTitle}
+- 正在進行的練習：{title}
 {mood_line}
 {note_line}
 
@@ -82,6 +94,11 @@ async def generate_encouragement(
     if user_id is None:
         raise HTTPException(status_code=401, detail="未通過身份驗證")
 
+    try:
+        prompt = _build_prompt(req)
+    except GuardrailViolationError:
+        raise HTTPException(status_code=400, detail="輸入內容違反安全規則") from None
+
     logging_client = LoggingLLMClient(
         llm_client=llm_client,
         db_session_factory=database.get_session,
@@ -89,7 +106,6 @@ async def generate_encouragement(
         context="encouragement",
         user_id=str(user_id),
     )
-    prompt = _build_prompt(req)
     try:
         output, _cost, _usage, _backend_name = await logging_client.generate(prompt)
     except QuotaExceededError as exc:
