@@ -116,3 +116,8 @@ def test_default_expiration_remains_600_seconds(cache, redis_client):
     redis_client.set("one", "1")
     cache.expire("one")
     assert 599 <= redis_client.ttl("one") <= 600
+
+
+def test_deeply_nested_json_is_cache_miss(cache, redis_client):
+    redis_client.set("deeply-nested", b"[" * 10000 + b"0" + b"]" * 10000)
+    assert cache.read_dict("deeply-nested") is None

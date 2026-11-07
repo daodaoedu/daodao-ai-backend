@@ -37,7 +37,7 @@ class CacheClient:
             return None
         try:
             value = json.loads(data)
-        except (ValueError, UnicodeDecodeError):
+        except (ValueError, UnicodeDecodeError, RecursionError):
             logger.warning("Invalid dictionary cache payload; treating as cache miss")
             return None
         if not isinstance(value, dict):
