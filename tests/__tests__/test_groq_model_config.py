@@ -3,7 +3,23 @@
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+from pydantic_settings import BaseSettings
+
+from src import config
 from src.config import Settings
+
+
+@pytest.fixture(autouse=True)
+def isolate_implicit_dotenv(monkeypatch):
+    """Nested settings otherwise read checkout dotenv despite the outer override."""
+    for model in vars(config).values():
+        if (
+            isinstance(model, type)
+            and issubclass(model, BaseSettings)
+            and model.__module__ == config.__name__
+        ):
+            monkeypatch.setitem(model.model_config, "env_file", None)
 
 
 def test_groq_default_uses_available_chat_model():
