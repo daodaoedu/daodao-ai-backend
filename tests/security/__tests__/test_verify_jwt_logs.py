@@ -37,9 +37,11 @@ runpy.run_module("src.verify_jwt", run_name="__main__")
 
 
 @pytest.fixture
-def captured_verifier_logs(monkeypatch: pytest.MonkeyPatch) -> Iterator[io.StringIO]:
+def captured_verifier_logs(
+    monkeypatch: pytest.MonkeyPatch, isolated_settings_env: Path
+) -> Iterator[io.StringIO]:
     """Capture the real non-propagating logger, including DEBUG-level records."""
-    monkeypatch.setattr(verify_jwt, "JWT_SECURITY", SECRET)
+    monkeypatch.setenv("JWT_SECURITY", SECRET)
     stream = io.StringIO()
     handler = logging.StreamHandler(stream)
     logger = verify_jwt.logger
@@ -109,11 +111,18 @@ def test_cli_does_not_echo_token_or_payload(
     kind: str, all_levels: bool, tmp_path: Path
 ) -> None:
     token, _ = signed_fixture(kind)
+    sandbox_source = tmp_path / "src"
+    sandbox_source.mkdir()
+    for filename in ("verify_jwt.py", "config.py", "logger.py"):
+        source_bytes = (ROOT / "src" / filename).read_bytes()
+        (sandbox_source / filename).write_bytes(source_bytes)
+        assert (sandbox_source / filename).read_bytes() == source_bytes
     environment = {
         "PATH": os.environ.get("PATH", ""),
-        "PYTHONPATH": str(ROOT),
+        "PYTHONPATH": str(tmp_path),
         "PYTHONDONTWRITEBYTECODE": "1",
         "JWT_SECURITY": SECRET,
+        "ENVIRONMENT": "development",
         "MY_TOKEN_ID": token,
     }
 
