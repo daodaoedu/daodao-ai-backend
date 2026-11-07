@@ -231,13 +231,16 @@ class Settings(BaseConfigSettings):
     @model_validator(mode="after")
     def _validate_secrets(self) -> "Settings":
         if self.environment in ("production", "staging"):
-            if self.jwt_security == "xxxxxxxxxxxxxxxx":
+            if not self.jwt_security.strip() or self.jwt_security == "xxxxxxxxxxxxxxxx":
                 raise ValueError(
-                    "JWT_SECURITY must be configured (currently using placeholder)"
+                    "JWT_SECURITY must be configured (empty or using placeholder)"
                 )
-            if self.api_secret_key == "xxxxxxxxxxxxxxxx":
+            if (
+                not self.api_secret_key.strip()
+                or self.api_secret_key == "xxxxxxxxxxxxxxxx"
+            ):
                 raise ValueError(
-                    "API_SECRET_KEY must be configured (currently using placeholder)"
+                    "API_SECRET_KEY must be configured (empty or using placeholder)"
                 )
         return self
 
