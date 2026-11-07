@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Request
 from sqlalchemy import String, select
+from starlette.concurrency import run_in_threadpool
 
 from src.dependencies import DatabaseDep, LLMDep, UserDep
 from src.logger import AppLogger
@@ -42,19 +43,7 @@ def _build_prompt(req: GenerateEncouragementRequest) -> str:
 - 只輸出鼓勵訊息本身，不要加任何前後綴、標題、引號或說明。"""
 
 
-@router.post("/generate", response_model=GenerateEncouragementResponse)
-@limiter.limit("10/minute")
-async def generate_encouragement(
-    request: Request,
-    current_user: UserDep,
-    req: GenerateEncouragementRequest,
-    llm_client: LLMDep,
-    database: DatabaseDep,
-):
-    """依打卡內容生成一段個人化鼓勵訊息（繁體中文）。"""
-    if current_user is None:
-        raise HTTPException(status_code=401, detail="未通過身份驗證")
-
+def _resolve_user_id(current_user: str, database: DatabaseDep) -> int | None:
     # JWT identities may be PostgreSQL ids or legacy Mongo/external ids.
     # Quotas and query logs always use the canonical PostgreSQL users.id.
     with database.get_session() as db:
@@ -73,12 +62,30 @@ async def generate_encouragement(
             user_id = db.scalar(
                 select(User.id).where(User.external_id.cast(String) == current_user)
             )
+    return user_id
+
+
+@router.post("/generate", response_model=GenerateEncouragementResponse)
+@limiter.limit("10/minute")
+async def generate_encouragement(
+    request: Request,
+    current_user: UserDep,
+    req: GenerateEncouragementRequest,
+    llm_client: LLMDep,
+    database: DatabaseDep,
+):
+    """依打卡內容生成一段個人化鼓勵訊息（繁體中文）。"""
+    if current_user is None:
+        raise HTTPException(status_code=401, detail="未通過身份驗證")
+
+    user_id = await run_in_threadpool(_resolve_user_id, current_user, database)
     if user_id is None:
         raise HTTPException(status_code=401, detail="未通過身份驗證")
 
     logging_client = LoggingLLMClient(
         llm_client=llm_client,
         db_session_factory=database.get_session,
+        quota_session_factory=database.get_quota_session,
         context="encouragement",
         user_id=str(user_id),
     )

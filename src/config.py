@@ -84,6 +84,11 @@ class PostgreSQLSettings(BaseSettings):
     echo_sql: bool = Field(default=False, description="Enable SQL query logging")
     pool_size: int = Field(default=20, description="Database connection pool size")
     max_overflow: int = Field(default=0, description="Maximum pool overflow")
+    quota_pool_size: int = Field(
+        default=2,
+        ge=1,
+        description="Isolated generation quota connections per process (no overflow)",
+    )
 
     # 啟動時等 DB 起來（daodao#362）：主機重開機時 pg 容器在另一個 compose project，
     # 無法用 depends_on 等待，DB 晚幾秒起來就會讓整個 app 啟動失敗

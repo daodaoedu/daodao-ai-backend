@@ -53,10 +53,10 @@ jobs:
       - name: Run all unit tests
         run: make test
 
-      - name: Run real PostgreSQL feed permission regressions
+      - name: Run real PostgreSQL feed permission and quota regressions
         env:
           TEST_DATABASE_URL: postgresql+psycopg2://acl_test:acl_test@127.0.0.1:5432/daodao_acl_test
-        run: .venv/bin/python3.12 -m pytest integration_tests/__tests__/test_private_cohort_feed_postgres.py -v
+        run: .venv/bin/python3.12 -m pytest integration_tests/__tests__/test_private_cohort_feed_postgres.py integration_tests/__tests__/test_quota_concurrency_postgres.py -v
 
   format:
     name: Format & Lint

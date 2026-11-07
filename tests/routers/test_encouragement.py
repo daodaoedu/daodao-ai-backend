@@ -41,6 +41,7 @@ def _database():
 
     database = MagicMock()
     database.get_session = get_session
+    database.get_quota_session = get_session
     return database
 
 

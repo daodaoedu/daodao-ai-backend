@@ -38,7 +38,7 @@ def get_monthly_usage(db: Session, user_id: int) -> int:
             FROM ai_query_logs
             WHERE user_id = :user_id
               AND DATE_TRUNC('month', created_at AT TIME ZONE 'UTC')
-                  = DATE_TRUNC('month', NOW() AT TIME ZONE 'UTC')
+                  = DATE_TRUNC('month', statement_timestamp() AT TIME ZONE 'UTC')
             """
         ),
         {"user_id": user_id},
@@ -55,7 +55,7 @@ def get_daily_usage(db: Session, user_id: int) -> int:
             FROM ai_query_logs
             WHERE user_id = :user_id
               AND DATE_TRUNC('day', created_at AT TIME ZONE 'UTC')
-                  = DATE_TRUNC('day', NOW() AT TIME ZONE 'UTC')
+                  = DATE_TRUNC('day', statement_timestamp() AT TIME ZONE 'UTC')
             """
         ),
         {"user_id": user_id},

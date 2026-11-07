@@ -80,7 +80,7 @@ def harness(monkeypatch):
     app.dependency_overrides[get_current_user] = lambda: state.identity
     app.dependency_overrides[get_llm_client] = lambda: llm
     app.dependency_overrides[get_database_postgres] = lambda: SimpleNamespace(
-        get_session=session_factory
+        get_session=session_factory, get_quota_session=session_factory
     )
     # Avoid sharing the module-level IP limit across independent test scenarios.
     from src.middleware.limiter import limiter
