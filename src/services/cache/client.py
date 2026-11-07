@@ -1,5 +1,6 @@
-import pickle
+import json
 from datetime import timedelta
+from typing import Any, Optional
 
 import redis
 
@@ -25,34 +26,27 @@ class CacheClient:
         except redis.RedisError:
             return False
 
-    @staticmethod
-    def _get_r():
-        r = redis.from_url(CacheClient.settings.url)
-        return r
+    def write_dict(
+        self, key: str, value: dict[str, Any], expire: Optional[int] = None
+    ) -> None:
+        self.client.set(key, json.dumps(value), ex=expire or 600)
 
-    @classmethod
-    def write_dict(self, key, value, expire=None):
-        expire_in_seconds = expire or 600
-
-        r = self._get_r()
-        r.set(key, pickle.dumps(value), ex=expire_in_seconds)
-
-    @classmethod
-    def read_dict(self, key):
-        r = self._get_r()
-        data = r.get(key)
+    def read_dict(self, key: str) -> Optional[dict[str, Any]]:
+        data = self.client.get(key)
         if data is None:
             return None
-        return pickle.loads(data)
+        try:
+            value = json.loads(data)
+        except (ValueError, UnicodeDecodeError, RecursionError):
+            logger.warning("Invalid dictionary cache payload; treating as cache miss")
+            return None
+        if not isinstance(value, dict):
+            logger.warning("Non-dictionary cache payload; treating as cache miss")
+            return None
+        return value
 
-    @classmethod
-    def delete(self, *names):
-        r = self._get_r()
-        r.delete(*names)
+    def delete(self, *names: str) -> None:
+        self.client.delete(*names)
 
-    @classmethod
-    def expire(self, name, expire=None):
-        expire_in_seconds = expire or 600
-
-        r = self._get_r()
-        r.expire(name, expire_in_seconds)
+    def expire(self, name: str, expire: Optional[int] = None) -> None:
+        self.client.expire(name, expire or 600)
