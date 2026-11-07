@@ -14,7 +14,6 @@ JWT_EXPIRATION = os.getenv("JWT_EXPIRATION")
 def verify(token: str):
     try:
         payload = jwt.decode(token, JWT_SECURITY, algorithms=["HS256"])
-        logger.info(f"驗證成功，payload:{payload}")
         return payload
     except ExpiredSignatureError:
         logger.info("Token 已過期")
@@ -26,7 +25,5 @@ def verify(token: str):
 
 if __name__ == "__main__":
     test_token = os.getenv("MY_TOKEN_ID", "test")
-
-    logger.info(f"Testing token: {test_token}")
 
     verify(test_token)
