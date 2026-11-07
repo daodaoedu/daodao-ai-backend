@@ -45,6 +45,11 @@ jobs:
           python -m pip install uv==0.9.27
           uv sync --frozen --python 3.12
 
+      - name: Install Redis for cache regressions
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes redis-server
+
       - name: Run all unit tests
         run: make test
 
