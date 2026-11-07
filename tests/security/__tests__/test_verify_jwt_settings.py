@@ -11,30 +11,14 @@ from fastapi.security import HTTPAuthorizationCredentials
 from starlette.requests import Request
 
 from src import verify_jwt
-from src.config import (
-    BaseConfigSettings,
-    ClickHouseSettings,
-    PostgreSQLSettings,
-    get_settings,
-)
+from src.config import get_settings
 from src.dependencies import get_admin_user, get_current_user
 
 
 @pytest.fixture
-def configured_env_file(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("JWT_SECURITY", raising=False)
-    monkeypatch.delenv("API_SECRET_KEY", raising=False)
+def configured_env_file(isolated_settings_env, monkeypatch):
     monkeypatch.setenv("ENVIRONMENT", "staging")
-    env_file = tmp_path / ".env"
-    settings_classes = (
-        BaseConfigSettings,
-        *BaseConfigSettings.__subclasses__(),
-        PostgreSQLSettings,
-        ClickHouseSettings,
-    )
-    for settings_class in settings_classes:
-        monkeypatch.setitem(settings_class.model_config, "env_file", str(env_file))
+    env_file = isolated_settings_env
 
     def configure(secret):
         env_file.write_text(
@@ -46,10 +30,7 @@ def configured_env_file(tmp_path, monkeypatch):
 
     secret = secrets.token_urlsafe(32)
     configure(secret)
-    try:
-        yield secret, configure
-    finally:
-        get_settings.cache_clear()
+    return secret, configure
 
 
 def signed_token(secret, expired=False):
