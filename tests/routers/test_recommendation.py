@@ -49,8 +49,7 @@ class TestRankFeedValidation:
 
     def test_invalid_type_returns_error(self, client):
         """
-        @api_response_decorator catches HTTPException and returns 200 with success=False.
-        We verify the error is surfaced correctly in the response body.
+        HTTP errors preserve both the status code and the error envelope.
         """
         with patch(
             "src.routers.recommendation.get_recommendation_feed",
@@ -60,7 +59,7 @@ class TestRankFeedValidation:
             ),
         ):
             resp = client.get("/api/v1/recommendation/rank_feed?type=invalid")
-        assert resp.status_code == 200
+        assert resp.status_code == 400
         body = resp.json()
         assert body["success"] is False
         assert "idea" in body["error"]["message"]

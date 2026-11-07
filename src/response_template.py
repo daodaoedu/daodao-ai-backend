@@ -4,6 +4,7 @@ from functools import wraps
 from typing import Any, Callable, Coroutine, Dict
 
 from fastapi import HTTPException
+from starlette.responses import JSONResponse
 
 from src.schemas.api_response import (
     APIResponse,
@@ -16,7 +17,7 @@ def api_response_decorator(func: Callable[..., Coroutine[Any, Any, Any]]):
     """統一 API 回傳格式的裝飾器"""
 
     @wraps(func)
-    async def wrapper(*args, **kwargs) -> Dict:
+    async def wrapper(*args, **kwargs) -> Dict | JSONResponse:
         start_time = time.time()
 
         try:
@@ -55,10 +56,14 @@ def api_response_decorator(func: Callable[..., Coroutine[Any, Any, Any]]):
             )
 
         except HTTPException as e:
-            return build_error_response(
-                code="HTTP_ERROR",
-                message=e.detail,
-                details={"status_code": e.status_code},
+            return JSONResponse(
+                status_code=e.status_code,
+                headers=e.headers,
+                content=build_error_response(
+                    code="HTTP_ERROR",
+                    message=e.detail,
+                    details={"status_code": e.status_code},
+                ),
             )
         except Exception as e:
             return build_error_response(
