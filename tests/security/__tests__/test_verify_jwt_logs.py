@@ -39,7 +39,10 @@ runpy.run_module("src.verify_jwt", run_name="__main__")
 @pytest.fixture
 def captured_verifier_logs(monkeypatch: pytest.MonkeyPatch) -> Iterator[io.StringIO]:
     """Capture the real non-propagating logger, including DEBUG-level records."""
-    monkeypatch.setattr(verify_jwt, "JWT_SECURITY", SECRET)
+    monkeypatch.setenv("JWT_SECURITY", SECRET)
+    from src.config import get_settings
+
+    get_settings.cache_clear()
     stream = io.StringIO()
     handler = logging.StreamHandler(stream)
     logger = verify_jwt.logger
@@ -49,6 +52,7 @@ def captured_verifier_logs(monkeypatch: pytest.MonkeyPatch) -> Iterator[io.Strin
     try:
         yield stream
     finally:
+        get_settings.cache_clear()
         logger.removeHandler(handler)
         logger.setLevel(previous_level)
         handler.close()
