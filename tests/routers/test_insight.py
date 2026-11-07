@@ -84,7 +84,7 @@ class TestInsights:
 
     def test_401_without_auth(self, client_anon):
         resp = client_anon.get("/api/v1/users/insights")
-        assert resp.status_code == 200
+        assert resp.status_code == 401
         body = resp.json()
         assert body["success"] is False
         assert body["error"]["details"]["status_code"] == 401
