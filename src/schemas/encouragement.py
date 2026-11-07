@@ -1,13 +1,13 @@
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class GenerateEncouragementRequest(BaseModel):
-    mood: Optional[str] = None
-    note: Optional[str] = None
-    practiceTitle: str
-    learnerNickname: Optional[str] = None
+    mood: Optional[str] = Field(None, max_length=20)
+    note: Optional[str] = Field(None, max_length=600)
+    practiceTitle: str = Field(..., max_length=100)
+    learnerNickname: Optional[str] = Field(None, max_length=255)
 
 
 class GenerateEncouragementResponse(BaseModel):
