@@ -126,7 +126,7 @@ _LLM_BACKEND_DEFAULTS: Dict[str, Dict[str, str]] = {
     },
     "groq": {
         "url": "https://api.groq.com/openai/v1",
-        "model": "llama-3.3-70b-versatile",
+        "model": "openai/gpt-oss-20b",
     },
     "cloudflare": {
         "url": "https://api.cloudflare.com/client/v4/accounts/PLACEHOLDER/ai/v1",
