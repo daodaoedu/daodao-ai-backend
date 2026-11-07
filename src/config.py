@@ -15,6 +15,20 @@ _ENV = os.getenv("ENVIRONMENT", "development")
 _ENV_FILE = ".env.prod" if _ENV == "production" else ".env.dev"
 
 
+JWT_SECRET_PLACEHOLDERS = frozenset(
+    {
+        "xxxxxxxxxxxxxxxx",
+        "xxxxxxxxxxxxxxxxxxxxx.bbbbbbbbbbbbbb.ddd-cccccccccc-dddddddd",
+    }
+)
+API_SECRET_PLACEHOLDERS = frozenset({"xxxxxxxxxxxxxxxx", "supersecurekey"})
+
+
+def is_unconfigured_secret(secret: str, placeholders: frozenset[str]) -> bool:
+    normalized = secret.strip()
+    return not normalized or normalized in placeholders
+
+
 class BaseConfigSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=[_ENV_FILE, ".env", str(ENV_FILE_PATH)],
@@ -231,14 +245,11 @@ class Settings(BaseConfigSettings):
     @model_validator(mode="after")
     def _validate_secrets(self) -> "Settings":
         if self.environment in ("production", "staging"):
-            if not self.jwt_security.strip() or self.jwt_security == "xxxxxxxxxxxxxxxx":
+            if is_unconfigured_secret(self.jwt_security, JWT_SECRET_PLACEHOLDERS):
                 raise ValueError(
                     "JWT_SECURITY must be configured (empty or using placeholder)"
                 )
-            if (
-                not self.api_secret_key.strip()
-                or self.api_secret_key == "xxxxxxxxxxxxxxxx"
-            ):
+            if is_unconfigured_secret(self.api_secret_key, API_SECRET_PLACEHOLDERS):
                 raise ValueError(
                     "API_SECRET_KEY must be configured (empty or using placeholder)"
                 )
