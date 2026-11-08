@@ -108,6 +108,8 @@ jobs:
       - name: Deploy to Linode
         env:
           METRICS_SECRET: ${{ secrets.METRICS_SECRET }}
+          REDIS_PASSWORD_DEV: ${{ secrets.REDIS_PASSWORD_DEV }}
+          REDIS_PASSWORD_PROD: ${{ secrets.REDIS_PASSWORD_PROD }}
           LINODE_INSTANCE_IP: ${{ secrets.LINODE_INSTANCE_IP }}
           BRANCH_NAME: ${{ github.ref_name }}
           IMAGE_TAG: ${{ needs.build.outputs.image-tag }}
@@ -116,8 +118,14 @@ jobs:
           COMMIT_SHA: ${{ github.sha }}
           COMPOSE_FILE: ${{ env.COMPOSE_FILE }}
         run: |
+          if [ "$BRANCH_NAME" = "main" ]; then
+            REDIS_PASSWORD="$REDIS_PASSWORD_PROD"
+          else
+            REDIS_PASSWORD="$REDIS_PASSWORD_DEV"
+          fi
           METRICS_SECRET_B64="$(printf '%s' "$METRICS_SECRET" | base64 | tr -d '\n')"
-          ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ConnectTimeout=10 root@$LINODE_INSTANCE_IP "METRICS_SECRET_B64='$METRICS_SECRET_B64' bash -s" << 'ENDSSH'
+          REDIS_PASSWORD_B64="$(printf '%s' "$REDIS_PASSWORD" | base64 | tr -d '\n')"
+          ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ConnectTimeout=10 root@$LINODE_INSTANCE_IP "METRICS_SECRET_B64='$METRICS_SECRET_B64' REDIS_PASSWORD_B64='$REDIS_PASSWORD_B64' bash -s" << 'ENDSSH'
             set -e
             export src_DIR=${{ env.APP_DIR }}
             export COMPOSE_FILE=${{ env.COMPOSE_FILE }}
@@ -181,18 +189,29 @@ jobs:
             set_env_var "POSTGRES_DB_PASSWORD"            "${{ secrets.POSTGRES_DB_PASSWORD }}"
             set_env_var "POSTGRES_DB_NAME"                "${{ secrets.POSTGRES_DB_NAME }}"
             set_env_var "API_SECRET_KEY"                  "${{ secrets.API_SECRET_KEY }}"
-            METRICS_SECRET_VALUE="$(printf '%s' "$METRICS_SECRET_B64" | base64 --decode && printf '.')"
-            METRICS_SECRET_VALUE="${METRICS_SECRET_VALUE%.}"
-            if [[ "$METRICS_SECRET_VALUE" == *$'\n'* || "$METRICS_SECRET_VALUE" == *$'\r'* ]]; then
-              echo "METRICS_SECRET must be a single-line credential"
+            for secret_name in METRICS_SECRET REDIS_PASSWORD; do
+              encoded_name="${secret_name}_B64"
+              secret_value="$(printf '%s' "${!encoded_name}" | base64 --decode && printf '.')"
+              secret_value="${secret_value%.}"
+              if [[ "$secret_value" == *$'\n'* || "$secret_value" == *$'\r'* ]]; then
+                echo "$secret_name must be a single-line credential"
+                exit 1
+              fi
+              printf -v "$secret_name" '%s' "$secret_value"
+            done
+            if [ -z "${REDIS_PASSWORD//[[:space:]]/}" ]; then
+              echo "REDIS_PASSWORD must be configured"
               exit 1
             fi
-            METRICS_SECRET_ESCAPED="$(printf '%s' "$METRICS_SECRET_VALUE" | sed 's/[\\&|]/\\&/g')"
-            if grep -q '^METRICS_SECRET=' "$ENV_FILE"; then
-              sed -i "s|^METRICS_SECRET=.*|METRICS_SECRET=${METRICS_SECRET_ESCAPED}|" "$ENV_FILE"
-            else
-              printf '\nMETRICS_SECRET=%s\n' "$METRICS_SECRET_VALUE" >> "$ENV_FILE"
-            fi
+            for secret_name in METRICS_SECRET REDIS_PASSWORD; do
+              secret_value="${!secret_name}"
+              secret_escaped="$(printf '%s' "$secret_value" | sed 's/[\\&|]/\\&/g')"
+              if grep -q "^${secret_name}=" "$ENV_FILE"; then
+                sed -i "s|^${secret_name}=.*|${secret_name}=${secret_escaped}|" "$ENV_FILE"
+              else
+                printf '\n%s=%s\n' "$secret_name" "$secret_value" >> "$ENV_FILE"
+              fi
+            done
             set_env_var "LLM_BACKEND__OPENAI__API_KEY"    "${{ secrets.LLM_BACKEND__OPENAI__API_KEY }}"
             set_env_var "LLM_BACKEND__GEMINI__API_KEY"    "${{ secrets.LLM_BACKEND__GEMINI__API_KEY }}"
             set_env_var "LLM_BACKEND__ANTHROPIC__API_KEY" "${{ secrets.LLM_BACKEND__ANTHROPIC__API_KEY }}"
@@ -201,6 +220,8 @@ jobs:
             set_env_var "INSIGHT__SCHEDULE_CRON"          "${{ secrets.INSIGHT__SCHEDULE_CRON }}"
 
             echo "✅ Generated $ENV_FILE with latest GitHub Secrets"
+
+            docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" --profile "$src_ENV" config --quiet
 
             # ===== 清理舊容器 =====
             echo "=== Cleaning up old containers for $src_ENV ==="
@@ -223,7 +244,7 @@ jobs:
             else
                 echo "❌ Failed to start new container"
                 echo "=== Checking container logs ==="
-                docker compose -f $COMPOSE_FILE --profile ${src_ENV} logs --tail=100 backend-${src_ENV} || true
+                docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" --profile "${src_ENV}" logs --tail=100 backend-${src_ENV} || true
                 echo "Container status:"
                 docker ps -a --filter "name=backend-${src_ENV}" || true
                 exit 1
@@ -243,7 +264,7 @@ jobs:
                 sleep $SLEEP_SECONDS
 
                 # 取得 container ID（若容器未啟動則為空）
-                container_id=$(docker compose -f $COMPOSE_FILE --profile ${src_ENV} ps -q $service_name 2>/dev/null)
+                container_id=$(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" --profile "${src_ENV}" ps -q $service_name 2>/dev/null)
 
                 if [ -z "$container_id" ]; then
                     echo "⚠ Attempt $i/$MAX_ATTEMPTS: container not running"
@@ -260,7 +281,7 @@ jobs:
                     if [ $i -eq $MAX_ATTEMPTS ]; then
                         echo "❌ $service_name failed health check after $MAX_ATTEMPTS attempts"
                         echo "=== Container Logs ==="
-                        docker compose -f $COMPOSE_FILE --profile ${src_ENV} logs --tail=100 $service_name || true
+                        docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" --profile "${src_ENV}" logs --tail=100 $service_name || true
                         exit 1
                     fi
                 fi

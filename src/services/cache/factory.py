@@ -12,18 +12,20 @@ def make_redis_client(settings: Settings) -> redis.Redis:
     redis_settings = settings.redis
 
     try:
-        client = redis.from_url(url=redis_settings.url)
+        client = redis.from_url(
+            url=redis_settings.url, password=redis_settings.password or None
+        )
 
         # Test connection
         client.ping()
-        logger.info(f"Connected to Redis at {redis_settings.url}")
+        logger.info("Connected to Redis")
         return client
 
     except redis.ConnectionError as e:
-        logger.error(f"Failed to connect to Redis: {e}")
+        logger.error("Failed to connect to Redis: %s", type(e).__name__)
         raise
     except Exception as e:
-        logger.error(f"Unexpected error creating Redis client: {e}")
+        logger.error("Unexpected error creating Redis client: %s", type(e).__name__)
         raise
 
 
@@ -35,5 +37,5 @@ def make_cache_client(settings: Settings) -> CacheClient:
         logger.info("Exact match cache client created successfully")
         return cache_client
     except Exception as e:
-        logger.error(f"Failed to create cache client: {e}")
+        logger.error("Failed to create cache client: %s", type(e).__name__)
         raise

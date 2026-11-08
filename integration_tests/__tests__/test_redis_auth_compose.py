@@ -167,7 +167,17 @@ def test_deployed_redis_rejects_anonymous_and_wrong_auth_but_is_healthy(
             assert health[0] == "CMD-SHELL"
             checked = _run("docker", "exec", name, "sh", "-c", health[1])
         assert checked.returncode == 0, checked.stderr
-        assert checked.stdout.strip() == "PONG"
+        invalid_health = _run(
+            "docker",
+            "exec",
+            "--env",
+            "REDIS_PASSWORD=wrong-secret",
+            name,
+            "sh",
+            "-c",
+            health[1],
+        )
+        assert invalid_health.returncode != 0, "Wrong credentials reported healthy"
     finally:
         removed = _run(*compose, "down", "--volumes", "--remove-orphans")
         assert removed.returncode == 0, removed.stderr
