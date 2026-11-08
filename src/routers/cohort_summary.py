@@ -76,8 +76,9 @@ def _build_prompt(req: GenerateCohortSummaryRequest) -> str:
         if cohort.startDate or cohort.endDate
         else "未提供"
     )
-    program = f"（系列：{_clean(cohort.programName)}）" if cohort.programName else ""
-    cohort_name = _clean(cohort.name)
+    cohort_name = GuardrailLayer.sanitize_user_input(_clean(cohort.name))
+    program_name = GuardrailLayer.sanitize_user_input(_clean(cohort.programName or ""))
+    program = f"（系列：{program_name}）" if cohort.programName else ""
 
     return f"""你是一位溫暖、觀察細膩的學習陪跑教練，正在為一個學習場次撰寫「成果摘要」，讀者是這個場次的帶領人。
 
@@ -131,8 +132,13 @@ async def generate_cohort_summary(
     if current_user is None:
         raise HTTPException(status_code=401, detail="未通過身份驗證")
 
+    try:
+        prompt = _build_prompt(req)
+    except GuardrailViolationError:
+        raise HTTPException(
+            status_code=422, detail="場次或系列名稱含有不允許的內容"
+        ) from None
     client, mode = _resolve_client(settings, req.provider, req.apiKey)
-    prompt = _build_prompt(req)
     # Gemini's output cap includes thinking tokens; retain the configured model/key
     # while leaving bounded room for reasoning and the requested three paragraphs.
     max_tokens = 8192 if client.backend == "gemini" else 1200
