@@ -117,7 +117,9 @@ jobs:
           COMPOSE_FILE: ${{ env.COMPOSE_FILE }}
         run: |
           METRICS_SECRET_B64="$(printf '%s' "$METRICS_SECRET" | base64 | tr -d '\n')"
-          ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ConnectTimeout=10 root@$LINODE_INSTANCE_IP "METRICS_SECRET_B64='$METRICS_SECRET_B64' bash -s" << 'ENDSSH'
+          {
+            printf 'METRICS_SECRET_B64=%s\n' "$METRICS_SECRET_B64"
+            cat << 'ENDSSH'
             set -e
             export src_DIR=${{ env.APP_DIR }}
             export COMPOSE_FILE=${{ env.COMPOSE_FILE }}
@@ -278,6 +280,7 @@ jobs:
             echo "Disk Usage:" && df -h /
 
           ENDSSH
+          } | ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ConnectTimeout=10 root@$LINODE_INSTANCE_IP 'bash -s'
       - name: Verify Deployment
         env:
           LINODE_INSTANCE_IP: ${{ secrets.LINODE_INSTANCE_IP }}
