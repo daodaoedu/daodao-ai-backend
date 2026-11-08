@@ -20,6 +20,12 @@ receives only this credential, requires it on startup, and its healthcheck must
 receive PONG using the same password. Unauthenticated or incorrect credentials
 must fail; ordinary application credentials are unrelated.
 
+Prepare the matching environment file before the first cutover. Compose resolves
+required variables for all operations, including `make down-dev`, `make down-prod`,
+status and logs; an old environment file without `REDIS_PASSWORD` cannot run those
+commands until it is configured. This validation does not send an AUTH request to
+the existing Redis instance or change its current password.
+
 CD transports this secret without inserting its raw value into the remote shell.
 It rejects missing/whitespace-only Redis passwords and multiline secrets, updates
 the matching environment file, and validates Compose configuration before stopping

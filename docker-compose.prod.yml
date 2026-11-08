@@ -39,7 +39,7 @@ services:
     restart: unless-stopped
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be configured}
-    command: ["sh", "-c", 'exec redis-server --requirepass "$${REDIS_PASSWORD}"']
+    command: ["sh", "-c", 'exec docker-entrypoint.sh redis-server --requirepass "$${REDIS_PASSWORD}"']
     # ports:
     #   - "6380:6379"
     volumes:
