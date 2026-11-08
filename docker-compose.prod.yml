@@ -37,6 +37,9 @@ services:
     image: redis:alpine
     container_name: daodao-ai-redis-prod
     restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be configured}
+    command: ["sh", "-c", 'exec docker-entrypoint.sh redis-server --requirepass "$${REDIS_PASSWORD}"']
     # ports:
     #   - "6380:6379"
     volumes:
@@ -46,7 +49,7 @@ services:
     profiles:
       - prod
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", 'REDISCLI_AUTH="$${REDIS_PASSWORD}" redis-cli ping | grep -qx PONG']
       interval: 5s
       timeout: 3s
       retries: 5

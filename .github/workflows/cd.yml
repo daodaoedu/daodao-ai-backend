@@ -108,6 +108,8 @@ jobs:
       - name: Deploy to Linode
         env:
           METRICS_SECRET: ${{ secrets.METRICS_SECRET }}
+          REDIS_PASSWORD_DEV: ${{ secrets.REDIS_PASSWORD_DEV }}
+          REDIS_PASSWORD_PROD: ${{ secrets.REDIS_PASSWORD_PROD }}
           LINODE_INSTANCE_IP: ${{ secrets.LINODE_INSTANCE_IP }}
           BRANCH_NAME: ${{ github.ref_name }}
           IMAGE_TAG: ${{ needs.build.outputs.image-tag }}
@@ -116,9 +118,16 @@ jobs:
           COMMIT_SHA: ${{ github.sha }}
           COMPOSE_FILE: ${{ env.COMPOSE_FILE }}
         run: |
+          if [ "$BRANCH_NAME" = "main" ]; then
+            REDIS_PASSWORD="$REDIS_PASSWORD_PROD"
+          else
+            REDIS_PASSWORD="$REDIS_PASSWORD_DEV"
+          fi
           METRICS_SECRET_B64="$(printf '%s' "$METRICS_SECRET" | base64 | tr -d '\n')"
+          REDIS_PASSWORD_B64="$(printf '%s' "$REDIS_PASSWORD" | base64 | tr -d '\n')"
           {
             printf 'METRICS_SECRET_B64=%s\n' "$METRICS_SECRET_B64"
+            printf 'REDIS_PASSWORD_B64=%s\n' "$REDIS_PASSWORD_B64"
             cat << 'ENDSSH'
             set -e
             export src_DIR=${{ env.APP_DIR }}
@@ -198,13 +207,23 @@ jobs:
               fi
               mv -f -- "$temporary_file" "$ENV_FILE"
             }
-            METRICS_SECRET_VALUE="$(printf '%s' "$METRICS_SECRET_B64" | base64 --decode && printf '.')"
-            METRICS_SECRET_VALUE="${METRICS_SECRET_VALUE%.}"
-            if [[ "$METRICS_SECRET_VALUE" == *$'\n'* || "$METRICS_SECRET_VALUE" == *$'\r'* ]]; then
-              echo "METRICS_SECRET must be a single-line credential"
+            for secret_name in METRICS_SECRET REDIS_PASSWORD; do
+              encoded_name="${secret_name}_B64"
+              secret_value="$(printf '%s' "${!encoded_name}" | base64 --decode && printf '.')"
+              secret_value="${secret_value%.}"
+              if [[ "$secret_value" == *$'\n'* || "$secret_value" == *$'\r'* ]]; then
+                echo "$secret_name must be a single-line credential"
+                exit 1
+              fi
+              printf -v "$secret_name" '%s' "$secret_value"
+            done
+            if [ -z "${REDIS_PASSWORD//[[:space:]]/}" ]; then
+              echo "REDIS_PASSWORD must be configured"
               exit 1
             fi
-            write_private_env_var "METRICS_SECRET" "$METRICS_SECRET_VALUE"
+            for secret_name in METRICS_SECRET REDIS_PASSWORD; do
+              write_private_env_var "$secret_name" "${!secret_name}"
+            done
             set_env_var "LLM_BACKEND__OPENAI__API_KEY"    "${{ secrets.LLM_BACKEND__OPENAI__API_KEY }}"
             set_env_var "LLM_BACKEND__GEMINI__API_KEY"    "${{ secrets.LLM_BACKEND__GEMINI__API_KEY }}"
             set_env_var "LLM_BACKEND__ANTHROPIC__API_KEY" "${{ secrets.LLM_BACKEND__ANTHROPIC__API_KEY }}"
@@ -213,6 +232,8 @@ jobs:
             set_env_var "INSIGHT__SCHEDULE_CRON"          "${{ secrets.INSIGHT__SCHEDULE_CRON }}"
 
             echo "✅ Generated $ENV_FILE with latest GitHub Secrets"
+
+            docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" --profile "$src_ENV" config --quiet
 
             # ===== 清理舊容器 =====
             echo "=== Cleaning up old containers for $src_ENV ==="
@@ -235,7 +256,7 @@ jobs:
             else
                 echo "❌ Failed to start new container"
                 echo "=== Checking container logs ==="
-                docker compose -f $COMPOSE_FILE --profile ${src_ENV} logs --tail=100 backend-${src_ENV} || true
+                docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" --profile "${src_ENV}" logs --tail=100 backend-${src_ENV} || true
                 echo "Container status:"
                 docker ps -a --filter "name=backend-${src_ENV}" || true
                 exit 1
@@ -255,7 +276,7 @@ jobs:
                 sleep $SLEEP_SECONDS
 
                 # 取得 container ID（若容器未啟動則為空）
-                container_id=$(docker compose -f $COMPOSE_FILE --profile ${src_ENV} ps -q $service_name 2>/dev/null)
+                container_id=$(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" --profile "${src_ENV}" ps -q $service_name 2>/dev/null)
 
                 if [ -z "$container_id" ]; then
                     echo "⚠ Attempt $i/$MAX_ATTEMPTS: container not running"
@@ -272,7 +293,7 @@ jobs:
                     if [ $i -eq $MAX_ATTEMPTS ]; then
                         echo "❌ $service_name failed health check after $MAX_ATTEMPTS attempts"
                         echo "=== Container Logs ==="
-                        docker compose -f $COMPOSE_FILE --profile ${src_ENV} logs --tail=100 $service_name || true
+                        docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" --profile "${src_ENV}" logs --tail=100 $service_name || true
                         exit 1
                     fi
                 fi

@@ -55,6 +55,7 @@ class RedisSettings(BaseConfigSettings):
     )
 
     url: str = "redis://localhost:6379/0"
+    password: str = ""
 
     # Cache settings
     ttl_hours: int = 6  # Cache TTL in hours

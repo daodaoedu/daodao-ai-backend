@@ -15,8 +15,8 @@ TAG=latest
 
 -include .env
 
-COMPOSE_DEV  = docker compose -f docker-compose.dev.yml
-COMPOSE_PROD = docker compose -f docker-compose.prod.yml
+COMPOSE_DEV  = docker compose --env-file .env.dev -f docker-compose.dev.yml
+COMPOSE_PROD = docker compose --env-file .env.prod -f docker-compose.prod.yml
 
 PY_DIRS = src
 

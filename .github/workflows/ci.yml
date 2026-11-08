@@ -53,6 +53,11 @@ jobs:
       - name: Run all unit tests
         run: make test
 
+      - name: Run isolated Redis authentication regressions
+        run: |
+          docker compose version
+          .venv/bin/python3.12 -m pytest integration_tests/__tests__/test_redis_auth_compose.py integration_tests/__tests__/test_redis_app_auth.py -v
+
       - name: Run real PostgreSQL feed permission and quota regressions
         env:
           TEST_DATABASE_URL: postgresql+psycopg2://acl_test:acl_test@127.0.0.1:5432/daodao_acl_test
