@@ -72,8 +72,27 @@ cd daodao-ai-backend
 ```bash
 cp .env.dev.sample .env.dev    # 開發環境
 cp .env.prod.sample .env.prod  # 生產環境
-# 填入資料庫連線、JWT secret、LLM API key 等
+# 填入 JWT_SECURITY、API_SECRET_KEY、REDIS_PASSWORD、資料庫與 LLM 設定
 ```
+
+`development`、`staging`、`production` 都必須明確設定 `JWT_SECURITY` 與
+`API_SECRET_KEY`。缺少、空白或已知公開 placeholder 會在建立 app、連接 DB／Redis
+前拒絕啟動；複製 sample 後仍須填入值。設定錯誤只顯示欄位與原因，不顯示輸入值。
+CLI（包含 insight dry-run）同樣需要這兩項設定。
+
+- `JWT_SECURITY` 是 HS256 簽章密鑰，不是已簽好的 JWT token。串接 server 時，使用
+  同一環境簽發端與驗證端一致的既有密鑰，不要只在 AI backend 單獨重生。
+- `API_SECRET_KEY` 是服務間 API 憑證，應與對應呼叫端一致；不要與 JWT、Redis 或
+  metrics 密鑰共用。dev／prod 各自管理。
+- 新建隔離環境的 HS256 密鑰至少使用 32 bytes 密碼學安全亂數；例如
+  `python -c 'import secrets; print(secrets.token_hex(32))'`。長度不等於隨機強度，
+  這次變更不會自動更換或重新編碼既有有效密鑰。
+- 本機 `.env.dev`／`.env.prod` 不進 Git，限制檔案存取權限；部署從 GitHub Secrets
+  注入。測試明確提供假密鑰，產品程式不會自動補上測試值。
+
+Redis 與 metrics 的配置及部署步驟見 [Redis authentication](docs/redis-auth.md)
+及 [Metrics access](docs/metrics.md)。JWT key 長度依據
+[RFC 7518 §3.2](https://www.rfc-editor.org/rfc/rfc7518.html#section-3.2)。
 
 **3. 啟動服務**
 

@@ -42,6 +42,7 @@ def captured_verifier_logs(
 ) -> Iterator[io.StringIO]:
     """Capture the real non-propagating logger, including DEBUG-level records."""
     monkeypatch.setenv("JWT_SECURITY", SECRET)
+    monkeypatch.setenv("API_SECRET_KEY", "synthetic-api-115-for-jwt-log-tests")
     stream = io.StringIO()
     handler = logging.StreamHandler(stream)
     logger = verify_jwt.logger
@@ -122,6 +123,7 @@ def test_cli_does_not_echo_token_or_payload(
         "PYTHONPATH": str(tmp_path),
         "PYTHONDONTWRITEBYTECODE": "1",
         "JWT_SECURITY": SECRET,
+        "API_SECRET_KEY": "synthetic-api-115-for-jwt-cli-tests",
         "ENVIRONMENT": "development",
         "MY_TOKEN_ID": token,
     }

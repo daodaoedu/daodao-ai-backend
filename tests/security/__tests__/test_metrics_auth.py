@@ -17,13 +17,23 @@ ENVIRONMENTS = ("development", "staging", "production")
 @pytest.mark.parametrize("secret", ["", METRICS_TOKEN])
 def test_metrics_credential_loads_from_environment(monkeypatch, secret):
     monkeypatch.setenv("METRICS_SECRET", secret)
-    settings = Settings(_env_file=None, environment="development")
+    settings = Settings(
+        _env_file=None,
+        environment="development",
+        jwt_security="synthetic-jwt-115-for-metrics-tests",
+        api_secret_key=API_TOKEN,
+    )
     assert settings.metrics_secret == secret
 
 
 def test_metrics_credential_has_no_default_access(monkeypatch):
     monkeypatch.delenv("METRICS_SECRET", raising=False)
-    settings = Settings(_env_file=None, environment="development")
+    settings = Settings(
+        _env_file=None,
+        environment="development",
+        jwt_security="synthetic-jwt-115-for-metrics-tests",
+        api_secret_key=API_TOKEN,
+    )
     assert settings.metrics_secret == ""
 
 

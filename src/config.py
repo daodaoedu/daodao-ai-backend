@@ -179,6 +179,7 @@ class Settings(BaseConfigSettings):
         env_nested_delimiter="__",
         case_sensitive=False,
         validate_assignment=True,
+        hide_input_in_errors=True,
     )
 
     app_version: str = "0.1.0"
@@ -215,7 +216,7 @@ class Settings(BaseConfigSettings):
         data["llm_backend"] = merged
         return data
 
-    jwt_security: str = "xxxxxxxxxxxxxxxx"
+    jwt_security: str = Field(..., description="JWT signing secret")
     jwt_expiration: str = "1h"
 
     # Qdrant
@@ -224,7 +225,7 @@ class Settings(BaseConfigSettings):
 
     #
     cloudflare_account_id: str = ""
-    api_secret_key: str = "xxxxxxxxxxxxxxxx"
+    api_secret_key: str = Field(..., description="Internal service API key")
     metrics_secret: str = ""
 
     @model_validator(mode="after")
@@ -251,15 +252,14 @@ class Settings(BaseConfigSettings):
 
     @model_validator(mode="after")
     def _validate_secrets(self) -> "Settings":
-        if self.environment in ("production", "staging"):
-            if is_unconfigured_secret(self.jwt_security, JWT_SECRET_PLACEHOLDERS):
-                raise ValueError(
-                    "JWT_SECURITY must be configured (empty or using placeholder)"
-                )
-            if is_unconfigured_secret(self.api_secret_key, API_SECRET_PLACEHOLDERS):
-                raise ValueError(
-                    "API_SECRET_KEY must be configured (empty or using placeholder)"
-                )
+        if is_unconfigured_secret(self.jwt_security, JWT_SECRET_PLACEHOLDERS):
+            raise ValueError(
+                "JWT_SECURITY must be configured (empty or using placeholder)"
+            )
+        if is_unconfigured_secret(self.api_secret_key, API_SECRET_PLACEHOLDERS):
+            raise ValueError(
+                "API_SECRET_KEY must be configured (empty or using placeholder)"
+            )
         return self
 
 
