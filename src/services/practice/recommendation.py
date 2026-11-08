@@ -3,9 +3,6 @@ from sqlalchemy import func
 from datetime import datetime, timezone
 from src.models import Practice, PracticeCheckIn
 from src.dependencies import SessionDep
-from src.logger import AppLogger
-
-logger = AppLogger(__name__).get_logger()
 
 
 def recommand_practices(db: SessionDep, user, query) -> list[Practice]:
@@ -93,9 +90,6 @@ def recommand_practices(db: SessionDep, user, query) -> list[Practice]:
         scored_posts.append((practice, score))
 
     scored_posts.sort(key=lambda x: x[1], reverse=True)
-
-    for p, s in scored_posts:
-        logger.info(f"Practice ID: {p.id}, Title: {p.title}, Score: {s}")
 
     return [p[0] for p in scored_posts]
 
