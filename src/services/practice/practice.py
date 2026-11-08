@@ -456,18 +456,16 @@ class PracticeService:
     @staticmethod
     def _apply_filters(query, tags, duration_min, duration_max, status):
         if tags:
-            logger.info(f"Applying tags filter: {tags}")
             # Get tag IDs from tag names
             tag_ids = query.session.query(Tag.id).filter(Tag.name.in_(tags)).all()
             tag_ids = [t.id for t in tag_ids]
-            logger.info(f"Resolved tag IDs: {tag_ids}")
             if tag_ids:
                 query = query.join(EntityTag, EntityTag.entity_id == Practice.id)
                 query = query.filter(
                     EntityTag.entity_type == "practice", EntityTag.tag_id.in_(tag_ids)
                 )
             else:
-                logger.warning(f"No tag IDs found for tags: {tags}")
+                logger.warning("No matching tag IDs found")
 
         if duration_min is not None:
             query = query.filter(Practice.duration_days >= duration_min)

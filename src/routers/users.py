@@ -55,13 +55,15 @@ def get_practice_suggestions(
         try:
             return {"data": json.loads(cached), "pagination": None, "cache_hit": True}
         except Exception:
-            logger.warning(f"cache parse error for key={cache_key}, falling back to DB")
+            logger.warning(
+                "Practice suggestions cache parse failed; falling back to DB"
+            )
 
     suggestions = PracticeService.get_search_suggestions(db=db, user_id=user.id)
     try:
         cache.client.set(cache_key, json.dumps(suggestions), ex=SUGGESTIONS_TTL)
     except Exception:
-        logger.warning(f"cache write error for key={cache_key}, skipping cache")
+        logger.warning("Practice suggestions cache write failed; skipping cache")
     return {"data": suggestions, "pagination": None, "cache_hit": False}
 
 
@@ -89,13 +91,15 @@ def get_practice_completions(
         try:
             return {"data": json.loads(cached), "pagination": None, "cache_hit": True}
         except Exception:
-            logger.warning(f"cache parse error for key={cache_key}, falling back to DB")
+            logger.warning(
+                "Practice completions cache parse failed; falling back to DB"
+            )
 
     result = PracticeService.get_completions(db=db, prefix=normalized_q, limit=limit)
     try:
         cache.client.set(cache_key, json.dumps(result), ex=COMPLETIONS_TTL)
     except Exception:
-        logger.warning(f"cache write error for key={cache_key}, skipping cache")
+        logger.warning("Practice completions cache write failed; skipping cache")
     return {"data": result, "pagination": None, "cache_hit": False}
 
 
@@ -160,9 +164,7 @@ def get_my_practices(
                 payload = json.loads(cached)
                 return {**payload, "cache_hit": True}
             except Exception:
-                logger.warning(
-                    f"cache parse error for key={cache_key}, falling back to DB"
-                )
+                logger.warning("Practice list cache parse failed; falling back to DB")
 
     # ── 實際查詢 ──
     practices = PracticeService.get_practices(
@@ -223,7 +225,7 @@ def get_my_practices(
 
     next_cursor = results[-1].get("id") if results else None
     has_next = len(results) == limit
-    logger.info(f"get_my_practices count={len(results)}, next_cursor={next_cursor}")
+    logger.info(f"get_my_practices count={len(results)}")
 
     # ── 2.2 Enrich each result (user, reactions, brewing, id) ────────────
     for r in results:
@@ -243,7 +245,6 @@ def get_my_practices(
             r.get("privacy_status") == PracticePrivacyStatus.DELAYED.value
             and r.get("status") == PracticeStatus.ACTIVE.value
         )
-        logger.info(f"get_my_practices result item: {r.get('title')}\n")
         # 將 id 替換為 external_id（UUID），供前端用於 reactions 和頁面導航
         r["id"] = r.get("external_id") or r["id"]
 
@@ -270,6 +271,6 @@ def get_my_practices(
                 ex=MY_PRACTICES_TTL,
             )
         except Exception:
-            logger.warning(f"cache write error for key={cache_key}, skipping cache")
+            logger.warning("Practice list cache write failed; skipping cache")
 
     return {**payload, "cache_hit": False}
