@@ -449,9 +449,6 @@ class PracticeService:
                     checkin_exists,
                 )
             )
-            logger.info(
-                str(query.statement.compile(compile_kwargs={"literal_binds": True}))
-            )
         return query
 
     # =========================================================
