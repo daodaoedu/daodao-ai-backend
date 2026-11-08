@@ -251,6 +251,12 @@ class Settings(BaseConfigSettings):
         return self
 
     @model_validator(mode="after")
+    def _validate_production_debug(self) -> "Settings":
+        if self.environment == "production" and self.debug:
+            raise ValueError("DEBUG must be disabled in production")
+        return self
+
+    @model_validator(mode="after")
     def _validate_secrets(self) -> "Settings":
         if is_unconfigured_secret(self.jwt_security, JWT_SECRET_PLACEHOLDERS):
             raise ValueError(
