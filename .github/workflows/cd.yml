@@ -183,18 +183,28 @@ jobs:
             set_env_var "POSTGRES_DB_PASSWORD"            "${{ secrets.POSTGRES_DB_PASSWORD }}"
             set_env_var "POSTGRES_DB_NAME"                "${{ secrets.POSTGRES_DB_NAME }}"
             set_env_var "API_SECRET_KEY"                  "${{ secrets.API_SECRET_KEY }}"
+            write_private_env_var() {
+              local key="$1" value="$2" line found=0 temporary_file
+              temporary_file="$(mktemp "${ENV_FILE}.XXXXXX")"
+              chmod 600 "$temporary_file"
+              while IFS= read -r line || [ -n "$line" ]; do
+                case "$line" in
+                  "$key="*) printf '%s=%s\n' "$key" "$value"; found=1 ;;
+                  *) printf '%s\n' "$line" ;;
+                esac
+              done < "$ENV_FILE" > "$temporary_file"
+              if [ "$found" -eq 0 ]; then
+                printf '\n%s=%s\n' "$key" "$value" >> "$temporary_file"
+              fi
+              mv -f -- "$temporary_file" "$ENV_FILE"
+            }
             METRICS_SECRET_VALUE="$(printf '%s' "$METRICS_SECRET_B64" | base64 --decode && printf '.')"
             METRICS_SECRET_VALUE="${METRICS_SECRET_VALUE%.}"
             if [[ "$METRICS_SECRET_VALUE" == *$'\n'* || "$METRICS_SECRET_VALUE" == *$'\r'* ]]; then
               echo "METRICS_SECRET must be a single-line credential"
               exit 1
             fi
-            METRICS_SECRET_ESCAPED="$(printf '%s' "$METRICS_SECRET_VALUE" | sed 's/[\\&|]/\\&/g')"
-            if grep -q '^METRICS_SECRET=' "$ENV_FILE"; then
-              sed -i "s|^METRICS_SECRET=.*|METRICS_SECRET=${METRICS_SECRET_ESCAPED}|" "$ENV_FILE"
-            else
-              printf '\nMETRICS_SECRET=%s\n' "$METRICS_SECRET_VALUE" >> "$ENV_FILE"
-            fi
+            write_private_env_var "METRICS_SECRET" "$METRICS_SECRET_VALUE"
             set_env_var "LLM_BACKEND__OPENAI__API_KEY"    "${{ secrets.LLM_BACKEND__OPENAI__API_KEY }}"
             set_env_var "LLM_BACKEND__GEMINI__API_KEY"    "${{ secrets.LLM_BACKEND__GEMINI__API_KEY }}"
             set_env_var "LLM_BACKEND__ANTHROPIC__API_KEY" "${{ secrets.LLM_BACKEND__ANTHROPIC__API_KEY }}"
