@@ -82,13 +82,30 @@ def setup_middlewares(app: FastAPI):
                 "/api/v1/ping",
                 "/api/v1/health",
                 "/api/v1/admin",  # JWT 驗證已足夠，瀏覽器不送 x-api-key
-                "/metrics",
                 "/docs",
                 "/redoc",
                 "/openapi.json",
             )
 
         async def dispatch(self, request: Request, call_next):
+            if request.url.path.rstrip("/") == "/metrics":
+                secret = settings.metrics_secret
+                scheme, _, credential = request.headers.get(
+                    "authorization", ""
+                ).partition(" ")
+                if (
+                    not secret.strip()
+                    or scheme.lower() != "bearer"
+                    or not hmac.compare_digest(
+                        credential.encode("utf-8"), secret.encode("utf-8")
+                    )
+                ):
+                    return JSONResponse(
+                        status_code=403,
+                        content={"detail": "Forbidden: Invalid metrics credential"},
+                    )
+                return await call_next(request)
+
             if self.environment == "development":
                 return await call_next(request)
 

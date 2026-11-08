@@ -7,10 +7,24 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from src.middleware import middleware as mw
+from src.config import Settings
 
 METRICS_TOKEN = "synthetic-metrics-105"
 API_TOKEN = "synthetic-service-105"
 ENVIRONMENTS = ("development", "staging", "production")
+
+
+@pytest.mark.parametrize("secret", ["", METRICS_TOKEN])
+def test_metrics_credential_loads_from_environment(monkeypatch, secret):
+    monkeypatch.setenv("METRICS_SECRET", secret)
+    settings = Settings(_env_file=None, environment="development")
+    assert settings.metrics_secret == secret
+
+
+def test_metrics_credential_has_no_default_access(monkeypatch):
+    monkeypatch.delenv("METRICS_SECRET", raising=False)
+    settings = Settings(_env_file=None, environment="development")
+    assert settings.metrics_secret == ""
 
 
 @pytest.fixture

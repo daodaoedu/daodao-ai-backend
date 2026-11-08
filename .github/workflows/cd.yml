@@ -107,6 +107,7 @@ jobs:
 
       - name: Deploy to Linode
         env:
+          METRICS_SECRET: ${{ secrets.METRICS_SECRET }}
           LINODE_INSTANCE_IP: ${{ secrets.LINODE_INSTANCE_IP }}
           BRANCH_NAME: ${{ github.ref_name }}
           IMAGE_TAG: ${{ needs.build.outputs.image-tag }}
@@ -115,7 +116,8 @@ jobs:
           COMMIT_SHA: ${{ github.sha }}
           COMPOSE_FILE: ${{ env.COMPOSE_FILE }}
         run: |
-          ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ConnectTimeout=10 root@$LINODE_INSTANCE_IP << 'ENDSSH'
+          METRICS_SECRET_B64="$(printf '%s' "$METRICS_SECRET" | base64 | tr -d '\n')"
+          ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ConnectTimeout=10 root@$LINODE_INSTANCE_IP "METRICS_SECRET_B64='$METRICS_SECRET_B64' bash -s" << 'ENDSSH'
             set -e
             export src_DIR=${{ env.APP_DIR }}
             export COMPOSE_FILE=${{ env.COMPOSE_FILE }}
@@ -179,6 +181,18 @@ jobs:
             set_env_var "POSTGRES_DB_PASSWORD"            "${{ secrets.POSTGRES_DB_PASSWORD }}"
             set_env_var "POSTGRES_DB_NAME"                "${{ secrets.POSTGRES_DB_NAME }}"
             set_env_var "API_SECRET_KEY"                  "${{ secrets.API_SECRET_KEY }}"
+            METRICS_SECRET_VALUE="$(printf '%s' "$METRICS_SECRET_B64" | base64 --decode && printf '.')"
+            METRICS_SECRET_VALUE="${METRICS_SECRET_VALUE%.}"
+            if [[ "$METRICS_SECRET_VALUE" == *$'\n'* || "$METRICS_SECRET_VALUE" == *$'\r'* ]]; then
+              echo "METRICS_SECRET must be a single-line credential"
+              exit 1
+            fi
+            METRICS_SECRET_ESCAPED="$(printf '%s' "$METRICS_SECRET_VALUE" | sed 's/[\\&|]/\\&/g')"
+            if grep -q '^METRICS_SECRET=' "$ENV_FILE"; then
+              sed -i "s|^METRICS_SECRET=.*|METRICS_SECRET=${METRICS_SECRET_ESCAPED}|" "$ENV_FILE"
+            else
+              printf '\nMETRICS_SECRET=%s\n' "$METRICS_SECRET_VALUE" >> "$ENV_FILE"
+            fi
             set_env_var "LLM_BACKEND__OPENAI__API_KEY"    "${{ secrets.LLM_BACKEND__OPENAI__API_KEY }}"
             set_env_var "LLM_BACKEND__GEMINI__API_KEY"    "${{ secrets.LLM_BACKEND__GEMINI__API_KEY }}"
             set_env_var "LLM_BACKEND__ANTHROPIC__API_KEY" "${{ secrets.LLM_BACKEND__ANTHROPIC__API_KEY }}"

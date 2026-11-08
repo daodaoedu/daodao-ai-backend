@@ -224,6 +224,7 @@ class Settings(BaseConfigSettings):
     #
     cloudflare_account_id: str = ""
     api_secret_key: str = "xxxxxxxxxxxxxxxx"
+    metrics_secret: str = ""
 
     @model_validator(mode="after")
     def _inject_cloudflare_account_id(self) -> "Settings":
