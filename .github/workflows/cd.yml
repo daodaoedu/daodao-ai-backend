@@ -234,6 +234,10 @@ jobs:
             echo "✅ Generated $ENV_FILE with latest GitHub Secrets"
 
             docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" --profile "$src_ENV" config --quiet
+            docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" --profile "$src_ENV" build "backend-${src_ENV}"
+            docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" --profile "$src_ENV" config --format json | \
+              docker run --rm --interactive --network none --env "PREFLIGHT_SERVICE=backend-${src_ENV}" --entrypoint python \
+                "daodao-ai-backend:${IMAGE_TAG}" -c 'import json, os, sys; environment = json.load(sys.stdin)["services"][os.environ["PREFLIGHT_SERVICE"]]["environment"]; os.environ.update({key: str(value) for key, value in environment.items() if value is not None}); from src.config import get_settings; get_settings()'
 
             # ===== 清理舊容器 =====
             echo "=== Cleaning up old containers for $src_ENV ==="
@@ -243,10 +247,6 @@ jobs:
             else
                 echo "⚠️ No old containers found or cleanup failed, continuing..."
             fi
-
-            # 強制移除舊 image（加 -f 避免被執行中容器擋住）
-            docker rmi -f daodao-ai-backend:${IMAGE_TAG} 2>/dev/null || true
-            echo "✅ Cleaned up old daodao-ai-backend:${IMAGE_TAG} image"
 
             sleep 3
 

@@ -73,6 +73,8 @@ def _settings(url, password):
     return Settings(
         _env_file=None,
         environment="development",
+        jwt_security="synthetic-jwt-115-for-redis-tests",
+        api_secret_key="synthetic-api-115-for-redis-tests",
         redis=RedisSettings(_env_file=None, url=url, password=password),
     )
 
