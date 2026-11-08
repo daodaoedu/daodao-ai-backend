@@ -120,7 +120,7 @@ class LoggingLLMClient:
             raise
         except Exception as exc:
             status = "error"
-            error_message = str(exc)
+            error_message = type(exc).__name__
             raise
         finally:
             entry = None
