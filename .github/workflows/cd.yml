@@ -107,6 +107,7 @@ jobs:
 
       - name: Deploy to Linode
         env:
+          METRICS_SECRET: ${{ secrets.METRICS_SECRET }}
           LINODE_INSTANCE_IP: ${{ secrets.LINODE_INSTANCE_IP }}
           BRANCH_NAME: ${{ github.ref_name }}
           IMAGE_TAG: ${{ needs.build.outputs.image-tag }}
@@ -115,7 +116,10 @@ jobs:
           COMMIT_SHA: ${{ github.sha }}
           COMPOSE_FILE: ${{ env.COMPOSE_FILE }}
         run: |
-          ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ConnectTimeout=10 root@$LINODE_INSTANCE_IP << 'ENDSSH'
+          METRICS_SECRET_B64="$(printf '%s' "$METRICS_SECRET" | base64 | tr -d '\n')"
+          {
+            printf 'METRICS_SECRET_B64=%s\n' "$METRICS_SECRET_B64"
+            cat << 'ENDSSH'
             set -e
             export src_DIR=${{ env.APP_DIR }}
             export COMPOSE_FILE=${{ env.COMPOSE_FILE }}
@@ -179,6 +183,28 @@ jobs:
             set_env_var "POSTGRES_DB_PASSWORD"            "${{ secrets.POSTGRES_DB_PASSWORD }}"
             set_env_var "POSTGRES_DB_NAME"                "${{ secrets.POSTGRES_DB_NAME }}"
             set_env_var "API_SECRET_KEY"                  "${{ secrets.API_SECRET_KEY }}"
+            write_private_env_var() {
+              local key="$1" value="$2" line found=0 temporary_file
+              temporary_file="$(mktemp "${ENV_FILE}.XXXXXX")"
+              chmod 600 "$temporary_file"
+              while IFS= read -r line || [ -n "$line" ]; do
+                case "$line" in
+                  "$key="*) printf '%s=%s\n' "$key" "$value"; found=1 ;;
+                  *) printf '%s\n' "$line" ;;
+                esac
+              done < "$ENV_FILE" > "$temporary_file"
+              if [ "$found" -eq 0 ]; then
+                printf '\n%s=%s\n' "$key" "$value" >> "$temporary_file"
+              fi
+              mv -f -- "$temporary_file" "$ENV_FILE"
+            }
+            METRICS_SECRET_VALUE="$(printf '%s' "$METRICS_SECRET_B64" | base64 --decode && printf '.')"
+            METRICS_SECRET_VALUE="${METRICS_SECRET_VALUE%.}"
+            if [[ "$METRICS_SECRET_VALUE" == *$'\n'* || "$METRICS_SECRET_VALUE" == *$'\r'* ]]; then
+              echo "METRICS_SECRET must be a single-line credential"
+              exit 1
+            fi
+            write_private_env_var "METRICS_SECRET" "$METRICS_SECRET_VALUE"
             set_env_var "LLM_BACKEND__OPENAI__API_KEY"    "${{ secrets.LLM_BACKEND__OPENAI__API_KEY }}"
             set_env_var "LLM_BACKEND__GEMINI__API_KEY"    "${{ secrets.LLM_BACKEND__GEMINI__API_KEY }}"
             set_env_var "LLM_BACKEND__ANTHROPIC__API_KEY" "${{ secrets.LLM_BACKEND__ANTHROPIC__API_KEY }}"
@@ -264,6 +290,7 @@ jobs:
             echo "Disk Usage:" && df -h /
 
           ENDSSH
+          } | ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ConnectTimeout=10 root@$LINODE_INSTANCE_IP 'bash -s'
       - name: Verify Deployment
         env:
           LINODE_INSTANCE_IP: ${{ secrets.LINODE_INSTANCE_IP }}
