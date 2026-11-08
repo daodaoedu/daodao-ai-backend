@@ -100,6 +100,14 @@ def test_deployed_redis_rejects_anonymous_and_wrong_auth_but_is_healthy(
         assert located.returncode == 0, located.stderr
         name = located.stdout.strip()
         assert name
+        deadline = time.monotonic() + 10
+        while True:
+            ping = _run("docker", "exec", name, "redis-cli", "ping")
+            if "PONG" in ping.stdout or "NOAUTH" in ping.stdout:
+                break
+            assert time.monotonic() < deadline, ping.stderr
+            time.sleep(0.1)
+
         runtime_uid = _run(
             "docker", "exec", name, "sh", "-c", "awk '/^Uid:/{print $2}' /proc/1/status"
         )
@@ -108,13 +116,6 @@ def test_deployed_redis_rejects_anonymous_and_wrong_auth_but_is_healthy(
         assert (
             runtime_uid.stdout.strip() == redis_uid.stdout.strip()
         ), "Redis must retain the official entrypoint's unprivileged runtime user"
-        deadline = time.monotonic() + 10
-        while True:
-            ping = _run("docker", "exec", name, "redis-cli", "ping")
-            if "PONG" in ping.stdout or "NOAUTH" in ping.stdout:
-                break
-            assert time.monotonic() < deadline, ping.stderr
-            time.sleep(0.1)
 
         assert "NOAUTH" in ping.stdout, "Anonymous client could read deployed Redis"
         wrong = _run(
