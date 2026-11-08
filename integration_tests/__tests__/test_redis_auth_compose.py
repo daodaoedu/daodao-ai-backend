@@ -105,9 +105,9 @@ def test_deployed_redis_rejects_anonymous_and_wrong_auth_but_is_healthy(
         )
         redis_uid = _run("docker", "exec", name, "id", "-u", "redis")
         assert runtime_uid.returncode == redis_uid.returncode == 0
-        assert runtime_uid.stdout.strip() == redis_uid.stdout.strip(), (
-            "Redis must retain the official entrypoint's unprivileged runtime user"
-        )
+        assert (
+            runtime_uid.stdout.strip() == redis_uid.stdout.strip()
+        ), "Redis must retain the official entrypoint's unprivileged runtime user"
         deadline = time.monotonic() + 10
         while True:
             ping = _run("docker", "exec", name, "redis-cli", "ping")
