@@ -192,6 +192,21 @@ jobs:
             set_env_var "POSTGRES_DB_PASSWORD"            "${{ secrets.POSTGRES_DB_PASSWORD }}"
             set_env_var "POSTGRES_DB_NAME"                "${{ secrets.POSTGRES_DB_NAME }}"
             set_env_var "API_SECRET_KEY"                  "${{ secrets.API_SECRET_KEY }}"
+            write_private_env_var() {
+              local key="$1" value="$2" line found=0 temporary_file
+              temporary_file="$(mktemp "${ENV_FILE}.XXXXXX")"
+              chmod 600 "$temporary_file"
+              while IFS= read -r line || [ -n "$line" ]; do
+                case "$line" in
+                  "$key="*) printf '%s=%s\n' "$key" "$value"; found=1 ;;
+                  *) printf '%s\n' "$line" ;;
+                esac
+              done < "$ENV_FILE" > "$temporary_file"
+              if [ "$found" -eq 0 ]; then
+                printf '\n%s=%s\n' "$key" "$value" >> "$temporary_file"
+              fi
+              mv -f -- "$temporary_file" "$ENV_FILE"
+            }
             for secret_name in METRICS_SECRET REDIS_PASSWORD; do
               encoded_name="${secret_name}_B64"
               secret_value="$(printf '%s' "${!encoded_name}" | base64 --decode && printf '.')"
@@ -207,13 +222,7 @@ jobs:
               exit 1
             fi
             for secret_name in METRICS_SECRET REDIS_PASSWORD; do
-              secret_value="${!secret_name}"
-              secret_escaped="$(printf '%s' "$secret_value" | sed 's/[\\&|]/\\&/g')"
-              if grep -q "^${secret_name}=" "$ENV_FILE"; then
-                sed -i "s|^${secret_name}=.*|${secret_name}=${secret_escaped}|" "$ENV_FILE"
-              else
-                printf '\n%s=%s\n' "$secret_name" "$secret_value" >> "$ENV_FILE"
-              fi
+              write_private_env_var "$secret_name" "${!secret_name}"
             done
             set_env_var "LLM_BACKEND__OPENAI__API_KEY"    "${{ secrets.LLM_BACKEND__OPENAI__API_KEY }}"
             set_env_var "LLM_BACKEND__GEMINI__API_KEY"    "${{ secrets.LLM_BACKEND__GEMINI__API_KEY }}"
