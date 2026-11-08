@@ -89,7 +89,8 @@ def test_development_unconfigured_keys_cannot_authenticate(
     monkeypatch.setenv("ENVIRONMENT", "development")
     configure(secret)
     token, _ = signed_token(secret or "xxxxxxxxxxxxxxxx")
-    assert verify_jwt.verify(token) is None
+    with pytest.raises(ValidationError, match="JWT_SECURITY must be configured"):
+        verify_jwt.verify(token)
 
 
 def test_development_default_cannot_authenticate_known_placeholder(
@@ -99,7 +100,12 @@ def test_development_default_cannot_authenticate_known_placeholder(
     (tmp_path / ".env").unlink()
     get_settings.cache_clear()
     token, _ = signed_token("xxxxxxxxxxxxxxxx")
-    assert verify_jwt.verify(token) is None
+    with pytest.raises(ValidationError) as caught:
+        verify_jwt.verify(token)
+    missing = {
+        error["loc"] for error in caught.value.errors() if error["type"] == "missing"
+    }
+    assert missing == {("jwt_security",), ("api_secret_key",)}
 
 
 def test_legitimate_whitespace_in_secret_is_not_rewritten(configured_env_file):
@@ -144,7 +150,7 @@ def test_nested_settings_use_fixture_dotenv(configured_env_file, monkeypatch):
 
 
 @pytest.mark.parametrize("sample_name", [".env.dev.sample", ".env.prod.sample"])
-@pytest.mark.parametrize("environment", ["development", "production"])
+@pytest.mark.parametrize("environment", ["development", "staging", "production"])
 @pytest.mark.parametrize("padding", ["", " "])
 def test_public_sample_jwt_cannot_authenticate(
     configured_env_file, monkeypatch, sample_name, environment, padding
@@ -155,16 +161,13 @@ def test_public_sample_jwt_cannot_authenticate(
     _, configure = configured_env_file
     monkeypatch.setenv("ENVIRONMENT", environment)
     configure(secret)
-    token, _ = signed_token(secret)
-    if environment == "production":
-        with pytest.raises(ValidationError, match="JWT_SECURITY must be configured"):
-            verify_jwt.verify(token)
-    else:
-        assert verify_jwt.verify(token) is None
+    token, _ = signed_token(secret or "xxxxxxxxxxxxxxxx")
+    with pytest.raises(ValidationError, match="JWT_SECURITY must be configured"):
+        verify_jwt.verify(token)
 
 
 @pytest.mark.parametrize("sample_name", [".env.dev.sample", ".env.prod.sample"])
-@pytest.mark.parametrize("environment", ["staging", "production"])
+@pytest.mark.parametrize("environment", ["development", "staging", "production"])
 @pytest.mark.parametrize("field", ["JWT_SECURITY", "API_SECRET_KEY"])
 @pytest.mark.parametrize("padding", ["", " "])
 def test_deployment_rejects_public_sample_secrets(
@@ -181,7 +184,7 @@ def test_deployment_rejects_public_sample_secrets(
         Settings(environment=environment, **values)
 
 
-@pytest.mark.parametrize("environment", ["staging", "production"])
+@pytest.mark.parametrize("environment", ["development", "staging", "production"])
 @pytest.mark.parametrize("field", ["jwt_security", "api_secret_key"])
 def test_deployment_rejects_padded_default_placeholder(
     isolated_settings_env, environment, field
