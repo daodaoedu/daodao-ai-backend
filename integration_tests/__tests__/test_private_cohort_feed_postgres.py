@@ -57,7 +57,10 @@ def database() -> Iterator[Connection]:
             connection.execute(
                 text(
                     """
-                    CREATE TABLE programs (id integer PRIMARY KEY, kind text NOT NULL);
+                    CREATE TABLE programs (
+                        id integer PRIMARY KEY, kind text NOT NULL,
+                        organization_id integer NOT NULL
+                    );
                     CREATE TABLE cohorts (
                         id integer PRIMARY KEY, program_id integer NOT NULL,
                         end_date date NOT NULL
@@ -65,6 +68,10 @@ def database() -> Iterator[Connection]:
                     CREATE TABLE cohort_enrollments (
                         cohort_id integer NOT NULL, user_id integer NOT NULL,
                         status text NOT NULL, PRIMARY KEY (cohort_id, user_id)
+                    );
+                    CREATE TABLE organization_members (
+                        organization_id integer NOT NULL, user_id integer NOT NULL,
+                        PRIMARY KEY (organization_id, user_id)
                     );
                     CREATE TABLE practices (
                         id integer PRIMARY KEY, user_id integer NOT NULL,
@@ -98,7 +105,8 @@ def database() -> Iterator[Connection]:
                     );
                     INSERT INTO users (id, external_id, nickname)
                         VALUES (1, 'fixture-owner', 'Owner');
-                    INSERT INTO programs VALUES (1, 'lighthouse'), (2, 'challenge');
+                    INSERT INTO programs (id, kind, organization_id) VALUES
+                        (1, 'lighthouse', 1), (2, 'challenge', 2);
                     INSERT INTO cohorts VALUES
                         (100, 1, CURRENT_DATE + 7),
                         (101, 1, CURRENT_DATE + 7),

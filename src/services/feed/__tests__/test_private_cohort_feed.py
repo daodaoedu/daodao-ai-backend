@@ -42,7 +42,6 @@ def test_selected_cohort_pool_requires_private_lighthouse_membership(pool):
 @pytest.mark.parametrize(
     "space_filter,requester_id",
     [
-        (None, 7),
         (SpaceFilter(personal=True), 7),
         (SpaceFilter(challenge=True), 7),
         (SpaceFilter(cohort_ids=(57,)), None),

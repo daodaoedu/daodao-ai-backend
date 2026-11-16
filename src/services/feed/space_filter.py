@@ -1,12 +1,12 @@
 """
 Feed 空間篩選（daodao#213 FR-D3）
 
-主頁動態牆以「空間」篩選：個人實踐、共同挑戰、使用者參與的活動課程。
+主頁動態牆以「空間」篩選：個人實踐、共同挑戰、使用者可存取的活動課程。
 空間由 practices.cohort_id 判定：
 - personal：不屬任何 cohort 的實踐
 - challenge：所屬 cohort 的 program.kind = 'challenge'
 - cohort:<id>：屬指定 cohort 的實踐
-多選時取聯集。私人燈塔內容僅於明確選取場次且仍為 joined 成員時可讀。
+多選時取聯集。組織成員可在主頁查看所屬組織燈塔場次的私人內容；學員須明確選取場次且仍為 joined 成員。
 """
 
 import re
@@ -55,7 +55,7 @@ def parse_space_filter(values: Optional[list[str]]) -> Optional[SpaceFilter]:
 def restrict_to_joined_cohorts(
     space_filter: Optional[SpaceFilter], joined_cohort_ids: set[int]
 ) -> Optional[SpaceFilter]:
-    """活動課程只能篩使用者已參加（joined）的 cohort，其餘 cohort id 移除；未登入時集合為空。"""
+    """Remove activity cohorts the user cannot access; guests have no accessible cohort IDs."""
     if space_filter is None:
         return None
     return SpaceFilter(
@@ -115,26 +115,53 @@ def space_cache_token(space_filter: Optional[SpaceFilter]) -> str:
 def build_feed_visibility_clause(
     space_filter: Optional[SpaceFilter], requester_id: Optional[int]
 ) -> tuple[str, dict]:
-    """Public feed by default; selected private Lighthouse content needs live membership."""
+    """Keep private Lighthouse content scoped to organization members or joined learners."""
     public_clause = (
         "p.privacy_status = 'public'"
         " OR (p.privacy_status = 'delayed' AND p.status = 'completed')"
     )
-    if requester_id is None or space_filter is None or not space_filter.cohort_ids:
+    if requester_id is None:
         return f"({public_clause})", {}
+
+    params = {"visibility_requester_id": requester_id}
+    params["visibility_program_kind"] = "lighthouse"
+
+    organization_access = (
+        "EXISTS (SELECT 1 FROM organization_members om"
+        " WHERE om.organization_id = pr.organization_id"
+        " AND om.user_id = :visibility_requester_id)"
+    )
+
+    # No space filter means all spaces on the home feed. Organization members
+    # retain access to private cohorts they manage in that default view.
+    if space_filter is None:
+        private_clause = (
+            "p.privacy_status = 'private'"
+            " AND EXISTS (SELECT 1 FROM cohorts co"
+            " JOIN programs pr ON pr.id = co.program_id"
+            " WHERE co.id = p.cohort_id"
+            " AND pr.kind = :visibility_program_kind"
+            " AND co.end_date >= (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date - 90"
+            f" AND {organization_access})"
+        )
+        return f"({public_clause} OR ({private_clause}))", params
+
+    # An explicit selection without a cohort must not add private cohort rows.
+    if not space_filter.cohort_ids:
+        return f"({public_clause})", {}
+
+    params["visibility_cohort_ids"] = list(space_filter.cohort_ids)
     private_clause = (
         "p.privacy_status = 'private'"
         " AND p.cohort_id = ANY(:visibility_cohort_ids)"
         " AND EXISTS (SELECT 1 FROM cohorts co"
         " JOIN programs pr ON pr.id = co.program_id"
-        " JOIN cohort_enrollments ce ON ce.cohort_id = co.id"
         " WHERE co.id = p.cohort_id"
         " AND pr.kind = :visibility_program_kind"
-        " AND ce.user_id = :visibility_requester_id AND ce.status = 'joined'"
-        " AND co.end_date >= (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date - 90)"
+        " AND co.end_date >= (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date - 90"
+        " AND (EXISTS (SELECT 1 FROM cohort_enrollments ce"
+        " WHERE ce.cohort_id = co.id"
+        " AND ce.user_id = :visibility_requester_id AND ce.status = 'joined')"
+        f" OR {organization_access}))"
     )
-    return f"({public_clause} OR ({private_clause}))", {
-        "visibility_cohort_ids": list(space_filter.cohort_ids),
-        "visibility_requester_id": requester_id,
-        "visibility_program_kind": "lighthouse",
-    }
+    return f"({public_clause} OR ({private_clause}))", params
