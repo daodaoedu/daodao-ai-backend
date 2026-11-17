@@ -568,15 +568,36 @@ class FeedService:
 
     @staticmethod
     def _fetch_joined_cohort_ids(db: Session, user_id: int) -> set[int]:
-        """使用者已參加（status = joined）的 cohort，供活動課程篩選限縮範圍。"""
+        """使用者已加入或所屬組織管理的活動課程，供篩選限縮範圍。"""
         rows = db.execute(
             text(
                 "SELECT cohort_id FROM cohort_enrollments"
                 " WHERE user_id = :user_id AND status = 'joined'"
+                " UNION"
+                " SELECT co.id AS cohort_id FROM cohorts co"
+                " JOIN programs pr ON pr.id = co.program_id"
+                " JOIN organization_members om ON om.organization_id = pr.organization_id"
+                " JOIN organization o ON o.id = om.organization_id"
+                " WHERE om.user_id = :user_id AND pr.kind = :program_kind"
+                " AND o.status = 'active'"
             ),
-            {"user_id": user_id},
+            {"user_id": user_id, "program_kind": "lighthouse"},
         ).fetchall()
         return {row.cohort_id for row in rows}
+
+    @staticmethod
+    def has_organization_feed_access(db: Session, user_id: int) -> bool:
+        """使用者是否屬於任何未停權組織；是的話主頁 feed 可能含私人燈塔內容。"""
+        row = db.execute(
+            text(
+                "SELECT 1 FROM organization_members om"
+                " JOIN organization o ON o.id = om.organization_id"
+                " WHERE om.user_id = :user_id AND o.status = 'active'"
+                " LIMIT 1"
+            ),
+            {"user_id": user_id},
+        ).first()
+        return row is not None
 
     # =========================================================================
     # Social Graph

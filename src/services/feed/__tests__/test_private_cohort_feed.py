@@ -42,7 +42,6 @@ def test_selected_cohort_pool_requires_private_lighthouse_membership(pool):
 @pytest.mark.parametrize(
     "space_filter,requester_id",
     [
-        (None, 7),
         (SpaceFilter(personal=True), 7),
         (SpaceFilter(challenge=True), 7),
         (SpaceFilter(cohort_ids=(57,)), None),
@@ -135,6 +134,7 @@ def test_public_feed_keeps_existing_cache_behavior():
     app.dependency_overrides[get_db_session] = lambda: db
     app.dependency_overrides[get_current_user] = lambda: "user-7"
     app.dependency_overrides[get_cache_client] = lambda: cache
+    db.execute.return_value.first.return_value = None  # not an organization member
     with patch.object(
         FeedService,
         "get_feed",
@@ -187,3 +187,72 @@ def test_public_get_feed_entry_includes_private_joined_cohort_in_real_pool_queri
         assert params["visibility_requester_id"] == 7
         assert params["visibility_cohort_ids"] == [57]
         assert params["visibility_program_kind"] == "lighthouse"
+
+
+# ---------------------------------------------------------------------------
+# #548: organization members see their organization's private Lighthouse rows
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "pool",
+    [FeedService._fetch_practice_pool, FeedService._fetch_checkin_pool_with_counts],
+)
+def test_default_feed_adds_private_rows_only_through_active_organization(pool):
+    db = MagicMock()
+    db.execute.return_value.fetchall.return_value = []
+    pool(db, None, None, 10, space_filter=None, requester_id=7)
+    statement, params = db.execute.call_args[0]
+    sql = str(statement)
+    assert "p.privacy_status = 'private'" in sql
+    assert "organization_members om" in sql
+    assert "o.status = 'active'" in sql
+    assert "pr.kind = :visibility_program_kind" in sql
+    assert "co.end_date >=" in sql
+    # Joined learners keep the #344 rule: no private rows without explicit selection.
+    assert "cohort_enrollments" not in sql
+    assert params["visibility_requester_id"] == 7
+    assert params["visibility_program_kind"] == "lighthouse"
+
+
+def _feed_client(db, cache):
+    app = FastAPI()
+    app.include_router(router, prefix="/api")
+    app.dependency_overrides[get_db_session] = lambda: db
+    app.dependency_overrides[get_current_user] = lambda: "user-7"
+    app.dependency_overrides[get_cache_client] = lambda: cache
+    return TestClient(app)
+
+
+def test_organization_member_default_feed_never_uses_cache():
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = MagicMock(id=7)
+    db.execute.return_value.first.return_value = (1,)  # active organization member
+    cache = MagicMock()
+    cache.client.get.return_value = json.dumps(
+        {"data": [{"private": "STALE_PRIVATE_DATA"}], "pagination": None}
+    )
+    with patch.object(
+        FeedService, "get_feed", return_value={"data": [], "next_cursor": None}
+    ) as get_feed:
+        response = _feed_client(db, cache).get("/api/v1/feed")
+    assert response.status_code == 200
+    assert "STALE_PRIVATE_DATA" not in response.text
+    get_feed.assert_called_once()
+    cache.client.get.assert_not_called()
+    cache.client.set.assert_not_called()
+
+
+def test_non_member_default_feed_is_still_cached():
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = MagicMock(id=7)
+    db.execute.return_value.first.return_value = None
+    cache = MagicMock()
+    cache.client.get.return_value = None
+    with patch.object(
+        FeedService, "get_feed", return_value={"data": [], "next_cursor": None}
+    ):
+        response = _feed_client(db, cache).get("/api/v1/feed")
+    assert response.status_code == 200
+    cache.client.get.assert_called_once()
+    cache.client.set.assert_called_once()

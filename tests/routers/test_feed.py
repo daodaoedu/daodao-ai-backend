@@ -28,6 +28,8 @@ def _make_cache():
 def _make_db():
     db = MagicMock()
     db.query.return_value.filter.return_value.first.return_value = None
+    # Not an organization member (#548), so the public feed cache stays enabled.
+    db.execute.return_value.first.return_value = None
     return db
 
 
