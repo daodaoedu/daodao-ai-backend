@@ -23,6 +23,9 @@ OTHER_COHORT_MEMBER = 11
 LEFT_MEMBER = 12
 REMOVED_MEMBER = 13
 OUTSIDER = 14
+ORG_ADMIN = 15  # member of organization 1, which runs Lighthouse program 1
+OTHER_ORG_ADMIN = 16  # member of organization 2 only
+SUSPENDED_ORG_ADMIN = 17  # member of suspended organization 3
 COHORT = 100
 PRIVATE_PRACTICE = 1000
 PUBLIC_PRACTICE = 1005
@@ -69,6 +72,9 @@ def database() -> Iterator[Connection]:
                         cohort_id integer NOT NULL, user_id integer NOT NULL,
                         status text NOT NULL, PRIMARY KEY (cohort_id, user_id)
                     );
+                    CREATE TABLE organization (
+                        id integer PRIMARY KEY, status text NOT NULL
+                    );
                     CREATE TABLE organization_members (
                         organization_id integer NOT NULL, user_id integer NOT NULL,
                         PRIMARY KEY (organization_id, user_id)
@@ -106,13 +112,19 @@ def database() -> Iterator[Connection]:
                     INSERT INTO users (id, external_id, nickname)
                         VALUES (1, 'fixture-owner', 'Owner');
                     INSERT INTO programs (id, kind, organization_id) VALUES
-                        (1, 'lighthouse', 1), (2, 'challenge', 2);
+                        (1, 'lighthouse', 1), (2, 'challenge', 2),
+                        (3, 'lighthouse', 3);
+                    INSERT INTO organization VALUES
+                        (1, 'active'), (2, 'active'), (3, 'suspended');
+                    INSERT INTO organization_members VALUES
+                        (1, 15), (2, 16), (3, 17);
                     INSERT INTO cohorts VALUES
                         (100, 1, CURRENT_DATE + 7),
                         (101, 1, CURRENT_DATE + 7),
                         (102, 2, CURRENT_DATE + 7),
                         (103, 1, CURRENT_DATE - 90),
-                        (104, 1, CURRENT_DATE - 91);
+                        (104, 1, CURRENT_DATE - 91),
+                        (105, 3, CURRENT_DATE + 7);
                     INSERT INTO cohort_enrollments VALUES
                         (100, 1, 'joined'), (100, 10, 'joined'),
                         (101, 11, 'joined'), (100, 12, 'left'), (100, 13, 'removed'),
@@ -129,7 +141,8 @@ def database() -> Iterator[Connection]:
                         (1007, 1, 100, 'delayed', 'active'),
                         (1008, 1, 103, 'private', 'active'),
                         (1009, 1, 104, 'private', 'active'),
-                        (1010, 1, 100, 'private', 'active');
+                        (1010, 1, 100, 'private', 'active'),
+                        (1011, 1, 105, 'private', 'active');
                     UPDATE practices SET deleted_at = NOW() WHERE id = 1010;
                     INSERT INTO practice_checkins (id, practice_id, user_id)
                         SELECT id + 10000, id, user_id FROM practices;
@@ -300,3 +313,76 @@ def test_comment_preview_excludes_private_threads_but_keeps_public_replies(
         "ORPHAN_REPLY",
     ):
         assert marker not in serialized
+
+
+# ---------------------------------------------------------------------------
+# #548: organization members read their organization's private Lighthouse rows
+# ---------------------------------------------------------------------------
+
+ORG_1_PRIVATE_IN_RETENTION = {PRIVATE_PRACTICE, 1001, 1008}
+
+
+@pytest.mark.parametrize(
+    "space_filter,expected",
+    [
+        # Default home feed: every in-retention private row of the organization.
+        (None, ORG_1_PRIVATE_IN_RETENTION | PUBLIC_IDS),
+        # Explicit cohort selection keeps the selection scope.
+        (SpaceFilter(cohort_ids=(COHORT,)), {PRIVATE_PRACTICE, *PUBLIC_IDS}),
+        (SpaceFilter(cohort_ids=(103, 104)), {1008}),
+    ],
+)
+def test_organization_member_reads_own_private_lighthouse_content(
+    database, pool, space_filter, expected
+):
+    rows = rows_for(database, pool, ORG_ADMIN, space_filter)
+    assert set(rows) == expected
+    # Draft, delayed-active, deleted, non-cohort and challenge rows stay hidden.
+    assert not {1002, 1003, 1004, 1007, 1009, 1010, 1011} & rows.keys()
+
+
+@pytest.mark.parametrize("requester", [OTHER_ORG_ADMIN, SUSPENDED_ORG_ADMIN])
+@pytest.mark.parametrize(
+    "space_filter",
+    [None, SpaceFilter(cohort_ids=(COHORT,)), SpaceFilter(cohort_ids=(105,))],
+)
+def test_other_or_suspended_organization_members_see_only_public(
+    database, pool, requester, space_filter
+):
+    rows = rows_for(database, pool, requester, space_filter)
+    assert not {p for p in rows if p not in PUBLIC_IDS}
+
+
+def test_organization_reactivation_and_removal_apply_on_next_query(database, pool):
+    assert 1011 not in rows_for(database, pool, SUSPENDED_ORG_ADMIN, None)
+    savepoint = database.begin_nested()
+    try:
+        database.execute(text("UPDATE organization SET status = 'active' WHERE id = 3"))
+        assert 1011 in rows_for(database, pool, SUSPENDED_ORG_ADMIN, None)
+        database.execute(
+            text("DELETE FROM organization_members WHERE user_id = :user"),
+            {"user": SUSPENDED_ORG_ADMIN},
+        )
+        assert 1011 not in rows_for(database, pool, SUSPENDED_ORG_ADMIN, None)
+    finally:
+        savepoint.rollback()
+
+
+def test_joined_cohort_ids_include_only_active_organization_lighthouse_cohorts(
+    database,
+):
+    assert FeedService._fetch_joined_cohort_ids(database, ORG_ADMIN) == {
+        100,
+        101,
+        103,
+        104,
+    }
+    assert FeedService._fetch_joined_cohort_ids(database, OTHER_ORG_ADMIN) == set()
+    assert FeedService._fetch_joined_cohort_ids(database, SUSPENDED_ORG_ADMIN) == set()
+    assert FeedService._fetch_joined_cohort_ids(database, PEER) == {COHORT}
+
+
+def test_has_organization_feed_access_requires_active_organization(database):
+    assert FeedService.has_organization_feed_access(database, ORG_ADMIN)
+    assert not FeedService.has_organization_feed_access(database, SUSPENDED_ORG_ADMIN)
+    assert not FeedService.has_organization_feed_access(database, PEER)

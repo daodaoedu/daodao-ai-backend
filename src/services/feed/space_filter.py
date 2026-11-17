@@ -126,10 +126,14 @@ def build_feed_visibility_clause(
     params = {"visibility_requester_id": requester_id}
     params["visibility_program_kind"] = "lighthouse"
 
+    # Suspended organizations lose management access in daodao-server; keep the
+    # feed consistent so their members stop seeing learners' private content.
     organization_access = (
         "EXISTS (SELECT 1 FROM organization_members om"
+        " JOIN organization o ON o.id = om.organization_id"
         " WHERE om.organization_id = pr.organization_id"
-        " AND om.user_id = :visibility_requester_id)"
+        " AND om.user_id = :visibility_requester_id"
+        " AND o.status = 'active')"
     )
 
     # No space filter means all spaces on the home feed. Organization members
