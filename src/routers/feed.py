@@ -68,8 +68,12 @@ def get_feed(
 
     # Cohort selections may contain private content. Recheck current membership and
     # retention on every request, including after a member exits; never use stale cache.
-    use_cache = user_id is not None and not (
-        space_filter is not None and space_filter.cohort_ids
+    # Organization members get private Lighthouse rows on the default feed too, so
+    # their feed is never cached: removal or suspension must apply on the next request.
+    use_cache = (
+        user_id is not None
+        and not (space_filter is not None and space_filter.cohort_ids)
+        and not FeedService.has_organization_feed_access(db, user_id)
     )
 
     # ── cache（公開 feed 的登入用戶才 cache）──
