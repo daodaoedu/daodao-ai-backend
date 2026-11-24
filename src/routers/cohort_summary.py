@@ -141,7 +141,10 @@ async def generate_cohort_summary(
     client, mode = _resolve_client(settings, req.provider, req.apiKey)
     # Gemini's output cap includes thinking tokens; retain the configured model/key
     # while leaving bounded room for reasoning and the requested three paragraphs.
-    max_tokens = 8192 if client.backend == "gemini" else 1200
+    # Platform Groq gpt-oss-20b is a reasoning model too: hidden reasoning shares
+    # max_tokens and used 680–1056 tokens on dev, so 1200 occasionally cut the
+    # answer (#189 AC-05). Non-reasoning models stop on their own well below this.
+    max_tokens = 8192 if client.backend == "gemini" else 4096
     try:
         output, _cost, usage, backend_name = await client.generate(
             prompt, max_tokens=max_tokens, temperature=0.5
@@ -165,6 +168,13 @@ async def generate_cohort_summary(
     if finish_reason in {"max_tokens", "length", "max_output_tokens", "incomplete"} or (
         backend_name == "gemini" and finish_reason != "stop"
     ):
+        # Metadata only (no output text): the 2026-11-23 dev failure left no trace
+        # of which finish_reason or how many tokens caused the rejection.
+        logger.warning(
+            f"cohort summary 未完整產生（{mode}）: backend={backend_name} "
+            f"model={client.model} finish_reason={finish_reason or '-'} "
+            f"output_tokens={(usage or {}).get('output_tokens')} max_tokens={max_tokens}"
+        )
         raise HTTPException(status_code=502, detail="AI 摘要未完整產生，請稍後再試")
 
     return GenerateCohortSummaryResponse(
