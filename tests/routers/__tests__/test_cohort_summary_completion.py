@@ -122,16 +122,59 @@ def test_complete_gemini_summary_is_returned_with_configured_model(http_client, 
     ("backend", "finish_reason"),
     [("openai", "completed"), ("groq", "stop"), ("anthropic", "end_turn")],
 )
-def test_other_providers_keep_normal_completion_and_existing_budget(
-    http_client, backend, finish_reason
-):
+def test_other_providers_keep_normal_completion(http_client, backend, finish_reason):
     fake = provider_client(backend=backend, finish_reason=finish_reason)
     response = generate(http_client, fake)
     assert response.status_code == 200
     assert response.json()["summary"] == COMPLETE
     assert response.json()["provider"] == backend
     assert fake.generate.await_count == 1
-    assert fake.generate.call_args.kwargs["max_tokens"] == 1200
+
+
+def reasoning_provider(tokens_needed):
+    """Model a reasoning provider: hidden reasoning plus the answer share max_tokens.
+
+    It only finishes normally when the budget covers everything it needs; otherwise
+    it stops at the cap with `length` and partial text, like Groq gpt-oss does.
+    """
+    client = MagicMock()
+    client.backend = "groq"
+    client.model = "openai/gpt-oss-20b"
+
+    async def _generate(
+        _prompt, max_tokens, temperature
+    ):  # pylint: disable=unused-argument
+        if max_tokens >= tokens_needed:
+            usage = {
+                "input_tokens": 695,
+                "output_tokens": tokens_needed,
+                "finish_reason": "stop",
+            }
+            return COMPLETE, 0.0, usage, "groq"
+        usage = {
+            "input_tokens": 695,
+            "output_tokens": max_tokens,
+            "finish_reason": "length",
+        }
+        return PARTIAL, 0.0, usage, "groq"
+
+    client.generate = AsyncMock(side_effect=_generate)
+    return client
+
+
+@pytest.mark.parametrize("tokens_needed", [871, 1056, 1300, 2400])
+def test_platform_reasoning_model_completes_within_observed_variance(
+    http_client, tokens_needed
+):
+    """#189 AC-05: platform groq gpt-oss-20b used 680–1056 tokens (reasoning included)
+    on cohort 129, and one dev run on 2026-11-23 was cut by the old 1200 cap → 502
+    「未完整產生」. A single platform generation must succeed across that variance."""
+    fake = reasoning_provider(tokens_needed)
+    response = generate(http_client, fake, own=False)
+    assert response.status_code == 200, response.text
+    assert response.json()["summary"] == COMPLETE
+    assert response.json()["usage"]["finish_reason"] == "stop"
+    assert fake.generate.await_count == 1
 
 
 @pytest.mark.parametrize("output", ["  ", "未提供回應"])
