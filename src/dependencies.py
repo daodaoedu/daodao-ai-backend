@@ -1,4 +1,6 @@
 import hmac
+import os
+import re
 from typing import Annotated, Generator, Optional
 
 from fastapi import Depends, HTTPException, Request
@@ -18,6 +20,25 @@ from src.services.qdrant.client import QdrantClient
 from src.verify_jwt import verify
 
 security = HTTPBearer(auto_error=False)
+
+
+DEFAULT_AUTH_COOKIE_NAME = "auth_token"
+_AUTH_COOKIE_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def get_auth_cookie_name() -> str:
+    """本環境的登入 Cookie 名稱，須與 daodao-server 的 AUTH_COOKIE_NAME 相同。
+
+    dev 與正式站共用 .daodao.so，名稱依環境分開（daodaoedu/daodao#526）；未設定時用 auth_token。
+    """
+    configured = (os.getenv("AUTH_COOKIE_NAME") or "").strip()
+    if not configured:
+        return DEFAULT_AUTH_COOKIE_NAME
+    if not _AUTH_COOKIE_NAME_PATTERN.fullmatch(configured):
+        raise ValueError(
+            'AUTH_COOKIE_NAME may only contain letters, digits, "_" and "-"'
+        )
+    return configured
 
 
 SERVICE_TOKEN_HEADER = "X-Service-Token"
@@ -48,7 +69,7 @@ def get_current_user(
 ) -> Optional[str]:
     """
     FastAPI Dependency: 驗證 JWT 並回傳使用者識別
-    優先讀 Authorization Bearer header，fallback 讀 auth_token cookie；
+    優先讀 Authorization Bearer header，fallback 讀本環境的登入 cookie（get_auth_cookie_name）；
     daodao-server 轉發的 JWT 只有 PostgreSQL `id`（沒有 mongo `_id`），兩者都接受。
     服務間身份由 require_service_caller 另行驗證，不得取代使用者 JWT。
     """
@@ -58,8 +79,8 @@ def get_current_user(
     if credentials is not None:
         token = credentials.credentials
     else:
-        # Fallback: 從 cookie 讀取（與 daodao-server 共用 auth_token）
-        token = request.cookies.get("auth_token")
+        # Fallback: 從 cookie 讀取（名稱與 daodao-server 相同）
+        token = request.cookies.get(get_auth_cookie_name())
 
     if token:
         try:
@@ -123,7 +144,7 @@ def get_admin_user(
 ) -> User:
     """
     FastAPI Dependency：驗證 JWT 存在且用戶 role.name == 'admin' / 'superadmin'。
-    優先讀 Authorization Bearer header，fallback 讀 auth_token cookie。
+    優先讀 Authorization Bearer header，fallback 讀本環境的登入 cookie。
     回傳 User ORM 物件供 admin routes 使用。
 
     查詢順序：
@@ -135,7 +156,7 @@ def get_admin_user(
     if credentials is not None:
         token = credentials.credentials
     else:
-        token = request.cookies.get("auth_token")
+        token = request.cookies.get(get_auth_cookie_name())
 
     if not token:
         raise HTTPException(

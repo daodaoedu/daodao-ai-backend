@@ -82,3 +82,44 @@ def test_placeholder_secret_never_authenticates():
 def test_invalid_token_without_service_header_is_none():
     with patch.object(dependencies, "verify", return_value=None):
         assert dependencies.get_current_user(_request(), _creds("bad")) is None
+
+
+# daodaoedu/daodao#526：dev 與正式站共用 .daodao.so，各自讀自己的登入 Cookie
+def test_cookie_fallback_defaults_to_auth_token(monkeypatch):
+    monkeypatch.delenv("AUTH_COOKIE_NAME", raising=False)
+    with patch.object(dependencies, "verify", return_value={"id": 7}) as verify:
+        request = _request(cookies={"auth_token": "prod-token"})
+        assert dependencies.get_current_user(request, None) == "7"
+        verify.assert_called_once_with("prod-token")
+
+
+def test_cookie_fallback_reads_only_this_environment_cookie(monkeypatch):
+    monkeypatch.setenv("AUTH_COOKIE_NAME", "auth_token_dev")
+    with patch.object(dependencies, "verify", return_value={"id": 9}) as verify:
+        request = _request(
+            cookies={"auth_token": "prod-token", "auth_token_dev": "dev-token"}
+        )
+        assert dependencies.get_current_user(request, None) == "9"
+        verify.assert_called_once_with("dev-token")
+
+
+def test_other_environment_cookie_alone_is_not_logged_in(monkeypatch):
+    monkeypatch.setenv("AUTH_COOKIE_NAME", "auth_token_dev")
+    with patch.object(dependencies, "verify", return_value={"id": 9}) as verify:
+        request = _request(cookies={"auth_token": "prod-token"})
+        assert dependencies.get_current_user(request, None) is None
+        verify.assert_not_called()
+
+
+def test_admin_cookie_fallback_ignores_other_environment_cookie(monkeypatch):
+    monkeypatch.setenv("AUTH_COOKIE_NAME", "auth_token_dev")
+    request = _request(cookies={"auth_token": "prod-token"})
+    with pytest.raises(HTTPException) as exc_info:
+        dependencies.get_admin_user(request, None, MagicMock())
+    assert exc_info.value.status_code == 403
+
+
+def test_rejects_cookie_name_that_breaks_cookie_header(monkeypatch):
+    monkeypatch.setenv("AUTH_COOKIE_NAME", "auth token;")
+    with pytest.raises(ValueError, match="AUTH_COOKIE_NAME"):
+        dependencies.get_auth_cookie_name()
