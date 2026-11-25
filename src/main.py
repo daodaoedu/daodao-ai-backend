@@ -6,6 +6,7 @@ from sqlalchemy.orm import configure_mappers
 
 from src.config import get_settings
 from src.db.factory import make_database
+from src.dependencies import get_auth_cookie_name
 from src.logger import AppLogger
 from src.middleware.middleware import setup_middlewares
 from src.routers import (
@@ -44,6 +45,8 @@ async def lifespan(app: FastAPI):
 
     """
     logger.info("Starting daodao ai backend API...")
+    # AUTH_COOKIE_NAME 設錯時在啟動就失敗，不要等到每個需登入請求才回 500（daodaoedu/daodao#526）
+    get_auth_cookie_name()
     logger.info("API ready")
 
     settings = get_settings()

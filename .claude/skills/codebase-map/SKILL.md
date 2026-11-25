@@ -48,4 +48,4 @@ CI 精確 pin `black==25.9`、`ruff==0.14.1`（`.github/workflows/ci.yml`），�
 
 ## 跨 repo
 
-與 server 共用 PostgreSQL（storage 管 schema，ORM 需人工同步）與 JWT（HS256 `JWT_SECURITY`，fallback 讀 `auth_token` cookie；payload 帶 `id` 與 `_id`）。入向：f2e（feed/recommendation/insights）、admin-ui（`/api/v1/admin/*`）。詳見 `.claude/skills/system-map/SKILL.md`。
+與 server 共用 PostgreSQL（storage 管 schema，ORM 需人工同步）與 JWT（HS256 `JWT_SECURITY`，fallback 讀登入 cookie，名稱為 `AUTH_COOKIE_NAME`（預設 `auth_token`，dev `auth_token_dev`）；payload 帶 `id` 與 `_id`）。入向：f2e（feed/recommendation/insights）、admin-ui（`/api/v1/admin/*`）。詳見 `.claude/skills/system-map/SKILL.md`。

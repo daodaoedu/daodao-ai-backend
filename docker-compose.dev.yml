@@ -30,6 +30,9 @@ services:
       start_period: 40s
     env_file:
       - .env.dev
+    environment:
+      # dev 與正式站共用 .daodao.so，登入 Cookie 名稱要與 daodao-server dev_app 一致（daodaoedu/daodao#526）
+      AUTH_COOKIE_NAME: auth_token_dev
     volumes:
       - ./src:/app/src
       - ./scripts:/app/scripts
