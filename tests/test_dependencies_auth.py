@@ -114,9 +114,23 @@ def test_other_environment_cookie_alone_is_not_logged_in(monkeypatch):
 def test_admin_cookie_fallback_ignores_other_environment_cookie(monkeypatch):
     monkeypatch.setenv("AUTH_COOKIE_NAME", "auth_token_dev")
     request = _request(cookies={"auth_token": "prod-token"})
-    with pytest.raises(HTTPException) as exc_info:
-        dependencies.get_admin_user(request, None, MagicMock())
+    with patch.object(dependencies, "verify", return_value={"id": 9}) as verify:
+        with pytest.raises(HTTPException) as exc_info:
+            dependencies.get_admin_user(request, None, MagicMock())
+        verify.assert_not_called()
     assert exc_info.value.status_code == 403
+    assert "not authenticated" in exc_info.value.detail
+
+
+def test_admin_cookie_fallback_verifies_this_environment_cookie(monkeypatch):
+    monkeypatch.setenv("AUTH_COOKIE_NAME", "auth_token_dev")
+    request = _request(
+        cookies={"auth_token": "prod-token", "auth_token_dev": "dev-token"}
+    )
+    with patch.object(dependencies, "verify", return_value=None) as verify:
+        with pytest.raises(HTTPException):
+            dependencies.get_admin_user(request, None, MagicMock())
+        verify.assert_called_once_with("dev-token")
 
 
 def test_rejects_cookie_name_that_breaks_cookie_header(monkeypatch):
